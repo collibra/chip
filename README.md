@@ -84,29 +84,24 @@ Add to your Claude Desktop configuration:
 {
   "mcpServers": {
     "collibra": {
-      "command": "/path/to/mcp-server",
-      "env": {
-        "COLLIBRA_MCP_API_URL": "https://your-instance.collibra.com",
-      }
+      "type": "stdio",
+      "command": "/path/to/mcp-server"
     }
   }
 }
 ```
 
 ### VS Code
-For VS Code with MCP extensions, add the server to your workspace or user settings:
+For VS Code with MCP extensions, add the server to `.vscode/mcp.json` in your workspace:
 
 ```json
-// .vscode/mcp.json
 {
-  "mcp.servers": {
-    "collibra": {
-      "command": "/path/to/mcp-server",
-      "env": {
-        "COLLIBRA_MCP_API_URL": "https://your-instance.collibra.com",
-      }
+    "servers": {
+        "collibra": {
+            "type": "stdio",
+            "command": ".build/chip"
+        }
     }
-  }
 }
 ```
 
