@@ -3,6 +3,7 @@ module github.com/collibra/chip
 go 1.25.0
 
 require (
+	github.com/google/go-querystring v1.1.0
 	github.com/google/uuid v1.5.0
 	github.com/modelcontextprotocol/go-sdk v0.4.0
 	github.com/spf13/pflag v1.0.10
