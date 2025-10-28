@@ -1,5 +1,7 @@
 * Coding instructions
 - Follow the stepdown rule when determinging the order of functions or other code constructs: we want the code to read like a top-down narrative. Every function to be followed by those at the next level of abstraction so that we can read the program, descending level of abstraction at a time as we read down the list of functions. 
+- When running a command remember the shell is initialized to the workspace path by default so no need to cd into it.
+
 
 * PR creation instructions
 - Use the github CLI to create the PR. The details of the `gh pr create` command are available below.
