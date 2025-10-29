@@ -1,9 +1,10 @@
-* Coding instructions
+# Coding instructions
 - Follow the stepdown rule when determinging the order of functions or other code constructs: we want the code to read like a top-down narrative. Every function to be followed by those at the next level of abstraction so that we can read the program, descending level of abstraction at a time as we read down the list of functions. 
 - When running a command remember the shell is initialized to the workspace path by default so no need to cd into it.
 
 
-* PR creation instructions
+# PR creation instructions
+- When generating commit messages, always start the PR message with the Jira ticket reference (e.g. DEV-146292) as part of the branch name. Keep the commit message short and professional one-liner.
 - Use the github CLI to create the PR. The details of the `gh pr create` command are available below.
 - To find out what are the changes and generate the PR details, you must compare the current branch with the main branch.
 - Any local changes that are not committed to the branch should be ignored.
