@@ -6,3 +6,4 @@
 mcp.yaml
 /chip
 /chip-service
+scripts/update-mcp-yaml.sh

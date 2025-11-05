@@ -42,6 +42,7 @@ func main() {
 	chip.RegisterMcpTool(server, tools.NewPullDataContractManifestTool(), client)
 	chip.RegisterMcpTool(server, tools.NewAddClassificationMatchTool(), client)
 	chip.RegisterMcpTool(server, tools.NewFindClassificationMatchesTool(), client)
+	chip.RegisterMcpTool(server, tools.NewRemoveClassificationMatchTool(), client)
 
 	if config.Mcp.Mode == "stdio" {
 		runStdioServer(server)
