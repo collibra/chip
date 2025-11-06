@@ -19,4 +19,5 @@ func RegisterAll(server *mcp.Server, client *http.Client, toolConfig *chip.ToolC
 	chip.RegisterMcpTool(server, NewAddClassificationMatchTool(), client, toolConfig)
 	chip.RegisterMcpTool(server, NewFindClassificationMatchesTool(), client, toolConfig)
 	chip.RegisterMcpTool(server, NewRemoveClassificationMatchTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, NewPushDataContractManifestTool(), client, toolConfig)
 }

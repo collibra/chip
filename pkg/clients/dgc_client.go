@@ -25,7 +25,12 @@ func KeywordSearch(ctx context.Context, collibraHttpClient *http.Client, questio
 		return nil, fmt.Errorf("failed to marshal search request: %w", err)
 	}
 
-	body, err := executeRequest(ctx, collibraHttpClient, "POST", searchUrl, jsonData)
+	req, err := http.NewRequestWithContext(ctx, "POST", searchUrl, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	body, err := executeRequest(collibraHttpClient, req)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +57,12 @@ func GetAssetSummary(
 		return nil, fmt.Errorf("failed to marshal GraphQL request: %w", err)
 	}
 
-	body, err := executeRequest(ctx, collibraHttpClient, "POST", gqlUrl, jsonData)
+	req, err := http.NewRequestWithContext(ctx, "POST", gqlUrl, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	body, err := executeRequest(collibraHttpClient, req)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +84,12 @@ func ListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, limit 
 		return nil, fmt.Errorf("failed to build endpoint: %w", err)
 	}
 
-	body, err := executeRequest(ctx, collibraHttpClient, "GET", endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	body, err := executeRequest(collibraHttpClient, req)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +112,12 @@ func ListDataContracts(ctx context.Context, collibraHttpClient *http.Client, cur
 		return nil, fmt.Errorf("failed to build endpoint: %w", err)
 	}
 
-	body, err := executeRequest(ctx, collibraHttpClient, "GET", endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	body, err := executeRequest(collibraHttpClient, req)
 	if err != nil {
 		return nil, err
 	}
@@ -110,12 +130,43 @@ func PullActiveDataContractManifest(ctx context.Context, collibraHttpClient *htt
 
 	endpoint := fmt.Sprintf("/rest/dataProduct/v1/dataContracts/%s/activeVersion/manifest", dataContractID)
 
-	manifest, err := executeRequest(ctx, collibraHttpClient, "GET", endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	manifest, err := executeRequest(collibraHttpClient, req)
 	if err != nil {
 		return nil, err
 	}
 
 	return manifest, nil
+}
+
+func PushDataContractManifest(ctx context.Context, collibraHttpClient *http.Client, reqParams PushDataContractManifestRequest) (*PushDataContractManifestResponse, error) {
+	slog.Info(fmt.Sprintf("Pushing data contract manifest for manifest ID: %s", reqParams.ManifestID))
+
+	endpoint := "/rest/dataProduct/v1/dataContracts/addFromManifest"
+
+	body, contentType, err := CreateAddFromManifestRequest(reqParams)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info(fmt.Sprintf("content type: %s", contentType))
+
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	responseBody, err := executeRequest(collibraHttpClient, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return ParseAddFromManifestResponse(responseBody)
 }
 
 func buildUrl(basePath string, params interface{}) (string, error) {
@@ -129,17 +180,7 @@ func buildUrl(basePath string, params interface{}) (string, error) {
 	return basePath, nil
 }
 
-func executeRequest(ctx context.Context, client *http.Client, method, url string, body []byte) ([]byte, error) {
-	var reqBody io.Reader
-	if body != nil {
-		reqBody = bytes.NewBuffer(body)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
+func executeRequest(client *http.Client, req *http.Request) ([]byte, error) {
 	response, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)

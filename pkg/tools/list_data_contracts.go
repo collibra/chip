@@ -57,10 +57,13 @@ func handleListDataContracts(ctx context.Context, collibraHttpClient *http.Clien
 		}
 	}
 
-	return ListDataContractsOutput{
-		Total:      response.Total,
+	output := ListDataContractsOutput{
 		Limit:      response.Limit,
 		NextCursor: response.NextCursor,
 		Contracts:  contracts,
-	}, nil
+	}
+	if response.Total > 0 {
+		output.Total = &response.Total
+	}
+	return output, nil
 }

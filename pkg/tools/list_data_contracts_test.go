@@ -80,7 +80,7 @@ func TestListDataContractsWithTotal(t *testing.T) {
 				},
 				Limit:      100,
 				NextCursor: "nextPageCursor",
-				Total:      &total,
+				Total:      total,
 			}
 		}),
 	})
