@@ -32,17 +32,20 @@ func main() {
 		},
 	}
 	server := chip.NewMcpServer()
-	chip.RegisterMcpTool(server, tools.NewAskDadTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewAskGlossaryTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewAssetDetailsTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewKeywordSearchTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewFindDataClassesTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewListAssetTypesTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewListDataContractsTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewPullDataContractManifestTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewAddClassificationMatchTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewFindClassificationMatchesTool(), client, config)
-	chip.RegisterMcpTool(server, tools.NewRemoveClassificationMatchTool(), client, config)
+	toolConfig := &chip.ToolConfig{
+		CollibraUrl: config.Api.Url,
+	}
+	chip.RegisterMcpTool(server, tools.NewAskDadTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewAskGlossaryTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewAssetDetailsTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewKeywordSearchTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewFindDataClassesTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewListAssetTypesTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewListDataContractsTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewPullDataContractManifestTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewAddClassificationMatchTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewFindClassificationMatchesTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools.NewRemoveClassificationMatchTool(), client, toolConfig)
 
 	if config.Mcp.Mode == "stdio" {
 		runStdioServer(server)

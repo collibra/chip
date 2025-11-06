@@ -16,7 +16,7 @@ type collibraClient struct {
 
 func (c *collibraClient) RoundTrip(request *http.Request) (*http.Response, error) {
 	reqClone := request.Clone(request.Context())
-	toolRequest, err := chip.GetToolRequest(reqClone.Context())
+	toolRequest, err := chip.GetCallToolRequest(reqClone.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -33,6 +33,7 @@ func (c *collibraClient) RoundTrip(request *http.Request) (*http.Response, error
 	if err != nil {
 		return nil, fmt.Errorf("invalid API URL configuration: %w", err)
 	}
+	toolRequest.Extra.Header.Set("collibraUrl", fmt.Sprintf("%s://%s", baseURL.Scheme, baseURL.Host))
 	reqClone.URL.Scheme = baseURL.Scheme
 	reqClone.URL.Host = baseURL.Host
 	reqClone.URL.Path = path.Join(baseURL.Path, request.URL.Path)
