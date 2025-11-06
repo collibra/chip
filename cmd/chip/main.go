@@ -32,17 +32,17 @@ func main() {
 		},
 	}
 	server := chip.NewMcpServer()
-	chip.RegisterMcpTool(server, tools.NewAskDadTool(), client)
-	chip.RegisterMcpTool(server, tools.NewAskGlossaryTool(), client)
-	chip.RegisterMcpTool(server, tools.NewAssetDetailsTool(), client)
-	chip.RegisterMcpTool(server, tools.NewKeywordSearchTool(), client)
-	chip.RegisterMcpTool(server, tools.NewFindDataClassesTool(), client)
-	chip.RegisterMcpTool(server, tools.NewListAssetTypesTool(), client)
-	chip.RegisterMcpTool(server, tools.NewListDataContractsTool(), client)
-	chip.RegisterMcpTool(server, tools.NewPullDataContractManifestTool(), client)
-	chip.RegisterMcpTool(server, tools.NewAddClassificationMatchTool(), client)
-	chip.RegisterMcpTool(server, tools.NewFindClassificationMatchesTool(), client)
-	chip.RegisterMcpTool(server, tools.NewRemoveClassificationMatchTool(), client)
+	chip.RegisterMcpTool(server, tools.NewAskDadTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewAskGlossaryTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewAssetDetailsTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewKeywordSearchTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewFindDataClassesTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewListAssetTypesTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewListDataContractsTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewPullDataContractManifestTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewAddClassificationMatchTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewFindClassificationMatchesTool(), client, config)
+	chip.RegisterMcpTool(server, tools.NewRemoveClassificationMatchTool(), client, config)
 
 	if config.Mcp.Mode == "stdio" {
 		runStdioServer(server)
