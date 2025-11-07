@@ -47,7 +47,8 @@ func newCollibraClient(config *Config) *http.Client {
 
 	return &http.Client{
 		Transport: &collibraClient{
-			next: chip.NewCollibraClient(baseTransport),
+			config: config,
+			next:   chip.NewCollibraClient(baseTransport),
 		},
 	}
 }
@@ -71,7 +72,9 @@ func (c *collibraClient) RoundTrip(request *http.Request) (*http.Response, error
 	if err != nil {
 		return nil, fmt.Errorf("invalid API URL configuration: %w", err)
 	}
-	toolRequest.Extra.Header.Set("collibraUrl", fmt.Sprintf("%s://%s", baseURL.Scheme, baseURL.Host))
+	if toolRequest.GetExtra() != nil {
+		toolRequest.Extra.Header.Set("collibraUrl", c.config.Api.Url)
+	}
 	reqClone.URL.Scheme = baseURL.Scheme
 	reqClone.URL.Host = baseURL.Host
 	reqClone.URL.Path = path.Join(baseURL.Path, request.URL.Path)

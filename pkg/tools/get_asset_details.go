@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"log"
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -67,7 +67,7 @@ func handleAssetDetails(ctx context.Context, collibraHttpClient *http.Client, in
 
 	collibraUrl, err := chip.GetCollibraUrl(ctx)
 	if err != nil {
-		slog.Warn("url of Collibra instance unknown, links will be rendered only relative")
+		log.Println("Warning: url of Collibra instance unknown, links will be rendered only relative")
 	}
 
 	return AssetDetailsOutput{

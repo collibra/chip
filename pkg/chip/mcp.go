@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -85,14 +86,14 @@ func GetCollibraUrl(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if toolRequest.GetExtra() == nil {
-		config, err := GetToolConfig(ctx)
-		if err != nil {
-			return "", err
-		}
-		return config.CollibraUrl, nil
+	if toolRequest.GetExtra() != nil {
+		return strings.TrimSuffix(toolRequest.Extra.Header.Get("collibraUrl"), "/"), nil
 	}
-	return toolRequest.Extra.Header.Get("collibraUrl"), nil
+	config, err := GetToolConfig(ctx)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(config.CollibraUrl, "/"), nil
 }
 
 func CopyHeader(mcpRequest *mcp.CallToolRequest, httpRequest *http.Request, header string) {
