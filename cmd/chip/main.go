@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	chip "github.com/collibra/chip/app"
-	"github.com/collibra/chip/tools"
+	tools2 "github.com/collibra/chip/app/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -35,17 +35,17 @@ func main() {
 	toolConfig := &chip.ToolConfig{
 		CollibraUrl: config.Api.Url,
 	}
-	chip.RegisterMcpTool(server, tools.NewAskDadTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewAskGlossaryTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewAssetDetailsTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewKeywordSearchTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewFindDataClassesTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewListAssetTypesTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewListDataContractsTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewPullDataContractManifestTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewAddClassificationMatchTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewFindClassificationMatchesTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, tools.NewRemoveClassificationMatchTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewAskDadTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewAskGlossaryTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewAssetDetailsTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewKeywordSearchTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewFindDataClassesTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewListAssetTypesTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewListDataContractsTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewPullDataContractManifestTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewAddClassificationMatchTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewFindClassificationMatchesTool(), client, toolConfig)
+	chip.RegisterMcpTool(server, tools2.NewRemoveClassificationMatchTool(), client, toolConfig)
 
 	if config.Mcp.Mode == "stdio" {
 		runStdioServer(server)
