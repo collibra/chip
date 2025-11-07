@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	chip "github.com/collibra/chip/app"
-	"github.com/collibra/chip/app/tools"
+	"github.com/collibra/chip/pkg/chip"
+	"github.com/collibra/chip/pkg/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

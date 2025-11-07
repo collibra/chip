@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	chip "github.com/collibra/chip/app"
+	"github.com/collibra/chip/pkg/chip"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )

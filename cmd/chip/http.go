@@ -10,7 +10,7 @@ import (
 	"path"
 	"time"
 
-	chip "github.com/collibra/chip/app"
+	"github.com/collibra/chip/pkg/chip"
 )
 
 type collibraClient struct {
