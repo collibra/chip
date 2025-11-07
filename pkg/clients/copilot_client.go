@@ -6,17 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
 func AskGlossary(ctx context.Context, collibraHttpClient *http.Client, question string) (string, error) {
-	log.Printf("Data glossary agent query: '%s'", question)
+	slog.Info(fmt.Sprintf("Data glossary agent query: '%s'", question))
 	return callTool(ctx, collibraHttpClient, "/rest/aiCopilot/v1/tools/askGlossary", question)
 }
 
 func AskDad(ctx context.Context, collibraHttpClient *http.Client, question string) (string, error) {
-	log.Printf("Data asset agent query: '%s'", question)
+	slog.Info(fmt.Sprintf("Data asset agent query: '%s'", question))
 	return callTool(ctx, collibraHttpClient, "/rest/aiCopilot/v1/tools/askDad", question)
 }
 

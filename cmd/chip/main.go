@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -15,14 +16,15 @@ import (
 func main() {
 	config := Init()
 
-	log.Printf("Starting Collibra MCP server (version: %s)...\n", chip.Version)
+	slog.Info(fmt.Sprintf("Starting Collibra MCP server (version: %s)...", chip.Version))
 
 	if config.Api.Url == "" {
-		log.Fatal("Missing Api url")
+		slog.Error("Missing Api url")
+		os.Exit(1)
 	}
 
 	if config.Api.Username != "" && config.Api.Password != "" {
-		log.Println("Warning: using a single basic auth header for all requests is not recommended as it will result in all actions being attributed to the same account. Consider setting an appropriate basic auth header for each request.")
+		slog.Warn("Using a single basic auth header for all requests is not recommended as it will result in all actions being attributed to the same account. Consider setting an appropriate basic auth header for each request.")
 	}
 
 	client := newCollibraClient(config)
@@ -37,14 +39,16 @@ func main() {
 	} else if strings.HasPrefix(config.Mcp.Mode, "http") {
 		runHttpServer(config.Mcp.Mode, server, config.Mcp.Http.Port)
 	} else {
-		log.Fatalf("Invalid server mode: '%s'", config.Mcp.Mode)
+		slog.Error(fmt.Sprintf("Invalid server mode: '%s'", config.Mcp.Mode))
+		os.Exit(1)
 	}
 }
 
 func runStdioServer(server *mcp.Server) {
-	log.Println("Listening on stdio")
+	slog.Info("Listening on stdio")
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
-		log.Fatal(err)
+		slog.Error(fmt.Sprintf("Failed to run stdio server: %v", err))
+		os.Exit(1)
 	}
 }
 
@@ -53,17 +57,18 @@ func runHttpServer(mode string, server *mcp.Server, port int) {
 
 	switch mode {
 	case "http", "http-streamable":
-		log.Println("Using streamable http handler")
+		slog.Info("Using streamable http handler")
 		handler = mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
 			return server
 		}, &mcp.StreamableHTTPOptions{})
 	case "http-sse":
-		log.Println("Using SSE http handler")
+		slog.Info("Using SSE http handler")
 		handler = mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
 			return server
 		}, &mcp.SSEOptions{})
 	default:
-		log.Fatalf("Invalid HTTP mode: %s (must be 'http', 'http-sse' or 'http-streamable')", mode)
+		slog.Error(fmt.Sprintf("Invalid HTTP mode: %s (must be 'http', 'http-sse' or 'http-streamable')", mode))
+		os.Exit(1)
 	}
 
 	httpServer := &http.Server{
@@ -71,7 +76,10 @@ func runHttpServer(mode string, server *mcp.Server, port int) {
 		Handler: handler,
 	}
 
-	log.Println("Warning: HTTP server is only listening on localhost for security reasons.")
-	log.Printf("Listening on localhost:%d", port)
-	log.Fatal(httpServer.ListenAndServe())
+	slog.Warn("HTTP server is only listening on localhost for security reasons.")
+	slog.Info(fmt.Sprintf("Listening on localhost:%d", port))
+	if err := httpServer.ListenAndServe(); err != nil {
+		slog.Error(fmt.Sprintf("Failed to start HTTP server: %v", err))
+		os.Exit(1)
+	}
 }

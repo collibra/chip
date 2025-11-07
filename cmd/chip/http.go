@@ -3,10 +3,11 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"time"
 
@@ -32,16 +33,17 @@ func newCollibraClient(config *Config) *http.Client {
 	}
 
 	if config.Api.SkipTLSVerify {
-		log.Println("Warning: skipping TLS certificate verification for ", config.Api.Url)
+		slog.Warn(fmt.Sprintf("Skipping TLS certificate verification for %s", config.Api.Url))
 		baseTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: config.Api.SkipTLSVerify}
 	}
 
 	if config.Api.Proxy != "" {
 		proxyURL, err := url.Parse(config.Api.Proxy)
 		if err != nil {
-			log.Fatal("Invalid proxy URL:", err)
+			slog.Error(fmt.Sprintf("Invalid proxy URL: %s", err))
+			os.Exit(1)
 		}
-		log.Println("Using proxy URL:", proxyURL)
+		slog.Info(fmt.Sprintf("Using proxy URL: %s", proxyURL))
 		baseTransport.Proxy = http.ProxyURL(proxyURL)
 	}
 

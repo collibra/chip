@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -125,24 +125,27 @@ CONFIGURATION FILE EXAMPLE:
 
 func validateConfigFile(config Config) {
 	if config.Mcp.Mode != "stdio" && config.Mcp.Mode != "http" && config.Mcp.Mode != "http-sse" && config.Mcp.Mode != "http-streamable" {
-		log.Fatalf("Invalid server mode: %s (must be 'stdio', 'http', 'http-sse' or 'http-streamable')", config.Mcp.Mode)
+		slog.Error(fmt.Sprintf("Invalid server mode: %s (must be 'stdio', 'http', 'http-sse' or 'http-streamable')", config.Mcp.Mode))
+		os.Exit(1)
 	}
 }
 
 func readConfigFile() Config {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Println("No config file found, using environment variables, command-line flags, and defaults")
+			slog.Info("No config file found, using environment variables, command-line flags, and defaults")
 		} else {
-			log.Fatalf("Error reading config file: %v", err)
+			slog.Error(fmt.Sprintf("Error reading config file: %v", err))
+			os.Exit(1)
 		}
 	} else {
-		log.Printf("Using config file: %s", viper.ConfigFileUsed())
+		slog.Info(fmt.Sprintf("Using config file: %s", viper.ConfigFileUsed()))
 	}
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
-		log.Fatalf("Unable to decode config: %v", err)
+		slog.Error(fmt.Sprintf("Unable to decode config: %v", err))
+		os.Exit(1)
 	}
 	return config
 }

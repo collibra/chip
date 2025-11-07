@@ -1,9 +1,8 @@
-./chip
-./chip-service
+/chip
+/chip-service
 .build
+build
 .idea/
 .vscode
 mcp.yaml
 oas/**
-/chip
-/chip-service

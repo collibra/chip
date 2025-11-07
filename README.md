@@ -50,7 +50,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
    git clone <repository-url>
    cd ai-mcp-discovery
    go mod download
-   go build -o mcp-server .
+   go build cmd/chip
    ```
 
 ## Running and Configuration
@@ -111,7 +111,7 @@ For VS Code with MCP extensions, add the server to `.vscode/mcp.json` in your wo
     "servers": {
         "collibra": {
             "type": "stdio",
-            "command": ".build/chip"
+            "command": "./chip"
         }
     }
 }

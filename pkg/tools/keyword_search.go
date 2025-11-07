@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/collibra/chip/pkg/chip"
-	clients2 "github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/clients"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -54,7 +54,7 @@ func handleKeywordSearch(ctx context.Context, collibraHttpClient *http.Client, i
 
 	filters := buildSearchFilters(input)
 
-	searchResponse, err := clients2.KeywordSearch(ctx, collibraHttpClient, input.Query, input.ResourceTypeFilters, filters, input.Limit, input.Offset)
+	searchResponse, err := clients.KeywordSearch(ctx, collibraHttpClient, input.Query, input.ResourceTypeFilters, filters, input.Limit, input.Offset)
 	if err != nil {
 		return KeywordSearchOutput{}, err
 	}
@@ -64,46 +64,46 @@ func handleKeywordSearch(ctx context.Context, collibraHttpClient *http.Client, i
 	return output, nil
 }
 
-func buildSearchFilters(input KeywordSearchInput) []clients2.SearchFilter {
-	var searchFilters []clients2.SearchFilter
+func buildSearchFilters(input KeywordSearchInput) []clients.SearchFilter {
+	var searchFilters []clients.SearchFilter
 
 	if len(input.CommunityFilter) > 0 {
-		searchFilters = append(searchFilters, clients2.SearchFilter{
+		searchFilters = append(searchFilters, clients.SearchFilter{
 			Field:  "community",
 			Values: input.CommunityFilter,
 		})
 	}
 
 	if len(input.DomainFilter) > 0 {
-		searchFilters = append(searchFilters, clients2.SearchFilter{
+		searchFilters = append(searchFilters, clients.SearchFilter{
 			Field:  "domain",
 			Values: input.DomainFilter,
 		})
 	}
 
 	if len(input.DomainTypeFilter) > 0 {
-		searchFilters = append(searchFilters, clients2.SearchFilter{
+		searchFilters = append(searchFilters, clients.SearchFilter{
 			Field:  "domainType",
 			Values: input.DomainTypeFilter,
 		})
 	}
 
 	if len(input.AssetTypeFilter) > 0 {
-		searchFilters = append(searchFilters, clients2.SearchFilter{
+		searchFilters = append(searchFilters, clients.SearchFilter{
 			Field:  "assetType",
 			Values: input.AssetTypeFilter,
 		})
 	}
 
 	if len(input.StatusFilter) > 0 {
-		searchFilters = append(searchFilters, clients2.SearchFilter{
+		searchFilters = append(searchFilters, clients.SearchFilter{
 			Field:  "status",
 			Values: input.StatusFilter,
 		})
 	}
 
 	if len(input.CreatedByFilter) > 0 {
-		searchFilters = append(searchFilters, clients2.SearchFilter{
+		searchFilters = append(searchFilters, clients.SearchFilter{
 			Field:  "createdBy",
 			Values: input.CreatedByFilter,
 		})
@@ -118,7 +118,7 @@ func formatTimestamp(milliseconds int64) string {
 	return t.Format(time.RFC3339)
 }
 
-func mapSearchResponseToOutput(searchResponse *clients2.SearchResponse) KeywordSearchOutput {
+func mapSearchResponseToOutput(searchResponse *clients.SearchResponse) KeywordSearchOutput {
 	resources := make([]KeywordSearchResource, len(searchResponse.Results))
 	for i, result := range searchResponse.Results {
 		resources[i] = KeywordSearchResource{

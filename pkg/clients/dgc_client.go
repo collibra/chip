@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/go-querystring/query"
@@ -14,13 +14,13 @@ import (
 )
 
 func KeywordSearch(ctx context.Context, collibraHttpClient *http.Client, question string, resourceTypes []string, filters []SearchFilter, limit int, offset int) (*SearchResponse, error) {
-	log.Printf("Keyword search query: '%s'", question)
+	slog.Info(fmt.Sprintf("Keyword search query: '%s'", question))
 	searchUrl := "/rest/2.0/search"
 
 	searchRequest := CreateSearchRequest(question, resourceTypes, filters, limit, offset)
 
 	jsonData, err := json.Marshal(searchRequest)
-	log.Printf("Search request: %s", string(jsonData))
+	slog.Info(fmt.Sprintf("Search request: %s", string(jsonData)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal search request: %w", err)
 	}
@@ -61,7 +61,7 @@ func GetAssetSummary(
 }
 
 func ListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, limit int, offset int) (*AssetTypePagedResponse, error) {
-	log.Printf("Listing asset types with limit: %d, offset: %d", limit, offset)
+	slog.Info(fmt.Sprintf("Listing asset types with limit: %d, offset: %d", limit, offset))
 
 	params := AssetTypesQueryParams{
 		ExcludeMeta: true,
@@ -83,7 +83,7 @@ func ListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, limit 
 }
 
 func ListDataContracts(ctx context.Context, collibraHttpClient *http.Client, cursor string, limit int, manifestID string) (*DataContractListPaginated, error) {
-	log.Printf("Listing data contracts with limit: %d, cursor: %s", limit, cursor)
+	slog.Info(fmt.Sprintf("Listing data contracts with limit: %d, cursor: %s", limit, cursor))
 
 	params := DataContractsQueryParams{
 		Cursor:       cursor,
@@ -106,7 +106,7 @@ func ListDataContracts(ctx context.Context, collibraHttpClient *http.Client, cur
 }
 
 func PullActiveDataContractManifest(ctx context.Context, collibraHttpClient *http.Client, dataContractID string) ([]byte, error) {
-	log.Printf("Pulling active manifest for data contract ID: %s", dataContractID)
+	slog.Info(fmt.Sprintf("Pulling active manifest for data contract ID: %s", dataContractID))
 
 	endpoint := fmt.Sprintf("/rest/dataProduct/v1/dataContracts/%s/activeVersion/manifest", dataContractID)
 

@@ -3,11 +3,11 @@ package tools
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
-	clients2 "github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/clients"
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -19,10 +19,10 @@ type AssetDetailsInput struct {
 }
 
 type AssetDetailsOutput struct {
-	Asset *clients2.Asset `json:"asset,omitempty" jsonschema:"the detailed asset information if found"`
-	Link  string          `json:"link,omitempty" jsonschema:"the link you can navigate to in Collibra to view the asset"`
-	Error string          `json:"error,omitempty" jsonschema:"error message if asset not found or other error occurred"`
-	Found bool            `json:"found" jsonschema:"whether the asset was found"`
+	Asset *clients.Asset `json:"asset,omitempty" jsonschema:"the detailed asset information if found"`
+	Link  string         `json:"link,omitempty" jsonschema:"the link you can navigate to in Collibra to view the asset"`
+	Error string         `json:"error,omitempty" jsonschema:"error message if asset not found or other error occurred"`
+	Found bool           `json:"found" jsonschema:"whether the asset was found"`
 }
 
 func NewAssetDetailsTool() *chip.CollibraTool[AssetDetailsInput, AssetDetailsOutput] {
@@ -44,7 +44,7 @@ func handleAssetDetails(ctx context.Context, collibraHttpClient *http.Client, in
 		}, nil
 	}
 
-	assets, err := clients2.GetAssetSummary(
+	assets, err := clients.GetAssetSummary(
 		ctx,
 		collibraHttpClient,
 		assetUUID,
@@ -67,7 +67,7 @@ func handleAssetDetails(ctx context.Context, collibraHttpClient *http.Client, in
 
 	collibraUrl, err := chip.GetCollibraUrl(ctx)
 	if err != nil {
-		log.Println("Warning: url of Collibra instance unknown, links will be rendered only relative")
+		slog.Warn("Collibra instance URL unknown, links will be rendered without host")
 	}
 
 	return AssetDetailsOutput{
