@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type FindClassificationMatchesInput struct {
+type SearchClassificationMatchesInput struct {
 	AssetIDs          []string `json:"assetIds,omitempty" jsonschema:"Optional. Filter by asset IDs. The list of asset IDs (with Column types) to filter the search results."`
 	Statuses          []string `json:"statuses,omitempty" jsonschema:"Optional. Filter by classification match status. Valid values: ACCEPTED, REJECTED, SUGGESTED."`
 	ClassificationIDs []string `json:"classificationIds,omitempty" jsonschema:"Optional. Filter by classification IDs. The list of classification IDs to filter the search results."`
@@ -19,40 +19,40 @@ type FindClassificationMatchesInput struct {
 	CountLimit        int      `json:"countLimit,omitempty" jsonschema:"Optional. Limits the number of elements that will be counted. -1 will count everything, 0 will skip counting. Default: -1."`
 }
 
-type FindClassificationMatchesOutput struct {
+type SearchClassificationMatchesOutput struct {
 	Total                 int                           `json:"total" jsonschema:"Total number of matching classification matches"`
 	Count                 int                           `json:"count" jsonschema:"Number of classification matches returned in this response"`
 	ClassificationMatches []clients.ClassificationMatch `json:"classificationMatches" jsonschema:"List of classification matches"`
 	Error                 string                        `json:"error,omitempty" jsonschema:"HTTP or other error message if the request failed"`
 }
 
-func NewFindClassificationMatchesTool() *chip.CollibraTool[FindClassificationMatchesInput, FindClassificationMatchesOutput] {
-	return &chip.CollibraTool[FindClassificationMatchesInput, FindClassificationMatchesOutput]{
+func NewSearchClassificationMatchesTool() *chip.CollibraTool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput] {
+	return &chip.CollibraTool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput]{
 		Tool: &mcp.Tool{
-			Name:        "find_classification_matches",
-			Description: "Find classification matches (associations between data classes and assets) in Collibra. Supports filtering by asset IDs, statuses (ACCEPTED/REJECTED/SUGGESTED), classification IDs, and asset type IDs.",
+			Name:        "classification_match_search",
+			Description: "Search for classification matches (associations between data classes and assets) in Collibra. Supports filtering by asset IDs, statuses (ACCEPTED/REJECTED/SUGGESTED), classification IDs, and asset type IDs.",
 		},
-		ToolHandler: handleFindClassificationMatches,
+		ToolHandler: handleSearchClassificationMatches,
 	}
 }
 
-func handleFindClassificationMatches(ctx context.Context, collibraHttpClient *http.Client, input FindClassificationMatchesInput) (FindClassificationMatchesOutput, error) {
+func handleSearchClassificationMatches(ctx context.Context, collibraHttpClient *http.Client, input SearchClassificationMatchesInput) (SearchClassificationMatchesOutput, error) {
 	input.sanitizePagination()
 
 	params := buildClassificationMatchQueryParams(input)
-	results, total, err := clients.FindClassificationMatches(ctx, collibraHttpClient, params)
+	results, total, err := clients.SearchClassificationMatches(ctx, collibraHttpClient, params)
 	if err != nil {
-		return FindClassificationMatchesOutput{Error: err.Error(), Total: int(total), Count: 0, ClassificationMatches: results}, nil
+		return SearchClassificationMatchesOutput{Error: err.Error(), Total: int(total), Count: 0, ClassificationMatches: results}, nil
 	}
 
 	if len(results) == 0 {
-		return FindClassificationMatchesOutput{Total: int(total), Count: 0, ClassificationMatches: results}, nil
+		return SearchClassificationMatchesOutput{Total: int(total), Count: 0, ClassificationMatches: results}, nil
 	}
 
-	return FindClassificationMatchesOutput{Total: int(total), Count: len(results), ClassificationMatches: results}, nil
+	return SearchClassificationMatchesOutput{Total: int(total), Count: len(results), ClassificationMatches: results}, nil
 }
 
-func (in *FindClassificationMatchesInput) sanitizePagination() {
+func (in *SearchClassificationMatchesInput) sanitizePagination() {
 	if in.Limit < 0 {
 		in.Limit = 0
 	}
@@ -64,7 +64,7 @@ func (in *FindClassificationMatchesInput) sanitizePagination() {
 	}
 }
 
-func buildClassificationMatchQueryParams(in FindClassificationMatchesInput) clients.ClassificationMatchQueryParams {
+func buildClassificationMatchQueryParams(in SearchClassificationMatchesInput) clients.ClassificationMatchQueryParams {
 	params := clients.ClassificationMatchQueryParams{
 		AssetIDs:          in.AssetIDs,
 		Statuses:          in.Statuses,

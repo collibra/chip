@@ -6,24 +6,17 @@ A Model Context Protocol (MCP) server that provides AI agents with access to Col
 
 This Go-based MCP server acts as a bridge between AI applications and Collibra, enabling intelligent data discovery and governance operations through the following tools:
 
-**Discovery & Search**
-- [`discover_data_assets`](pkg/tools/ask_dad.go) - Query available data assets using natural language
-- [`discover_business_glossary`](pkg/tools/ask_glossary.go) - Ask questions about terms and definitions
-- [`search_keyword`](pkg/tools/keyword_search.go) - Wildcard keyword search for assets
-- [`search_data_classes`](pkg/tools/find_data_classes.go) - Search for data classes with filters
-- [`find_classification_matches`](pkg/tools/find_classification_matches.go) - Find associations between data classes and assets
-
-**Asset Management**
-- [`get_asset_details`](pkg/tools/get_asset_details.go) - Retrieve detailed information about specific assets by UUID
-- [`list_asset_types`](pkg/tools/list_asset_types.go) - List available asset types
-
-**Classification**
-- [`add_classification_match`](pkg/tools/add_classification_match.go) - Associate a data class with an asset
-- [`remove_classification_match`](pkg/tools/remove_classification_match.go) - Remove a classification match
-
-**Data Contracts**
-- [`list_data_contracts`](pkg/tools/list_data_contracts.go) - List data contracts with pagination
-- [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest.go) - Download manifest for a data contract
+- [`asset_details_get`](pkg/tools/get_asset_details.go) - Retrieve detailed information about specific assets by UUID
+- [`asset_keyword_search`](pkg/tools/keyword_search.go) - Wildcard keyword search for assets
+- [`asset_types_list`](pkg/tools/list_asset_types.go) - List available asset types
+- [`business_glossary_discover`](pkg/tools/ask_glossary.go) - Ask questions about terms and definitions
+- [`classification_match_add`](pkg/tools/add_classification_match.go) - Associate a data class with an asset
+- [`classification_match_remove`](pkg/tools/remove_classification_match.go) - Remove a classification match
+- [`classification_match_search`](pkg/tools/find_classification_matches.go) - Find associations between data classes and assets
+- [`data_assets_discover`](pkg/tools/ask_dad.go) - Query available data assets using natural language
+- [`data_class_search`](pkg/tools/search_data_classes.go) - Search for data classes with filters
+- [`data_contract_list`](pkg/tools/list_data_contracts.go) - List data contracts with pagination
+- [`data_contract_manifest_pull`](pkg/tools/pull_data_contract_manifest.go) - Download manifest for a data contract
 
 ## Quick Start
 

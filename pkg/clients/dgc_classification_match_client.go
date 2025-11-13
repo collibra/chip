@@ -101,7 +101,7 @@ func AddClassificationMatch(ctx context.Context, httpClient *http.Client, reques
 	return &match, nil
 }
 
-func FindClassificationMatches(ctx context.Context, httpClient *http.Client, params ClassificationMatchQueryParams) ([]ClassificationMatch, int64, error) {
+func SearchClassificationMatches(ctx context.Context, httpClient *http.Client, params ClassificationMatchQueryParams) ([]ClassificationMatch, int64, error) {
 	endpoint := "/rest/catalog/1.0/dataClassification/classificationMatches/bulk"
 	values, err := query.Values(params)
 	if err != nil {

@@ -36,7 +36,7 @@ func TestFindClassificationMatches(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewFindClassificationMatchesTool().ToolHandler(t.Context(), client, tools.FindClassificationMatchesInput{
+	output, err := tools.NewSearchClassificationMatchesTool().ToolHandler(t.Context(), client, tools.SearchClassificationMatchesInput{
 		Statuses: []string{"ACCEPTED"},
 		Limit:    50,
 	})

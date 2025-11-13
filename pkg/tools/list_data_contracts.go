@@ -31,7 +31,7 @@ type DataContract struct {
 func NewListDataContractsTool() *chip.CollibraTool[ListDataContractsInput, ListDataContractsOutput] {
 	return &chip.CollibraTool[ListDataContractsInput, ListDataContractsOutput]{
 		Tool: &mcp.Tool{
-			Name:        "list_data_contracts",
+			Name:        "data_contract_list",
 			Description: "List data contracts available in Collibra. Returns a paginated list of data contract metadata, sorted by the last modified date in descending order.",
 		},
 		ToolHandler: handleListDataContracts,

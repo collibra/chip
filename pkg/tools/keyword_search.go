@@ -10,7 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type KeywordSearchInput struct {
+type SearchKeywordInput struct {
 	Query               string   `json:"query" jsonschema:"Required. The keyword query to search for."`
 	Limit               int      `json:"limit,omitempty" jsonschema:"Optional. Maximum number of results to return. The maximum value is 1000. Default: 50."`
 	Offset              int      `json:"offset,omitempty" jsonschema:"Optional. Index of first result (pagination offset). Default: 0."`
@@ -23,12 +23,12 @@ type KeywordSearchInput struct {
 	CreatedByFilter     []string `json:"createdByFilter,omitempty" jsonschema:"Optional. Filter by resources created by the specified user UUIDs."`
 }
 
-type KeywordSearchOutput struct {
+type SearchKeywordOutput struct {
 	Total   int                     `json:"total" jsonschema:"The total number of results available matching the search criteria"`
-	Results []KeywordSearchResource `json:"results" jsonschema:"The list of search results"`
+	Results []SearchKeywordResource `json:"results" jsonschema:"The list of search results"`
 }
 
-type KeywordSearchResource struct {
+type SearchKeywordResource struct {
 	ResourceType   string `json:"resourceType" jsonschema:"The type of the resource (e.g., Asset, Domain, Community, User, UserGroup)"`
 	ID             string `json:"id" jsonschema:"The unique identifier of the resource"`
 	CreatedBy      string `json:"createdBy" jsonschema:"The user who created the resource"`
@@ -37,26 +37,26 @@ type KeywordSearchResource struct {
 	Name           string `json:"name" jsonschema:"The name of the resource"`
 }
 
-func NewKeywordSearchTool() *chip.CollibraTool[KeywordSearchInput, KeywordSearchOutput] {
-	return &chip.CollibraTool[KeywordSearchInput, KeywordSearchOutput]{
+func NewSearchKeywordTool() *chip.CollibraTool[SearchKeywordInput, SearchKeywordOutput] {
+	return &chip.CollibraTool[SearchKeywordInput, SearchKeywordOutput]{
 		Tool: &mcp.Tool{
-			Name:        "search_keyword",
+			Name:        "asset_keyword_search",
 			Description: "Perform a wildcard keyword search for assets in the Collibra knowledge graph. Supports filtering by resource type, community, domain, asset type, status, and creator.",
 		},
-		ToolHandler: handleKeywordSearch,
+		ToolHandler: handleSearchKeyword,
 	}
 }
 
-func handleKeywordSearch(ctx context.Context, collibraHttpClient *http.Client, input KeywordSearchInput) (KeywordSearchOutput, error) {
+func handleSearchKeyword(ctx context.Context, collibraHttpClient *http.Client, input SearchKeywordInput) (SearchKeywordOutput, error) {
 	if input.Limit == 0 {
 		input.Limit = 50
 	}
 
 	filters := buildSearchFilters(input)
 
-	searchResponse, err := clients.KeywordSearch(ctx, collibraHttpClient, input.Query, input.ResourceTypeFilters, filters, input.Limit, input.Offset)
+	searchResponse, err := clients.SearchKeyword(ctx, collibraHttpClient, input.Query, input.ResourceTypeFilters, filters, input.Limit, input.Offset)
 	if err != nil {
-		return KeywordSearchOutput{}, err
+		return SearchKeywordOutput{}, err
 	}
 
 	output := mapSearchResponseToOutput(searchResponse)
@@ -64,7 +64,7 @@ func handleKeywordSearch(ctx context.Context, collibraHttpClient *http.Client, i
 	return output, nil
 }
 
-func buildSearchFilters(input KeywordSearchInput) []clients.SearchFilter {
+func buildSearchFilters(input SearchKeywordInput) []clients.SearchFilter {
 	var searchFilters []clients.SearchFilter
 
 	if len(input.CommunityFilter) > 0 {
@@ -118,10 +118,10 @@ func formatTimestamp(milliseconds int64) string {
 	return t.Format(time.RFC3339)
 }
 
-func mapSearchResponseToOutput(searchResponse *clients.SearchResponse) KeywordSearchOutput {
-	resources := make([]KeywordSearchResource, len(searchResponse.Results))
+func mapSearchResponseToOutput(searchResponse *clients.SearchResponse) SearchKeywordOutput {
+	resources := make([]SearchKeywordResource, len(searchResponse.Results))
 	for i, result := range searchResponse.Results {
-		resources[i] = KeywordSearchResource{
+		resources[i] = SearchKeywordResource{
 			ResourceType:   result.Resource.ResourceType,
 			ID:             result.Resource.ID,
 			CreatedBy:      result.Resource.CreatedBy,
@@ -131,7 +131,7 @@ func mapSearchResponseToOutput(searchResponse *clients.SearchResponse) KeywordSe
 		}
 	}
 
-	return KeywordSearchOutput{
+	return SearchKeywordOutput{
 		Total:   searchResponse.Total,
 		Results: resources,
 	}

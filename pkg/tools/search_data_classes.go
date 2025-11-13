@@ -28,7 +28,7 @@ type SearchDataClassesOutput struct {
 func NewSearchDataClassesTool() *chip.CollibraTool[SearchDataClassesInput, SearchDataClassesOutput] {
 	return &chip.CollibraTool[SearchDataClassesInput, SearchDataClassesOutput]{
 		Tool: &mcp.Tool{
-			Name:        "search_data_classes",
+			Name:        "data_class_search",
 			Description: "Search for data classes in Collibra's classification service. Supports filtering by name, description, and whether they contain rules.",
 		},
 		ToolHandler: handleSearchDataClasses,

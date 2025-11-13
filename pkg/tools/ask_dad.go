@@ -20,7 +20,7 @@ type AskDadOutput struct {
 func NewAskDadTool() *chip.CollibraTool[AskDadInput, AskDadOutput] {
 	return &chip.CollibraTool[AskDadInput, AskDadOutput]{
 		Tool: &mcp.Tool{
-			Name:        "discover_data_assets",
+			Name:        "data_assets_discover",
 			Description: "Ask the data asset discovery agent questions about available data assets in Collibra.",
 		},
 		ToolHandler: handleAskDad,

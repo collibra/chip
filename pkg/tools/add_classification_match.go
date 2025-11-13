@@ -25,7 +25,7 @@ type AddClassificationMatchOutput struct {
 func NewAddClassificationMatchTool() *chip.CollibraTool[AddClassificationMatchInput, AddClassificationMatchOutput] {
 	return &chip.CollibraTool[AddClassificationMatchInput, AddClassificationMatchOutput]{
 		Tool: &mcp.Tool{
-			Name:        "add_classification_match",
+			Name:        "classification_match_add",
 			Description: "Associate a data classification (data class) with a specific data asset in Collibra. Requires both the asset UUID and the classification UUID.",
 		},
 		ToolHandler: handleAddClassificationMatch,

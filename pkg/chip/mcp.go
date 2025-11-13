@@ -17,7 +17,7 @@ type ToolConfig struct {
 func NewMcpServer() *mcp.Server {
 	return mcp.NewServer(&mcp.Implementation{
 		Name:    "Collibra MCP server",
-		Title:   "Interact with your Collibra environment to discover and interact with your governed assets.",
+		Title:   "Collibra Data Intelligence Platform MCP Server - Discover and interact with your governed assets. Collibra's operating model structures data governance through Communities (high-level organizational units), Domains (logical groupings of assets within communities), and Assets (core building blocks like data sets, business terms, and reports). Assets have Attributes (metadata) and Relations (connections between assets), and are organized by Asset Types (templates defining structure) and Domain Types (templates defining which asset types belong in a domain). This hierarchical model forms a knowledge graph that enables effective data governance, access control, and lineage tracking across your organization.",
 		Version: Version,
 	}, nil)
 }

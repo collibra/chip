@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func KeywordSearch(ctx context.Context, collibraHttpClient *http.Client, question string, resourceTypes []string, filters []SearchFilter, limit int, offset int) (*SearchResponse, error) {
+func SearchKeyword(ctx context.Context, collibraHttpClient *http.Client, question string, resourceTypes []string, filters []SearchFilter, limit int, offset int) (*SearchResponse, error) {
 	slog.Info(fmt.Sprintf("Keyword search query: '%s'", question))
 	searchUrl := "/rest/2.0/search"
 
