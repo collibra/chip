@@ -3,7 +3,10 @@ package chip
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -11,7 +14,21 @@ import (
 )
 
 type ToolConfig struct {
-	CollibraUrl string
+	CollibraUrl   string
+	EnabledTools  []string
+	DisabledTools []string
+}
+
+func (tc *ToolConfig) IsToolEnabled(toolName string) bool {
+	if slices.Contains(tc.DisabledTools, toolName) {
+		return false
+	}
+
+	if len(tc.EnabledTools) > 0 {
+		return slices.Contains(tc.EnabledTools, toolName)
+	}
+
+	return true
 }
 
 func NewMcpServer() *mcp.Server {
@@ -23,6 +40,7 @@ func NewMcpServer() *mcp.Server {
 }
 
 func RegisterMcpTool[In, Out any](server *mcp.Server, tool *CollibraTool[In, Out], client *http.Client, toolConfig *ToolConfig) {
+	slog.Info(fmt.Sprintf("Registering tool: %s", tool.Tool.Name))
 	mcp.AddTool(server, tool.Tool, mcpToolFunction(tool.ToolHandler, client, toolConfig))
 }
 

@@ -30,7 +30,9 @@ func main() {
 	client := newCollibraClient(config)
 	server := chip.NewMcpServer()
 	toolConfig := &chip.ToolConfig{
-		CollibraUrl: config.Api.Url,
+		CollibraUrl:   config.Api.Url,
+		EnabledTools:  config.Mcp.EnabledTools,
+		DisabledTools: config.Mcp.DisabledTools,
 	}
 	tools.RegisterAll(server, client, toolConfig)
 

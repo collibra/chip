@@ -77,6 +77,14 @@ func initConfigOptions() {
 	viper.BindEnv("mcp.http.port", "COLLIBRA_MCP_HTTP_PORT")
 	viper.BindPFlag("mcp.http.port", pflag.Lookup("port"))
 	viper.SetDefault("mcp.http.port", 8080)
+
+	pflag.StringSlice("enabled-tools", []string{}, "Comma-separated list of tools to enable (cannot be used with disabled-tools) (env: COLLIBRA_MCP_ENABLED_TOOLS)")
+	viper.BindEnv("mcp.enabled-tools", "COLLIBRA_MCP_ENABLED_TOOLS")
+	viper.BindPFlag("mcp.enabled-tools", pflag.Lookup("enabled-tools"))
+
+	pflag.StringSlice("disabled-tools", []string{}, "Comma-separated list of tools to disable (cannot be used with enabled-tools) (env: COLLIBRA_MCP_DISABLED_TOOLS)")
+	viper.BindEnv("mcp.disabled-tools", "COLLIBRA_MCP_DISABLED_TOOLS")
+	viper.BindPFlag("mcp.disabled-tools", pflag.Lookup("disabled-tools"))
 }
 
 func printUsage(version string) {
@@ -101,6 +109,8 @@ ENVIRONMENT VARIABLES:
   HTTPS_PROXY                   HTTPS proxy URL (alternative to COLLIBRA_MCP_API_PROXY)
   COLLIBRA_MCP_MODE             Server mode: 'stdio', 'http', 'http-sse', or 'http-streamable' (default: stdio)
   COLLIBRA_MCP_HTTP_PORT        HTTP server port (default: 8080)
+  COLLIBRA_MCP_ENABLED_TOOLS    Comma-separated list of tools to enable, mutually exclusive with disabled-tools
+  COLLIBRA_MCP_DISABLED_TOOLS   Comma-separated list of tools to disable, mutually exclusive with enabled-tools
 
 CONFIGURATION:
   Configuration can be provided in the following order of precedence: command-line flags (highest), environment variables, or a YAML configuration file (lowest).
@@ -120,12 +130,23 @@ CONFIGURATION FILE EXAMPLE:
     mode: "http"  # or "stdio", "http-sse", "http-streamable"
     http:
       port: 8080
+    enabled-tools:  # Optional: list of tools to enable (cannot be used with disabled-tools)
+      - "tool1"
+      - "tool2"
+    # disabled-tools:  # Optional: list of tools to disable (cannot be used with enabled-tools)
+    #   - "tool3"
+    #   - "tool4"
 `)
 }
 
 func validateConfigFile(config Config) {
 	if config.Mcp.Mode != "stdio" && config.Mcp.Mode != "http" && config.Mcp.Mode != "http-sse" && config.Mcp.Mode != "http-streamable" {
 		slog.Error(fmt.Sprintf("Invalid server mode: %s (must be 'stdio', 'http', 'http-sse' or 'http-streamable')", config.Mcp.Mode))
+		os.Exit(1)
+	}
+
+	if len(config.Mcp.EnabledTools) > 0 && len(config.Mcp.DisabledTools) > 0 {
+		slog.Error("Cannot specify both enabled-tools and disabled-tools, only one can be specified")
 		os.Exit(1)
 	}
 }
@@ -166,9 +187,11 @@ type CollibraApiConfig struct {
 
 // ServerConfig holds server configuration
 type McpConfig struct {
-	Mode  string      `mapstructure:"mode"` // "stdio", "http", "http-sse", or "http-streamable"
-	Http  HttpConfig  `mapstructure:"http"`
-	Stdio StdioConfig `mapstructure:"stdio"`
+	Mode          string      `mapstructure:"mode"` // "stdio", "http", "http-sse", or "http-streamable"
+	Http          HttpConfig  `mapstructure:"http"`
+	Stdio         StdioConfig `mapstructure:"stdio"`
+	EnabledTools  []string    `mapstructure:"enabled-tools"`
+	DisabledTools []string    `mapstructure:"disabled-tools"`
 }
 
 type HttpConfig struct {

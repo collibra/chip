@@ -8,16 +8,33 @@ import (
 )
 
 func RegisterAll(server *mcp.Server, client *http.Client, toolConfig *chip.ToolConfig) {
-	chip.RegisterMcpTool(server, NewAskDadTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewAskGlossaryTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewAssetDetailsTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewSearchKeywordTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewSearchDataClassesTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewListAssetTypesTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewAddDataClassificationMatchTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewSearchClassificationMatchesTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewRemoveDataClassificationMatchTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewListDataContractsTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewPushDataContractManifestTool(), client, toolConfig)
-	chip.RegisterMcpTool(server, NewPullDataContractManifestTool(), client, toolConfig)
+	for _, register := range toolRegistry {
+		register(server, client, toolConfig)
+	}
+}
+
+var toolRegistry = []toolRegistrar{
+	toolRegister(NewAskDadTool),
+	toolRegister(NewAskGlossaryTool),
+	toolRegister(NewAssetDetailsTool),
+	toolRegister(NewSearchKeywordTool),
+	toolRegister(NewSearchDataClassesTool),
+	toolRegister(NewListAssetTypesTool),
+	toolRegister(NewAddDataClassificationMatchTool),
+	toolRegister(NewSearchClassificationMatchesTool),
+	toolRegister(NewRemoveDataClassificationMatchTool),
+	toolRegister(NewListDataContractsTool),
+	toolRegister(NewPushDataContractManifestTool),
+	toolRegister(NewPullDataContractManifestTool),
+}
+
+type toolRegistrar func(*mcp.Server, *http.Client, *chip.ToolConfig)
+
+func toolRegister[In, Out any](toolFunc func() *chip.CollibraTool[In, Out]) toolRegistrar {
+	return func(server *mcp.Server, client *http.Client, toolConfig *chip.ToolConfig) {
+		toolInstance := toolFunc()
+		if toolConfig.IsToolEnabled(toolInstance.Tool.Name) {
+			chip.RegisterMcpTool(server, toolInstance, client, toolConfig)
+		}
+	}
 }
