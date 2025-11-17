@@ -1,0 +1,46 @@
+# Example configuration file for Collibra MCP Server
+# Copy this file to mcp.yaml and update with your values
+#
+# The server looks for mcp.yaml in:
+# 1. Current directory (.)
+# 2. $HOME/.config/collibra/
+# 3. /etc/collibra/
+
+# Collibra API configuration
+api:
+  # Collibra API base URL (required)
+  url: "https://your-collibra-instance.com"
+  
+  # API credentials (optional - can be provided by client requests)
+  # For server-wide authentication (all requests use same credentials):
+  username: "your-username"
+  password: "your-password"
+  
+  # For client-provided authentication (recommended):
+  # Leave username and password empty or omit them entirely
+  # Clients will provide Authorization headers with each request
+  
+  # Skip TLS certificate verification (optional, default: false)
+  # Set to true only for development with self-signed certificates
+  http-skip-tls-verify: false
+  
+  # HTTP proxy URL for API requests (optional)
+  # Can also be set via HTTP_PROXY or HTTPS_PROXY environment variables
+  # Example: "http://proxy.example.com:8080"
+  proxy: ""
+
+# MCP server configuration
+mcp:
+  # Transport mode (optional, default: "stdio")
+  # Options: 
+  #   "stdio" - Standard input/output for MCP clients
+  #   "http" - Default HTTP transport (uses SSE)
+  #   "http-sse" - HTTP with Server-Sent Events
+  #   "http-streamable" - HTTP with streamable transport
+  mode: "stdio"
+  
+  # HTTP transport configuration (used for all HTTP modes)
+  http:
+    # Port for HTTP server (optional, default: 8080)
+    port: 8080
+  

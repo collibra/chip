@@ -1,0 +1,8 @@
+/chip
+/chip-service
+.build
+build
+.idea/
+.vscode
+mcp.yaml
+oas/**
