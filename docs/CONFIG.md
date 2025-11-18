@@ -22,6 +22,8 @@ The server can be configured using the following environment variables:
 - `COLLIBRA_MCP_HTTP_PORT` - HTTP server port (default: 8080, only used in HTTP modes)
 - `COLLIBRA_MCP_API_SKIP_TLS_VERIFY` - Skip TLS certificate verification (default: false)
 - `COLLIBRA_MCP_API_PROXY` | `HTTP_PROXY` | `HTTPS_PROXY`  - HTTP proxy URL for API requests (e.g., `http://proxy.example.com:8080`)
+- `COLLIBRA_MCP_ENABLED_TOOLS` - Comma-separated list of tool names to enable instead of enabling all tools (cannot be used with `COLLIBRA_MCP_DISABLED_TOOLS`)
+- `COLLIBRA_MCP_DISABLED_TOOLS` - Comma-separated list of tool names to disable while enabling the remaining tools (cannot be used with `COLLIBRA_MCP_ENABLED_TOOLS`)
 
 ## Configuration File
 
@@ -45,6 +47,10 @@ mcp:
   mode: "stdio"  # or "http", "http-sse", "http-streamable"
   http:
     port: 8080
+
+  # optionally enable OR disable specific tools using the tool names listed in the README.md file. 
+  # enabled-tools: []  
+  # disabled-tools: []
 ```
 
 ## Configuration Structure
@@ -63,6 +69,8 @@ The configuration is organized into two main sections:
 - `http` section:
   - `port` - HTTP server port number
 - `stdio` section: (currently empty, reserved for future stdio-specific settings)
+- `enabled-tools` - optional list of tool names to be enabled instead of enabling all tools.  Cannot be used with `disabled-tools`
+- `disabled-tools` - optional list of tool names to be disabled while enabling remaining tools.  Cannot be used with `enabled-tools`
 
 ## Authentication Approaches
 
@@ -120,6 +128,13 @@ export COLLIBRA_MCP_API_URL="https://your-instance.collibra.com"
 export COLLIBRA_MCP_API_USR="your-username"
 export COLLIBRA_MCP_API_PWD="your-password"
 export COLLIBRA_MCP_API_PROXY="http://proxy.example.com:8080" # Or use HTTP_PROXY or HTTPS_PROXY
+./mcp-server
+
+# Enabling specific tools only
+export COLLIBRA_MCP_API_URL="https://your-instance.collibra.com"
+export COLLIBRA_MCP_API_USR="your-username"
+export COLLIBRA_MCP_API_PWD="your-password"
+export COLLIBRA_MCP_ENABLED_TOOLS="asset_keyword_search,asset_details_get,asset_types_list"
 ./mcp-server
 ```
 
@@ -191,3 +206,5 @@ All environment variables use the `COLLIBRA_MCP_` prefix. The configuration syst
 - `HTTPS_PROXY` → `api.proxy` 
 - `COLLIBRA_MCP_MODE` → `mcp.mode`
 - `COLLIBRA_MCP_HTTP_PORT` → `mcp.http.port`
+- `COLLIBRA_MCP_ENABLED_TOOLS` → `mcp.enabled-tools`
+- `COLLIBRA_MCP_DISABLED_TOOLS` → `mcp.disabled-tools`

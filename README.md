@@ -10,13 +10,14 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`asset_keyword_search`](pkg/tools/keyword_search.go) - Wildcard keyword search for assets
 - [`asset_types_list`](pkg/tools/list_asset_types.go) - List available asset types
 - [`business_glossary_discover`](pkg/tools/ask_glossary.go) - Ask questions about terms and definitions
-- [`classification_match_add`](pkg/tools/add_classification_match.go) - Associate a data class with an asset
-- [`classification_match_remove`](pkg/tools/remove_classification_match.go) - Remove a classification match
-- [`classification_match_search`](pkg/tools/find_classification_matches.go) - Find associations between data classes and assets
+- [`data_classification_match_add`](pkg/tools/add_data_classification_match.go) - Associate a data class with an asset
+- [`data_classification_match_remove`](pkg/tools/remove_data_classification_match.go) - Remove a classification match
+- [`data_classification_match_search`](pkg/tools/find_data_classification_matches.go) - Find associations between data classes and assets
 - [`data_assets_discover`](pkg/tools/ask_dad.go) - Query available data assets using natural language
 - [`data_class_search`](pkg/tools/search_data_classes.go) - Search for data classes with filters
 - [`data_contract_list`](pkg/tools/list_data_contracts.go) - List data contracts with pagination
 - [`data_contract_manifest_pull`](pkg/tools/pull_data_contract_manifest.go) - Download manifest for a data contract
+- [`data_contract_manifest_push`](pkg/tools/push_data_contract_manifest.go) - Upload manifest for a data contract
 
 ## Quick Start
 
@@ -142,6 +143,14 @@ Here's how to integrate with some popular clients assuming you have a configurat
   }
 }
 ```
+
+## Enabling or disabling specific tools
+
+You can enable or disable specific tools by passing command line parameters, setting environment variables, or customizing the `mcp.yaml` configuration file.
+You can specify tools to enable or disable by using the tool names listed above (e.g. `asset_details_get`).  For more information, see the [CONFIG.md](docs/CONFIG.md) documentation.
+
+By default, all tools are enabled. Specifying tools to be enabled will enable *only* those tools.  Disabling tools will disable *only* those tools and leave all others enabled.
+At present, enabling and disabling at the same time is not supported. 
 
 
 ## Contributing

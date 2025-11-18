@@ -78,11 +78,11 @@ func initConfigOptions() {
 	viper.BindPFlag("mcp.http.port", pflag.Lookup("port"))
 	viper.SetDefault("mcp.http.port", 8080)
 
-	pflag.StringSlice("enabled-tools", []string{}, "Comma-separated list of tools to enable (cannot be used with disabled-tools) (env: COLLIBRA_MCP_ENABLED_TOOLS)")
+	pflag.StringSlice("enabled-tools", []string{}, "Optional comma-separated list of tool names to enable instead of enabling all tools (cannot be used with disabled-tools) (env: COLLIBRA_MCP_ENABLED_TOOLS)")
 	viper.BindEnv("mcp.enabled-tools", "COLLIBRA_MCP_ENABLED_TOOLS")
 	viper.BindPFlag("mcp.enabled-tools", pflag.Lookup("enabled-tools"))
 
-	pflag.StringSlice("disabled-tools", []string{}, "Comma-separated list of tools to disable (cannot be used with enabled-tools) (env: COLLIBRA_MCP_DISABLED_TOOLS)")
+	pflag.StringSlice("disabled-tools", []string{}, "Optional comma-separated list of tool names to disable while enabling the remaining tools (cannot be used with enabled-tools) (env: COLLIBRA_MCP_DISABLED_TOOLS)")
 	viper.BindEnv("mcp.disabled-tools", "COLLIBRA_MCP_DISABLED_TOOLS")
 	viper.BindPFlag("mcp.disabled-tools", pflag.Lookup("disabled-tools"))
 }
@@ -109,8 +109,8 @@ ENVIRONMENT VARIABLES:
   HTTPS_PROXY                   HTTPS proxy URL (alternative to COLLIBRA_MCP_API_PROXY)
   COLLIBRA_MCP_MODE             Server mode: 'stdio', 'http', 'http-sse', or 'http-streamable' (default: stdio)
   COLLIBRA_MCP_HTTP_PORT        HTTP server port (default: 8080)
-  COLLIBRA_MCP_ENABLED_TOOLS    Comma-separated list of tools to enable, mutually exclusive with disabled-tools
-  COLLIBRA_MCP_DISABLED_TOOLS   Comma-separated list of tools to disable, mutually exclusive with enabled-tools
+  COLLIBRA_MCP_ENABLED_TOOLS    Optional comma-separated list of tool names to enable instead of enabling all tools, cannot be used with disabled-tools
+  COLLIBRA_MCP_DISABLED_TOOLS   Optional comma-separated list of tool names to disable while enabling the remaining tools, cannot be used with enabled-tools
 
 CONFIGURATION:
   Configuration can be provided in the following order of precedence: command-line flags (highest), environment variables, or a YAML configuration file (lowest).
