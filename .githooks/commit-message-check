@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+# Validates commit messages against the project's Conventional Commits policy.
+
+set -euo pipefail
+
+msgfile="$1"
+header="$(sed -n '1p' "$msgfile" | sed 's/[[:space:]]*$//')"
+
+if [ -z "$header" ]; then
+  echo "Aborting commit: empty commit message header."
+  exit 1
+fi
+
+# Allowed types
+# feat, fix, docs, style, refactor, test, chore, ci
+#regex='^(feat|fix|docs|style|refactor|test|chore|ci)(\([a-zA-Z0-9._\/-]+\))?(!)?: .+'
+regex='^(feat|fix|docs|style|refactor|test|chore|ci)(\([A-Za-z0-9._\/-]+\))?(!)?: .+(?:\r?\n\r?\n.*)?$'
+
+
+if ! printf '%s\n' "$header" | grep -E -q "$regex"; then
+  cat <<'MSG'
+Aborting commit: commit message does not follow Conventional Commits.
+Expected header format:
+  <type>[optional scope]: <description>
+
+Allowed types: feat, fix, docs, style, refactor, test, chore, ci
+Optional breaking change: add a `!` after the type or include `BREAKING CHANGE:` in the body.
+
+Examples:
+  feat(api): add user login endpoint
+
+  fix: correct nil pointer dereference
+
+  refactor(database): switch to pgx driver
+MSG
+  exit 1
+fi
+
+# Enforce description length <= 72 characters
+# description is everything after the first colon+space
+desc="${header#*: }"
+if [ "${#desc}" -gt 72 ]; then
+  echo "Aborting commit: description longer than 72 characters (${#desc})."
+  exit 1
+fi
+
+# All checks passed
+exit 0
