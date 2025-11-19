@@ -2,8 +2,6 @@ package chip
 
 import (
 	"net/http"
-
-	"github.com/google/uuid"
 )
 
 type CollibraClient struct {
@@ -17,8 +15,6 @@ func (c *CollibraClient) RoundTrip(request *http.Request) (*http.Response, error
 		reqClone.Header.Set("Content-Type", "application/json")
 	}
 	reqClone.Header.Set("User-Agent", "Collibra MCP/"+Version)
-	// TODO: Remove the need for X-Thread-Id header
-	reqClone.Header.Set("X-Thread-Id", uuid.New().String())
 	return c.next.RoundTrip(reqClone)
 }
 
