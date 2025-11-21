@@ -1,0 +1,60 @@
+name: release
+run-name: release - ${{github.event.pull_request.title || github.event.head_commit.message || github.head_ref || github.ref}}
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yaml
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      BUILD_DIR: 'build'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        run: |
+          VERSION=${{ github.ref_name }}
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.0'
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Build
+        run: |
+          GOFIPS140=v1.0.0 GOOS=linux GOARCH=amd64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-amd64 ./cmd/chip
+          GOFIPS140=v1.0.0 GOOS=linux GOARCH=arm64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-arm64 ./cmd/chip
+          GOFIPS140=v1.0.0 GOOS=darwin GOARCH=amd64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-mac-amd64 ./cmd/chip
+          GOFIPS140=v1.0.0 GOOS=darwin GOARCH=arm64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-mac-arm64 ./cmd/chip
+          GOFIPS140=v1.0.0 GOOS=windows GOARCH=amd64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-windows-amd64.exe ./cmd/chip
+          GOFIPS140=v1.0.0 GOOS=windows GOARCH=arm64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-windows-arm64.exe ./cmd/chip
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-amd64
+            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-arm64
+            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-mac-amd64
+            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-mac-arm64
+            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-windows-amd64.exe
+            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-windows-arm64.exe
+          generate_release_notes: true
+          make_latest: true
+          draft: false
+          prerelease: false

@@ -4,8 +4,6 @@
 
 - [ ] My code follows the style guidelines of this project.
 - [ ] I have performed a **self-review** of my own code.
-- [ ] I have run `go test -race ./...` and all tests pass.
-- [ ] I have run `golangci-lint run` and there are no new issues.
 - [ ] I have commented my code, particularly in hard-to-understand areas.
 - [ ] I have made corresponding changes to the **documentation** (if needed).
 - [ ] My commit messages follow the [**Conventional Commits**](../CONTRIBUTING.md) standard.

@@ -1,0 +1,36 @@
+name: build
+run-name: build - ${{github.event.pull_request.title || github.event.head_commit.message || github.head_ref || github.ref}}
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.0'
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Compile
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -race -v ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.4.0
