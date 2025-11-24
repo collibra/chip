@@ -74,6 +74,21 @@ The server supports two authentication approaches, either configured through env
 #### Option 1: Server-wide Authentication
 When running over the stdio transport, configure credentials at the server level - all requests use the same credentials:
 
+```bash
+mkdir -p ~/.config/collibra/
+```
+
+Powershell:
+```powershell
+New-Item -ItemType File -Path $HOME\.config\collibra\mcp.yaml
+```
+
+bash/zsh:
+```bash
+touch ~/.config/collibra/mcp.yaml
+```
+
+
 ```yaml
 # ~/.config/collibra/mcp.yaml
 api:

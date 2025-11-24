@@ -59,7 +59,9 @@ Each commit message consists of a **header**, a **body**, and a **footer**.
 
 ```text
 <type>[optional scope]: <description>
+
 [optional body]
+
 [optional footer(s)]
 ```
 
