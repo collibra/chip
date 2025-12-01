@@ -57,7 +57,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 #### Option B: Build from Source
    ```bash
    git clone <repository-url>
-   cd ai-mcp-discovery
+   cd chip
    go mod download
    go build -o .build/chip ./cmd/chip
 
