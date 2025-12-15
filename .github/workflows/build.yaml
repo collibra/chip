@@ -24,11 +24,11 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Compile
-        run: go build -v ./...
-
       - name: Test
         run: go test -race -v ./...
+
+      - name: Build
+        run: go build -v ./...
 
       - name: Lint
         uses: golangci/golangci-lint-action@v8

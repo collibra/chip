@@ -28,7 +28,7 @@ func main() {
 	}
 
 	client := newCollibraClient(config)
-	server := chip.NewMcpServer()
+	server := chip.NewServer()
 	toolConfig := &chip.ToolConfig{
 		CollibraUrl:   config.Api.Url,
 		EnabledTools:  config.Mcp.EnabledTools,
@@ -46,7 +46,7 @@ func main() {
 	}
 }
 
-func runStdioServer(server *mcp.Server) {
+func runStdioServer(server *chip.Server) {
 	slog.Info("Listening on stdio")
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		slog.Error(fmt.Sprintf("Failed to run stdio server: %v", err))
@@ -54,19 +54,21 @@ func runStdioServer(server *mcp.Server) {
 	}
 }
 
-func runHttpServer(mode string, server *mcp.Server, port int) {
+func runHttpServer(mode string, server *chip.Server, port int) {
 	var handler http.Handler
 
 	switch mode {
 	case "http", "http-streamable":
 		slog.Info("Using streamable http handler")
 		handler = mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
-			return server
-		}, &mcp.StreamableHTTPOptions{})
+			return &server.Server
+		}, &mcp.StreamableHTTPOptions{
+			Stateless: true,
+		})
 	case "http-sse":
 		slog.Info("Using SSE http handler")
 		handler = mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
-			return server
+			return &server.Server
 		}, &mcp.SSEOptions{})
 	default:
 		slog.Error(fmt.Sprintf("Invalid HTTP mode: %s (must be 'http', 'http-sse' or 'http-streamable')", mode))

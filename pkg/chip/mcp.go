@@ -8,10 +8,18 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+type Server struct {
+	mcpToolCalls    *prometheus.CounterVec
+	mcpToolDuration *prometheus.HistogramVec
+	mcp.Server
+}
 
 type ToolConfig struct {
 	CollibraUrl   string
@@ -31,17 +39,37 @@ func (tc *ToolConfig) IsToolEnabled(toolName string) bool {
 	return true
 }
 
-func NewMcpServer() *mcp.Server {
-	return mcp.NewServer(&mcp.Implementation{
-		Name:    "Collibra MCP server",
-		Title:   "Collibra Data Intelligence Platform MCP Server - Discover and interact with your governed assets. Collibra's operating model structures data governance through Communities (high-level organizational units), Domains (logical groupings of assets within communities), and Assets (core building blocks like data sets, business terms, and reports). Assets have Attributes (metadata) and Relations (connections between assets), and are organized by Asset Types (templates defining structure) and Domain Types (templates defining which asset types belong in a domain). This hierarchical model forms a knowledge graph that enables effective data governance, access control, and lineage tracking across your organization.",
-		Version: Version,
-	}, nil)
+func NewServer() *Server {
+	mcpToolCalls := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "mcp_tool_calls_total",
+			Help: "Total number of MCP tool calls",
+		},
+		[]string{"tool_name", "success"},
+	)
+
+	mcpToolDuration := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "mcp_tool_duration_seconds",
+			Help:    "Mcp tool execution duration",
+			Buckets: []float64{0.1, 0.5, 1, 2, 5, 10},
+		},
+		[]string{"tool_name"},
+	)
+
+	return &Server{
+		mcpToolCalls:    mcpToolCalls,
+		mcpToolDuration: mcpToolDuration,
+		Server: *mcp.NewServer(&mcp.Implementation{
+			Name:    "Collibra MCP server",
+			Title:   "Collibra Data Intelligence Platform MCP Server - Discover and interact with your governed assets. Collibra's operating model structures data governance through Communities (high-level organizational units), Domains (logical groupings of assets within communities), and Assets (core building blocks like data sets, business terms, and reports). Assets have Attributes (metadata) and Relations (connections between assets), and are organized by Asset Types (templates defining structure) and Domain Types (templates defining which asset types belong in a domain). This hierarchical model forms a knowledge graph that enables effective data governance, access control, and lineage tracking across your organization.",
+			Version: Version,
+		}, nil)}
 }
 
-func RegisterMcpTool[In, Out any](server *mcp.Server, tool *CollibraTool[In, Out], client *http.Client, toolConfig *ToolConfig) {
+func RegisterMcpTool[In, Out any](server *Server, tool *CollibraTool[In, Out], client *http.Client, toolConfig *ToolConfig) {
 	slog.Info(fmt.Sprintf("Registering tool: %s", tool.Tool.Name))
-	mcp.AddTool(server, tool.Tool, mcpToolFunction(tool.ToolHandler, client, toolConfig))
+	mcp.AddTool(&server.Server, tool.Tool, mcpToolFunction(server, tool.ToolHandler, client, toolConfig))
 }
 
 type CollibraToolHandler[In, Out any] func(ctx context.Context, client *http.Client, input In) (Out, error)
@@ -49,6 +77,16 @@ type CollibraToolHandler[In, Out any] func(ctx context.Context, client *http.Cli
 type CollibraTool[In, Out any] struct {
 	Tool        *mcp.Tool
 	ToolHandler CollibraToolHandler[In, Out]
+}
+
+func (c *Server) Describe(ch chan<- *prometheus.Desc) {
+	c.mcpToolCalls.Describe(ch)
+	c.mcpToolDuration.Describe(ch)
+}
+
+func (c *Server) Collect(ch chan<- prometheus.Metric) {
+	c.mcpToolCalls.Collect(ch)
+	c.mcpToolDuration.Collect(ch)
 }
 
 func GetHeaderValue(mcpRequest *mcp.CallToolRequest, header string) string {
@@ -133,11 +171,29 @@ func CopyHeader(mcpRequest *mcp.CallToolRequest, httpRequest *http.Request, head
 	}
 }
 
-func mcpToolFunction[In, Out any](handler CollibraToolHandler[In, Out], client *http.Client, toolConfig *ToolConfig) func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error) {
+func mcpToolFunction[In, Out any](server *Server, handler CollibraToolHandler[In, Out], client *http.Client, toolConfig *ToolConfig) func(context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, Out, error) {
 	return func(ctx context.Context, mcpRequest *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		ctx = context.WithValue(ctx, CallToolRequestKey, mcpRequest)
 		ctx = context.WithValue(ctx, ToolConfigKey, toolConfig)
+
+		start := time.Now()
 		output, err := handler(ctx, client, input)
+
+		successLabel := "false"
+		if err == nil {
+			successLabel = "true"
+		}
+		toolName := mcpRequest.Params.Name
+
+		server.mcpToolCalls.With(prometheus.Labels{
+			"tool_name": toolName,
+			"success":   successLabel,
+		}).Inc()
+
+		server.mcpToolDuration.With(prometheus.Labels{
+			"tool_name": toolName,
+		}).Observe(time.Since(start).Seconds())
+
 		return nil, output, err
 	}
 }

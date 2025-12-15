@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Test
+        run: go test --tags release -run TestReleaseVersionCheck -v ./...
+
       - name: Build
         run: |
           GOFIPS140=v1.0.0 GOOS=linux GOARCH=amd64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-amd64 ./cmd/chip
