@@ -68,7 +68,7 @@ func handleAssetDetails(ctx context.Context, collibraHttpClient *http.Client, in
 
 	collibraUrl, err := getCollibraUrl(ctx)
 	if err != nil {
-		slog.Warn("Collibra instance URL unknown, links will be rendered without host")
+		slog.WarnContext(ctx, "Collibra instance URL unknown, links will be rendered without host")
 	}
 
 	return AssetDetailsOutput{

@@ -14,13 +14,13 @@ import (
 )
 
 func SearchKeyword(ctx context.Context, collibraHttpClient *http.Client, question string, resourceTypes []string, filters []SearchFilter, limit int, offset int) (*SearchResponse, error) {
-	slog.Info(fmt.Sprintf("Keyword search query: '%s'", question))
+	slog.InfoContext(ctx, fmt.Sprintf("Keyword search query: '%s'", question))
 	searchUrl := "/rest/2.0/search"
 
 	searchRequest := CreateSearchRequest(question, resourceTypes, filters, limit, offset)
 
 	jsonData, err := json.Marshal(searchRequest)
-	slog.Info(fmt.Sprintf("Search request: %s", string(jsonData)))
+	slog.InfoContext(ctx, fmt.Sprintf("Search request: %s", string(jsonData)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal search request: %w", err)
 	}
@@ -71,7 +71,7 @@ func GetAssetSummary(
 }
 
 func ListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, limit int, offset int) (*AssetTypePagedResponse, error) {
-	slog.Info(fmt.Sprintf("Listing asset types with limit: %d, offset: %d", limit, offset))
+	slog.InfoContext(ctx, fmt.Sprintf("Listing asset types with limit: %d, offset: %d", limit, offset))
 
 	params := AssetTypesQueryParams{
 		ExcludeMeta: true,
@@ -98,7 +98,7 @@ func ListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, limit 
 }
 
 func ListDataContracts(ctx context.Context, collibraHttpClient *http.Client, cursor string, limit int, manifestID string) (*DataContractListPaginated, error) {
-	slog.Info(fmt.Sprintf("Listing data contracts with limit: %d, cursor: %s", limit, cursor))
+	slog.InfoContext(ctx, fmt.Sprintf("Listing data contracts with limit: %d, cursor: %s", limit, cursor))
 
 	params := DataContractsQueryParams{
 		Cursor:       cursor,
@@ -126,7 +126,7 @@ func ListDataContracts(ctx context.Context, collibraHttpClient *http.Client, cur
 }
 
 func PullActiveDataContractManifest(ctx context.Context, collibraHttpClient *http.Client, dataContractID string) ([]byte, error) {
-	slog.Info(fmt.Sprintf("Pulling active manifest for data contract ID: %s", dataContractID))
+	slog.InfoContext(ctx, fmt.Sprintf("Pulling active manifest for data contract ID: %s", dataContractID))
 
 	endpoint := fmt.Sprintf("/rest/dataProduct/v1/dataContracts/%s/activeVersion/manifest", dataContractID)
 
@@ -144,7 +144,7 @@ func PullActiveDataContractManifest(ctx context.Context, collibraHttpClient *htt
 }
 
 func PushDataContractManifest(ctx context.Context, collibraHttpClient *http.Client, reqParams PushDataContractManifestRequest) (*PushDataContractManifestResponse, error) {
-	slog.Info(fmt.Sprintf("Pushing data contract manifest for manifest ID: %s", reqParams.ManifestID))
+	slog.InfoContext(ctx, fmt.Sprintf("Pushing data contract manifest for manifest ID: %s", reqParams.ManifestID))
 
 	endpoint := "/rest/dataProduct/v1/dataContracts/addFromManifest"
 
@@ -153,7 +153,7 @@ func PushDataContractManifest(ctx context.Context, collibraHttpClient *http.Clie
 		return nil, err
 	}
 
-	slog.Info(fmt.Sprintf("content type: %s", contentType))
+	slog.InfoContext(ctx, fmt.Sprintf("content type: %s", contentType))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, body)
 	if err != nil {

@@ -94,7 +94,7 @@ func logMiddleware(next chip.ToolMiddlewareHandler) chip.ToolMiddlewareHandler {
 		if err != nil {
 			return nil, err
 		}
-		slog.Info(fmt.Sprintf("Calling tool: %s", toolRequest.Params.Name), "tool_name", toolRequest.Params.Name)
+		slog.InfoContext(ctx, fmt.Sprintf("Calling tool: %s", toolRequest.Params.Name), "tool_name", toolRequest.Params.Name)
 		return next(ctx, input)
 	}
 }

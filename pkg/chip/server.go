@@ -93,7 +93,7 @@ func toolHandlerFor[In, Out any](server *Server, logic ToolHandler[In, Out], cli
 		}
 		out, err := logic(ctx, client, typedInput)
 		if err != nil {
-			slog.Error("error while calling tool logic", "error", err)
+			slog.ErrorContext(ctx, "error while calling tool logic", "error", err)
 		}
 		return out, err
 	}
