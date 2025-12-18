@@ -50,7 +50,7 @@ func TestAddClassificationMatch_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	output, err := handleAddClassificationMatch(ctx, client, input)
+	output, err := handleAddClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -85,7 +85,7 @@ func TestAddClassificationMatch_MissingAssetID(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	output, err := handleAddClassificationMatch(ctx, client, input)
+	output, err := handleAddClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -108,7 +108,7 @@ func TestAddClassificationMatch_MissingClassificationID(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	output, err := handleAddClassificationMatch(ctx, client, input)
+	output, err := handleAddClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -143,7 +143,7 @@ func TestAddClassificationMatch_AssetNotFound(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	output, err := handleAddClassificationMatch(ctx, client, input)
+	output, err := handleAddClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -178,7 +178,7 @@ func TestAddClassificationMatch_AlreadyExists(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	output, err := handleAddClassificationMatch(ctx, client, input)
+	output, err := handleAddClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

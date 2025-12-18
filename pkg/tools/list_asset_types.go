@@ -33,45 +33,47 @@ type AssetType struct {
 	Product            string `json:"product,omitempty" jsonschema:"The product to which this asset type is linked"`
 }
 
-func NewListAssetTypesTool() *chip.Tool[ListAssetTypesInput, ListAssetTypesOutput] {
+func NewListAssetTypesTool(collibraClient *http.Client) *chip.Tool[ListAssetTypesInput, ListAssetTypesOutput] {
 	return &chip.Tool[ListAssetTypesInput, ListAssetTypesOutput]{
 		Tool: &mcp.Tool{
 			Name:        "asset_types_list",
 			Description: "List asset types available in Collibra with their properties and metadata.",
 		},
-		ToolHandler: handleListAssetTypes,
+		ToolHandler: handleListAssetTypes(collibraClient),
 	}
 }
 
-func handleListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, input ListAssetTypesInput) (ListAssetTypesOutput, error) {
-	if input.Limit == 0 {
-		input.Limit = 100
-	}
-
-	response, err := clients.ListAssetTypes(ctx, collibraHttpClient, input.Limit, input.Offset)
-	if err != nil {
-		return ListAssetTypesOutput{}, err
-	}
-
-	assetTypes := make([]AssetType, len(response.Results))
-	for i, at := range response.Results {
-		assetTypes[i] = AssetType{
-			ID:                 at.ID,
-			Name:               at.Name,
-			Description:        at.Description,
-			PublicId:           at.PublicId,
-			DisplayNameEnabled: at.DisplayNameEnabled,
-			RatingEnabled:      at.RatingEnabled,
-			FinalType:          at.FinalType,
-			System:             at.System,
-			Product:            at.Product,
+func handleListAssetTypes(collibraClient *http.Client) chip.ToolHandlerFunc[ListAssetTypesInput, ListAssetTypesOutput] {
+	return func(ctx context.Context, input ListAssetTypesInput) (ListAssetTypesOutput, error) {
+		if input.Limit == 0 {
+			input.Limit = 100
 		}
-	}
 
-	return ListAssetTypesOutput{
-		Total:      response.Total,
-		Offset:     response.Offset,
-		Limit:      response.Limit,
-		AssetTypes: assetTypes,
-	}, nil
+		response, err := clients.ListAssetTypes(ctx, collibraClient, input.Limit, input.Offset)
+		if err != nil {
+			return ListAssetTypesOutput{}, err
+		}
+
+		assetTypes := make([]AssetType, len(response.Results))
+		for i, at := range response.Results {
+			assetTypes[i] = AssetType{
+				ID:                 at.ID,
+				Name:               at.Name,
+				Description:        at.Description,
+				PublicId:           at.PublicId,
+				DisplayNameEnabled: at.DisplayNameEnabled,
+				RatingEnabled:      at.RatingEnabled,
+				FinalType:          at.FinalType,
+				System:             at.System,
+				Product:            at.Product,
+			}
+		}
+
+		return ListAssetTypesOutput{
+			Total:      response.Total,
+			Offset:     response.Offset,
+			Limit:      response.Limit,
+			AssetTypes: assetTypes,
+		}, nil
+	}
 }

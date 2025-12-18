@@ -37,31 +37,33 @@ type SearchKeywordResource struct {
 	Name           string `json:"name" jsonschema:"The name of the resource"`
 }
 
-func NewSearchKeywordTool() *chip.Tool[SearchKeywordInput, SearchKeywordOutput] {
+func NewSearchKeywordTool(collibraClient *http.Client) *chip.Tool[SearchKeywordInput, SearchKeywordOutput] {
 	return &chip.Tool[SearchKeywordInput, SearchKeywordOutput]{
 		Tool: &mcp.Tool{
 			Name:        "asset_keyword_search",
 			Description: "Perform a wildcard keyword search for assets in the Collibra knowledge graph. Supports filtering by resource type, community, domain, asset type, status, and creator.",
 		},
-		ToolHandler: handleSearchKeyword,
+		ToolHandler: handleSearchKeyword(collibraClient),
 	}
 }
 
-func handleSearchKeyword(ctx context.Context, collibraHttpClient *http.Client, input SearchKeywordInput) (SearchKeywordOutput, error) {
-	if input.Limit == 0 {
-		input.Limit = 50
+func handleSearchKeyword(collibraClient *http.Client) chip.ToolHandlerFunc[SearchKeywordInput, SearchKeywordOutput] {
+	return func(ctx context.Context, input SearchKeywordInput) (SearchKeywordOutput, error) {
+		if input.Limit == 0 {
+			input.Limit = 50
+		}
+
+		filters := buildSearchFilters(input)
+
+		searchResponse, err := clients.SearchKeyword(ctx, collibraClient, input.Query, input.ResourceTypeFilters, filters, input.Limit, input.Offset)
+		if err != nil {
+			return SearchKeywordOutput{}, err
+		}
+
+		output := mapSearchResponseToOutput(searchResponse)
+
+		return output, nil
 	}
-
-	filters := buildSearchFilters(input)
-
-	searchResponse, err := clients.SearchKeyword(ctx, collibraHttpClient, input.Query, input.ResourceTypeFilters, filters, input.Limit, input.Offset)
-	if err != nil {
-		return SearchKeywordOutput{}, err
-	}
-
-	output := mapSearchResponseToOutput(searchResponse)
-
-	return output, nil
 }
 
 func buildSearchFilters(input SearchKeywordInput) []clients.SearchFilter {

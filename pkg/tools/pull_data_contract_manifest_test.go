@@ -26,7 +26,7 @@ description: This is a sample data contract manifest`
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPullDataContractManifestTool().ToolHandler(context.Background(), client, tools.PullDataContractManifestInput{
+	output, err := tools.NewPullDataContractManifestTool(client).ToolHandler(context.Background(), tools.PullDataContractManifestInput{
 		DataContractID: contractId.String(),
 	})
 	if err != nil {
@@ -51,7 +51,7 @@ func TestPullDataContractManifestInvalidUUID(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPullDataContractManifestTool().ToolHandler(context.Background(), client, tools.PullDataContractManifestInput{
+	output, err := tools.NewPullDataContractManifestTool(client).ToolHandler(context.Background(), tools.PullDataContractManifestInput{
 		DataContractID: "invalid-uuid",
 	})
 	if err != nil {
@@ -76,7 +76,7 @@ func TestPullDataContractManifestNotFound(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPullDataContractManifestTool().ToolHandler(context.Background(), client, tools.PullDataContractManifestInput{
+	output, err := tools.NewPullDataContractManifestTool(client).ToolHandler(context.Background(), tools.PullDataContractManifestInput{
 		DataContractID: contractId.String(),
 	})
 	if err != nil {

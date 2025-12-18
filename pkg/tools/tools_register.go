@@ -7,33 +7,22 @@ import (
 )
 
 func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ToolConfig) {
-	for _, register := range toolRegistry {
-		register(server, client, toolConfig)
-	}
+	toolRegister(server, toolConfig, NewAskDadTool(client))
+	toolRegister(server, toolConfig, NewAskGlossaryTool(client))
+	toolRegister(server, toolConfig, NewAssetDetailsTool(client))
+	toolRegister(server, toolConfig, NewSearchKeywordTool(client))
+	toolRegister(server, toolConfig, NewSearchDataClassesTool(client))
+	toolRegister(server, toolConfig, NewListAssetTypesTool(client))
+	toolRegister(server, toolConfig, NewAddDataClassificationMatchTool(client))
+	toolRegister(server, toolConfig, NewSearchClassificationMatchesTool(client))
+	toolRegister(server, toolConfig, NewRemoveDataClassificationMatchTool(client))
+	toolRegister(server, toolConfig, NewListDataContractsTool(client))
+	toolRegister(server, toolConfig, NewPushDataContractManifestTool(client))
+	toolRegister(server, toolConfig, NewPullDataContractManifestTool(client))
 }
 
-var toolRegistry = []toolRegistrar{
-	toolRegister(NewAskDadTool),
-	toolRegister(NewAskGlossaryTool),
-	toolRegister(NewAssetDetailsTool),
-	toolRegister(NewSearchKeywordTool),
-	toolRegister(NewSearchDataClassesTool),
-	toolRegister(NewListAssetTypesTool),
-	toolRegister(NewAddDataClassificationMatchTool),
-	toolRegister(NewSearchClassificationMatchesTool),
-	toolRegister(NewRemoveDataClassificationMatchTool),
-	toolRegister(NewListDataContractsTool),
-	toolRegister(NewPushDataContractManifestTool),
-	toolRegister(NewPullDataContractManifestTool),
-}
-
-type toolRegistrar func(*chip.Server, *http.Client, *chip.ToolConfig)
-
-func toolRegister[In, Out any](toolFunc func() *chip.Tool[In, Out]) toolRegistrar {
-	return func(server *chip.Server, client *http.Client, toolConfig *chip.ToolConfig) {
-		toolInstance := toolFunc()
-		if toolConfig.IsToolEnabled(toolInstance.Tool.Name) {
-			chip.RegisterTool(server, toolInstance, client, toolConfig)
-		}
+func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ToolConfig, tool *chip.Tool[In, Out]) {
+	if toolConfig.IsToolEnabled(tool.Tool.Name) {
+		chip.RegisterTool(server, tool, toolConfig)
 	}
 }

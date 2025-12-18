@@ -46,7 +46,7 @@ func callTool(ctx context.Context, collibraHttpClient *http.Client, endpoint str
 		return "", fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if response.StatusCode < 200 || response.StatusCode >= 300 { // TODO: Handle 400 and 500 errors.
+	if response.StatusCode < 200 || response.StatusCode >= 300 { // TODO: ToolHandle 400 and 500 errors.
 		return "", fmt.Errorf("HTTP %d: %s", response.StatusCode, string(body))
 	}
 

@@ -37,7 +37,7 @@ func TestListAssetTypes(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewListAssetTypesTool().ToolHandler(t.Context(), client, tools.ListAssetTypesInput{
+	output, err := tools.NewListAssetTypesTool(client).ToolHandler(t.Context(), tools.ListAssetTypesInput{
 		Limit: 100,
 	})
 	if err != nil {

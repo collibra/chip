@@ -25,30 +25,32 @@ type SearchDataClassesOutput struct {
 	Error       string              `json:"error,omitempty" jsonschema:"HTTP or other error message if the request failed"`
 }
 
-func NewSearchDataClassesTool() *chip.Tool[SearchDataClassesInput, SearchDataClassesOutput] {
+func NewSearchDataClassesTool(collibraClient *http.Client) *chip.Tool[SearchDataClassesInput, SearchDataClassesOutput] {
 	return &chip.Tool[SearchDataClassesInput, SearchDataClassesOutput]{
 		Tool: &mcp.Tool{
 			Name:        "data_class_search",
 			Description: "Search for data classes in Collibra's classification service. Supports filtering by name, description, and whether they contain rules.",
 		},
-		ToolHandler: handleSearchDataClasses,
+		ToolHandler: handleSearchDataClasses(collibraClient),
 	}
 }
 
-func handleSearchDataClasses(ctx context.Context, collibraHttpClient *http.Client, input SearchDataClassesInput) (SearchDataClassesOutput, error) {
-	input.sanitizePagination()
+func handleSearchDataClasses(collibraClient *http.Client) chip.ToolHandlerFunc[SearchDataClassesInput, SearchDataClassesOutput] {
+	return func(ctx context.Context, input SearchDataClassesInput) (SearchDataClassesOutput, error) {
+		input.sanitizePagination()
 
-	params := buildQueryParams(input)
-	results, total, err := clients.SearchDataClasses(ctx, collibraHttpClient, params)
-	if err != nil {
-		return SearchDataClassesOutput{Error: err.Error(), Total: total, Count: 0, DataClasses: results}, nil
+		params := buildQueryParams(input)
+		results, total, err := clients.SearchDataClasses(ctx, collibraClient, params)
+		if err != nil {
+			return SearchDataClassesOutput{Error: err.Error(), Total: total, Count: 0, DataClasses: results}, nil
+		}
+
+		if len(results) == 0 {
+			return SearchDataClassesOutput{Total: total, Count: 0, DataClasses: results}, nil
+		}
+
+		return SearchDataClassesOutput{Total: total, Count: len(results), DataClasses: results}, nil
 	}
-
-	if len(results) == 0 {
-		return SearchDataClassesOutput{Total: total, Count: 0, DataClasses: results}, nil
-	}
-
-	return SearchDataClassesOutput{Total: total, Count: len(results), DataClasses: results}, nil
 }
 
 func (in *SearchDataClassesInput) sanitizePagination() {

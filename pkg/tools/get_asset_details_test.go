@@ -37,7 +37,7 @@ func TestGetAssetDetails(t *testing.T) {
 	}
 	ctx := chip.SetToolConfig(context.Background(), config)
 
-	output, err := tools.NewAssetDetailsTool().ToolHandler(ctx, client, tools.AssetDetailsInput{
+	output, err := tools.NewAssetDetailsTool(client).ToolHandler(ctx, tools.AssetDetailsInput{
 		AssetID: assetId.String(),
 	})
 	if err != nil {

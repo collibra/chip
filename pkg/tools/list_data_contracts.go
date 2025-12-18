@@ -28,42 +28,44 @@ type DataContract struct {
 	ManifestID string `json:"manifestId" jsonschema:"The unique identifier of the data contract manifest"`
 }
 
-func NewListDataContractsTool() *chip.Tool[ListDataContractsInput, ListDataContractsOutput] {
+func NewListDataContractsTool(collibraClient *http.Client) *chip.Tool[ListDataContractsInput, ListDataContractsOutput] {
 	return &chip.Tool[ListDataContractsInput, ListDataContractsOutput]{
 		Tool: &mcp.Tool{
 			Name:        "data_contract_list",
 			Description: "List data contracts available in Collibra. Returns a paginated list of data contract metadata, sorted by the last modified date in descending order.",
 		},
-		ToolHandler: handleListDataContracts,
+		ToolHandler: handleListDataContracts(collibraClient),
 	}
 }
 
-func handleListDataContracts(ctx context.Context, collibraHttpClient *http.Client, input ListDataContractsInput) (ListDataContractsOutput, error) {
-	if input.Limit == 0 {
-		input.Limit = 100
-	}
-
-	response, err := clients.ListDataContracts(ctx, collibraHttpClient, input.Cursor, input.Limit, input.ManifestFilter)
-	if err != nil {
-		return ListDataContractsOutput{}, err
-	}
-
-	contracts := make([]DataContract, len(response.Items))
-	for i, dc := range response.Items {
-		contracts[i] = DataContract{
-			ID:         dc.ID,
-			DomainID:   dc.DomainID,
-			ManifestID: dc.ManifestID,
+func handleListDataContracts(collibraClient *http.Client) chip.ToolHandlerFunc[ListDataContractsInput, ListDataContractsOutput] {
+	return func(ctx context.Context, input ListDataContractsInput) (ListDataContractsOutput, error) {
+		if input.Limit == 0 {
+			input.Limit = 100
 		}
-	}
 
-	output := ListDataContractsOutput{
-		Limit:      response.Limit,
-		NextCursor: response.NextCursor,
-		Contracts:  contracts,
+		response, err := clients.ListDataContracts(ctx, collibraClient, input.Cursor, input.Limit, input.ManifestFilter)
+		if err != nil {
+			return ListDataContractsOutput{}, err
+		}
+
+		contracts := make([]DataContract, len(response.Items))
+		for i, dc := range response.Items {
+			contracts[i] = DataContract{
+				ID:         dc.ID,
+				DomainID:   dc.DomainID,
+				ManifestID: dc.ManifestID,
+			}
+		}
+
+		output := ListDataContractsOutput{
+			Limit:      response.Limit,
+			NextCursor: response.NextCursor,
+			Contracts:  contracts,
+		}
+		if response.Total > 0 {
+			output.Total = &response.Total
+		}
+		return output, nil
 	}
-	if response.Total > 0 {
-		output.Total = &response.Total
-	}
-	return output, nil
 }

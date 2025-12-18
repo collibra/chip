@@ -2,24 +2,24 @@ package chip
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"net/http"
 	"slices"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type ToolMiddlewareHandler func(ctx context.Context, input any) (any, error)
+type ToolHandlerFunc[In, Out any] func(ctx context.Context, input In) (Out, error)
+
+type CallToolFunc func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error)
 
 type ToolMiddleware interface {
-	Handle(next ToolMiddlewareHandler) ToolMiddlewareHandler
+	ToolHandle(ctx context.Context, toolRequest *mcp.CallToolRequest, next CallToolFunc) (*mcp.CallToolResult, error)
 }
 
-type ToolMiddlewareFunc func(next ToolMiddlewareHandler) ToolMiddlewareHandler
+type ToolMiddlewareFunc func(ctx context.Context, toolRequest *mcp.CallToolRequest, next CallToolFunc) (*mcp.CallToolResult, error)
 
-func (f ToolMiddlewareFunc) Handle(next ToolMiddlewareHandler) ToolMiddlewareHandler {
-	return f(next)
+func (f ToolMiddlewareFunc) ToolHandle(ctx context.Context, toolRequest *mcp.CallToolRequest, next CallToolFunc) (*mcp.CallToolResult, error) {
+	return f(ctx, toolRequest, next)
 }
 
 type Server struct {
@@ -68,57 +68,38 @@ func WithToolMiddleware(middleware ToolMiddleware) ServerOption {
 	}
 }
 
-type ToolHandler[In, Out any] func(ctx context.Context, client *http.Client, input In) (Out, error)
-
 type Tool[In, Out any] struct {
 	Tool        *mcp.Tool
-	ToolHandler ToolHandler[In, Out]
+	ToolHandler ToolHandlerFunc[In, Out]
 }
 
-func RegisterTool[In, Out any](server *Server, tool *Tool[In, Out], client *http.Client, toolConfig *ToolConfig) {
-	slog.Info(fmt.Sprintf("Registering tool: %s", tool.Tool.Name))
-	mcp.AddTool(
-		&server.Server,
-		tool.Tool,
-		toolHandlerFor(server, tool.ToolHandler, client, toolConfig),
-	)
-}
+func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out], toolConfig *ToolConfig) {
+	handler := func(ctx context.Context, toolRequest *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
+		var capturedOutput Out
 
-func toolHandlerFor[In, Out any](server *Server, logic ToolHandler[In, Out], client *http.Client, toolConfig *ToolConfig) mcp.ToolHandlerFor[In, Out] {
-	var root ToolMiddlewareHandler = func(ctx context.Context, input any) (any, error) {
-		typedInput, ok := input.(In)
-		if !ok {
-			var zero In
-			return nil, fmt.Errorf("middleware chain input mismatch: expected %T, got %T", zero, input)
+		middlewareChain := func(ctx context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			out, err := tool.ToolHandler(ctx, input)
+			if err != nil {
+				slog.ErrorContext(ctx, "error while calling tool function", "error", err)
+			}
+			capturedOutput = out
+			return nil, err
 		}
-		out, err := logic(ctx, client, typedInput)
-		if err != nil {
-			slog.ErrorContext(ctx, "error while calling tool logic", "error", err)
+
+		for i := len(s.toolMiddlewares) - 1; i >= 0; i-- {
+			mw := s.toolMiddlewares[i]
+			next := middlewareChain
+			middlewareChain = func(ctx context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return mw.ToolHandle(ctx, r, next)
+			}
 		}
-		return out, err
-	}
 
-	chain := root
-	for i := len(server.toolMiddlewares) - 1; i >= 0; i-- {
-		chain = server.toolMiddlewares[i].Handle(chain)
-	}
-
-	return func(ctx context.Context, toolRequest *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		ctx = SetCallToolRequest(ctx, toolRequest)
 		ctx = SetToolConfig(ctx, toolConfig)
+		res, err := middlewareChain(ctx, toolRequest)
 
-		output, err := chain(ctx, input)
-		if err != nil {
-			var zero Out
-			return nil, zero, err
-		}
-
-		typedOutput, ok := output.(Out)
-		if !ok {
-			var zero Out
-			return nil, zero, fmt.Errorf("middleware chain output mismatch: expected %T, got %T", zero, output)
-		}
-
-		return nil, typedOutput, nil
+		return res, capturedOutput, err
 	}
+
+	mcp.AddTool(&s.Server, tool.Tool, handler)
 }

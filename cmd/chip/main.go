@@ -88,13 +88,7 @@ func runHttpServer(mode string, server *chip.Server, port int) {
 	}
 }
 
-func logMiddleware(next chip.ToolMiddlewareHandler) chip.ToolMiddlewareHandler {
-	return func(ctx context.Context, input any) (any, error) {
-		toolRequest, err := chip.GetCallToolRequest(ctx)
-		if err != nil {
-			return nil, err
-		}
-		slog.InfoContext(ctx, fmt.Sprintf("Calling tool: %s", toolRequest.Params.Name), "tool_name", toolRequest.Params.Name)
-		return next(ctx, input)
-	}
+func logMiddleware(ctx context.Context, toolRequest *mcp.CallToolRequest, next chip.CallToolFunc) (*mcp.CallToolResult, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Calling tool: %s", toolRequest.Params.Name), "tool_name", toolRequest.Params.Name)
+	return next(ctx, toolRequest)
 }

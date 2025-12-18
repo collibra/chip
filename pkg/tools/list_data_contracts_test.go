@@ -33,7 +33,7 @@ func TestListDataContracts(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewListDataContractsTool().ToolHandler(t.Context(), client, tools.ListDataContractsInput{
+	output, err := tools.NewListDataContractsTool(client).ToolHandler(t.Context(), tools.ListDataContractsInput{
 		Limit: 100,
 	})
 	if err != nil {
@@ -87,7 +87,7 @@ func TestListDataContractsWithTotal(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewListDataContractsTool().ToolHandler(t.Context(), client, tools.ListDataContractsInput{
+	output, err := tools.NewListDataContractsTool(client).ToolHandler(t.Context(), tools.ListDataContractsInput{
 		Limit: 100,
 	})
 	if err != nil {

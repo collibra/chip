@@ -31,7 +31,7 @@ func TestKeywordSearch(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewSearchKeywordTool().ToolHandler(t.Context(), client, tools.SearchKeywordInput{
+	output, err := tools.NewSearchKeywordTool(client).ToolHandler(t.Context(), tools.SearchKeywordInput{
 		Query: "revenue",
 	})
 	if err != nil {

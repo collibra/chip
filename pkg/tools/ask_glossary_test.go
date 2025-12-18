@@ -23,7 +23,7 @@ func TestAskGlossary(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewAskGlossaryTool().ToolHandler(t.Context(), client, tools.AskGlossaryInput{
+	output, err := tools.NewAskGlossaryTool(client).ToolHandler(t.Context(), tools.AskGlossaryInput{
 		Question: "What is the definition of ARR?",
 	})
 	if err != nil {

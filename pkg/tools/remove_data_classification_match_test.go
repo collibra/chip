@@ -29,7 +29,7 @@ func TestRemoveClassificationMatch_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	output, err := handleRemoveDataClassificationMatch(ctx, client, input)
+	output, err := handleRemoveDataClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -46,7 +46,7 @@ func TestRemoveClassificationMatch_MissingClassificationMatchID(t *testing.T) {
 	input := RemoveDataClassificationMatchInput{}
 
 	ctx := context.Background()
-	output, err := handleRemoveDataClassificationMatch(ctx, client, input)
+	output, err := handleRemoveDataClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -76,7 +76,7 @@ func TestRemoveClassificationMatch_NotFound(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	output, err := handleRemoveDataClassificationMatch(ctx, client, input)
+	output, err := handleRemoveDataClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -110,7 +110,7 @@ func TestRemoveClassificationMatch_ServerError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	output, err := handleRemoveDataClassificationMatch(ctx, client, input)
+	output, err := handleRemoveDataClassificationMatch(client)(ctx, input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

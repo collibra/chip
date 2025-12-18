@@ -26,30 +26,32 @@ type SearchClassificationMatchesOutput struct {
 	Error                 string                            `json:"error,omitempty" jsonschema:"HTTP or other error message if the request failed"`
 }
 
-func NewSearchClassificationMatchesTool() *chip.Tool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput] {
+func NewSearchClassificationMatchesTool(collibraClient *http.Client) *chip.Tool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput] {
 	return &chip.Tool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput]{
 		Tool: &mcp.Tool{
 			Name:        "data_classification_match_search",
 			Description: "Search for classification matches (associations between data classes and assets) in Collibra. Supports filtering by asset IDs, statuses (ACCEPTED/REJECTED/SUGGESTED), classification IDs, and asset type IDs.",
 		},
-		ToolHandler: handleSearchClassificationMatches,
+		ToolHandler: handleSearchClassificationMatches(collibraClient),
 	}
 }
 
-func handleSearchClassificationMatches(ctx context.Context, collibraHttpClient *http.Client, input SearchClassificationMatchesInput) (SearchClassificationMatchesOutput, error) {
-	input.sanitizePagination()
+func handleSearchClassificationMatches(collibraClient *http.Client) chip.ToolHandlerFunc[SearchClassificationMatchesInput, SearchClassificationMatchesOutput] {
+	return func(ctx context.Context, input SearchClassificationMatchesInput) (SearchClassificationMatchesOutput, error) {
+		input.sanitizePagination()
 
-	params := buildClassificationMatchQueryParams(input)
-	results, total, err := clients.SearchDataClassificationMatches(ctx, collibraHttpClient, params)
-	if err != nil {
-		return SearchClassificationMatchesOutput{Error: err.Error(), Total: int(total), Count: 0, ClassificationMatches: results}, nil
+		params := buildClassificationMatchQueryParams(input)
+		results, total, err := clients.SearchDataClassificationMatches(ctx, collibraClient, params)
+		if err != nil {
+			return SearchClassificationMatchesOutput{Error: err.Error(), Total: int(total), Count: 0, ClassificationMatches: results}, nil
+		}
+
+		if len(results) == 0 {
+			return SearchClassificationMatchesOutput{Total: int(total), Count: 0, ClassificationMatches: results}, nil
+		}
+
+		return SearchClassificationMatchesOutput{Total: int(total), Count: len(results), ClassificationMatches: results}, nil
 	}
-
-	if len(results) == 0 {
-		return SearchClassificationMatchesOutput{Total: int(total), Count: 0, ClassificationMatches: results}, nil
-	}
-
-	return SearchClassificationMatchesOutput{Total: int(total), Count: len(results), ClassificationMatches: results}, nil
 }
 
 func (in *SearchClassificationMatchesInput) sanitizePagination() {

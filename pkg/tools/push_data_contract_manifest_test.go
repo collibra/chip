@@ -70,7 +70,7 @@ description: This is a sample data contract manifest`
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPushDataContractManifestTool().ToolHandler(context.Background(), client, tools.PushDataContractManifestInput{
+	output, err := tools.NewPushDataContractManifestTool(client).ToolHandler(context.Background(), tools.PushDataContractManifestInput{
 		Manifest: manifestContent,
 	})
 	if err != nil {
@@ -142,7 +142,7 @@ title: Another Data Contract`
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPushDataContractManifestTool().ToolHandler(context.Background(), client, tools.PushDataContractManifestInput{
+	output, err := tools.NewPushDataContractManifestTool(client).ToolHandler(context.Background(), tools.PushDataContractManifestInput{
 		Manifest:   manifestContent,
 		ManifestID: "test-manifest-456",
 		Version:    "1.0.0",
@@ -167,7 +167,7 @@ func TestPushDataContractManifestEmptyManifest(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPushDataContractManifestTool().ToolHandler(context.Background(), client, tools.PushDataContractManifestInput{
+	output, err := tools.NewPushDataContractManifestTool(client).ToolHandler(context.Background(), tools.PushDataContractManifestInput{
 		Manifest: "",
 	})
 	if err != nil {
@@ -195,7 +195,7 @@ kind: DataContract`
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPushDataContractManifestTool().ToolHandler(context.Background(), client, tools.PushDataContractManifestInput{
+	output, err := tools.NewPushDataContractManifestTool(client).ToolHandler(context.Background(), tools.PushDataContractManifestInput{
 		Manifest: manifestContent,
 	})
 	if err != nil {

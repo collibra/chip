@@ -23,7 +23,7 @@ func TestAskDad(t *testing.T) {
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewAskDadTool().ToolHandler(t.Context(), client, tools.AskDadInput{
+	output, err := tools.NewAskDadTool(client).ToolHandler(t.Context(), tools.AskDadInput{
 		Question: "Column names with PII in table users?",
 	})
 	if err != nil {

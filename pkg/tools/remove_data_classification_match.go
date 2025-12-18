@@ -20,33 +20,35 @@ type RemoveDataClassificationMatchOutput struct {
 	Error   string `json:"error,omitempty" jsonschema:"Error message if the operation failed"`
 }
 
-func NewRemoveDataClassificationMatchTool() *chip.Tool[RemoveDataClassificationMatchInput, RemoveDataClassificationMatchOutput] {
+func NewRemoveDataClassificationMatchTool(collibraClient *http.Client) *chip.Tool[RemoveDataClassificationMatchInput, RemoveDataClassificationMatchOutput] {
 	return &chip.Tool[RemoveDataClassificationMatchInput, RemoveDataClassificationMatchOutput]{
 		Tool: &mcp.Tool{
 			Name:        "data_classification_match_remove",
 			Description: "Remove a classification match (association between a data class and an asset) from Collibra. Requires the UUID of the classification match to remove.",
 		},
-		ToolHandler: handleRemoveDataClassificationMatch,
+		ToolHandler: handleRemoveDataClassificationMatch(collibraClient),
 	}
 }
 
-func handleRemoveDataClassificationMatch(ctx context.Context, collibraHttpClient *http.Client, input RemoveDataClassificationMatchInput) (RemoveDataClassificationMatchOutput, error) {
-	output, isNotValid := validateRemoveClassificationMatchInput(input)
-	if isNotValid {
-		return output, nil
-	}
+func handleRemoveDataClassificationMatch(collibraClient *http.Client) chip.ToolHandlerFunc[RemoveDataClassificationMatchInput, RemoveDataClassificationMatchOutput] {
+	return func(ctx context.Context, input RemoveDataClassificationMatchInput) (RemoveDataClassificationMatchOutput, error) {
+		output, isNotValid := validateRemoveClassificationMatchInput(input)
+		if isNotValid {
+			return output, nil
+		}
 
-	err := clients.RemoveDataClassificationMatch(ctx, collibraHttpClient, input.ClassificationMatchID)
-	if err != nil {
+		err := clients.RemoveDataClassificationMatch(ctx, collibraClient, input.ClassificationMatchID)
+		if err != nil {
+			return RemoveDataClassificationMatchOutput{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to remove classification match: %s", err.Error()),
+			}, nil
+		}
+
 		return RemoveDataClassificationMatchOutput{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to remove classification match: %s", err.Error()),
+			Success: true,
 		}, nil
 	}
-
-	return RemoveDataClassificationMatchOutput{
-		Success: true,
-	}, nil
 }
 
 func validateRemoveClassificationMatchInput(input RemoveDataClassificationMatchInput) (RemoveDataClassificationMatchOutput, bool) {

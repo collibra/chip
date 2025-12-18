@@ -26,44 +26,46 @@ type PushDataContractManifestOutput struct {
 	Success    bool   `json:"success" jsonschema:"Whether the manifest was successfully uploaded"`
 }
 
-func NewPushDataContractManifestTool() *chip.Tool[PushDataContractManifestInput, PushDataContractManifestOutput] {
+func NewPushDataContractManifestTool(collibraClient *http.Client) *chip.Tool[PushDataContractManifestInput, PushDataContractManifestOutput] {
 	return &chip.Tool[PushDataContractManifestInput, PushDataContractManifestOutput]{
 		Tool: &mcp.Tool{
 			Name:        "data_contract_manifest_push",
 			Description: "Upload a new version of a data contract manifest to Collibra. The manifestID and version are automatically parsed from the manifest content if it adheres to the Open Data Contract Standard.",
 		},
-		ToolHandler: handlePushDataContractManifest,
+		ToolHandler: handlePushDataContractManifest(collibraClient),
 	}
 }
 
-func handlePushDataContractManifest(ctx context.Context, collibraHttpClient *http.Client, input PushDataContractManifestInput) (PushDataContractManifestOutput, error) {
-	if input.Manifest == "" {
+func handlePushDataContractManifest(collibraClient *http.Client) chip.ToolHandlerFunc[PushDataContractManifestInput, PushDataContractManifestOutput] {
+	return func(ctx context.Context, input PushDataContractManifestInput) (PushDataContractManifestOutput, error) {
+		if input.Manifest == "" {
+			return PushDataContractManifestOutput{
+				Error:   "Manifest content is required",
+				Success: false,
+			}, nil
+		}
+
+		req := clients.PushDataContractManifestRequest{
+			Manifest:   input.Manifest,
+			ManifestID: input.ManifestID,
+			Version:    input.Version,
+			Force:      input.Force,
+			Active:     input.Active,
+		}
+
+		response, err := clients.PushDataContractManifest(ctx, collibraClient, req)
+		if err != nil {
+			return PushDataContractManifestOutput{
+				Error:   fmt.Sprintf("Failed to upload manifest: %s", err.Error()),
+				Success: false,
+			}, nil
+		}
+
 		return PushDataContractManifestOutput{
-			Error:   "Manifest content is required",
-			Success: false,
+			ID:         response.ID,
+			DomainID:   response.DomainID,
+			ManifestID: response.ManifestID,
+			Success:    true,
 		}, nil
 	}
-
-	req := clients.PushDataContractManifestRequest{
-		Manifest:   input.Manifest,
-		ManifestID: input.ManifestID,
-		Version:    input.Version,
-		Force:      input.Force,
-		Active:     input.Active,
-	}
-
-	response, err := clients.PushDataContractManifest(ctx, collibraHttpClient, req)
-	if err != nil {
-		return PushDataContractManifestOutput{
-			Error:   fmt.Sprintf("Failed to upload manifest: %s", err.Error()),
-			Success: false,
-		}, nil
-	}
-
-	return PushDataContractManifestOutput{
-		ID:         response.ID,
-		DomainID:   response.DomainID,
-		ManifestID: response.ManifestID,
-		Success:    true,
-	}, nil
 }

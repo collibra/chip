@@ -22,39 +22,41 @@ type AddDataClassificationMatchOutput struct {
 	Error   string                           `json:"error,omitempty" jsonschema:"Error message if the operation failed"`
 }
 
-func NewAddDataClassificationMatchTool() *chip.Tool[AddDataClassificationMatchInput, AddDataClassificationMatchOutput] {
+func NewAddDataClassificationMatchTool(collibraClient *http.Client) *chip.Tool[AddDataClassificationMatchInput, AddDataClassificationMatchOutput] {
 	return &chip.Tool[AddDataClassificationMatchInput, AddDataClassificationMatchOutput]{
 		Tool: &mcp.Tool{
 			Name:        "data_classification_match_add",
 			Description: "Associate a data classification (data class) with a specific data asset in Collibra. Requires both the asset UUID and the classification UUID.",
 		},
-		ToolHandler: handleAddClassificationMatch,
+		ToolHandler: handleAddClassificationMatch(collibraClient),
 	}
 }
 
-func handleAddClassificationMatch(ctx context.Context, collibraHttpClient *http.Client, input AddDataClassificationMatchInput) (AddDataClassificationMatchOutput, error) {
-	output, isNotValid := validateClassificationMatchInput(input)
-	if isNotValid {
-		return output, nil
-	}
+func handleAddClassificationMatch(collibraClient *http.Client) chip.ToolHandlerFunc[AddDataClassificationMatchInput, AddDataClassificationMatchOutput] {
+	return func(ctx context.Context, input AddDataClassificationMatchInput) (AddDataClassificationMatchOutput, error) {
+		output, isNotValid := validateClassificationMatchInput(input)
+		if isNotValid {
+			return output, nil
+		}
 
-	request := clients.AddDataClassificationMatchRequest{
-		AssetID:          input.AssetID,
-		ClassificationID: input.ClassificationID,
-	}
+		request := clients.AddDataClassificationMatchRequest{
+			AssetID:          input.AssetID,
+			ClassificationID: input.ClassificationID,
+		}
 
-	match, err := clients.AddDataClassificationMatch(ctx, collibraHttpClient, request)
-	if err != nil {
+		match, err := clients.AddDataClassificationMatch(ctx, collibraClient, request)
+		if err != nil {
+			return AddDataClassificationMatchOutput{
+				Success: false,
+				Error:   fmt.Sprintf("Failed to add classification match: %s", err.Error()),
+			}, nil
+		}
+
 		return AddDataClassificationMatchOutput{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to add classification match: %s", err.Error()),
+			Match:   match,
+			Success: true,
 		}, nil
 	}
-
-	return AddDataClassificationMatchOutput{
-		Match:   match,
-		Success: true,
-	}, nil
 }
 
 func validateClassificationMatchInput(input AddDataClassificationMatchInput) (AddDataClassificationMatchOutput, bool) {

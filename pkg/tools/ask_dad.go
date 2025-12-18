@@ -17,21 +17,23 @@ type AskDadOutput struct {
 	Answer string `json:"output" jsonschema:"the answer from the data asset discovery agent"`
 }
 
-func NewAskDadTool() *chip.Tool[AskDadInput, AskDadOutput] {
+func NewAskDadTool(collibraClient *http.Client) *chip.Tool[AskDadInput, AskDadOutput] {
 	return &chip.Tool[AskDadInput, AskDadOutput]{
 		Tool: &mcp.Tool{
 			Name:        "data_assets_discover",
 			Description: "Ask the data asset discovery agent questions about available data assets in Collibra.",
 		},
-		ToolHandler: handleAskDad,
+		ToolHandler: handleAskDad(collibraClient),
 	}
 }
 
-func handleAskDad(ctx context.Context, collibraHttpClient *http.Client, input AskDadInput) (AskDadOutput, error) {
-	response, err := clients.AskDad(ctx, collibraHttpClient, input.Question)
-	if err != nil {
-		return AskDadOutput{}, err
-	}
+func handleAskDad(collibraClient *http.Client) chip.ToolHandlerFunc[AskDadInput, AskDadOutput] {
+	return func(ctx context.Context, input AskDadInput) (AskDadOutput, error) {
+		response, err := clients.AskDad(ctx, collibraClient, input.Question)
+		if err != nil {
+			return AskDadOutput{}, err
+		}
 
-	return AskDadOutput{Answer: response}, nil
+		return AskDadOutput{Answer: response}, nil
+	}
 }
