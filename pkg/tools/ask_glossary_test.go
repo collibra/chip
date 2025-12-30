@@ -11,19 +11,20 @@ import (
 )
 
 func TestAskGlossary(t *testing.T) {
-	server := httptest.NewServer(&testServer{
-		"/rest/aiCopilot/v1/tools/askGlossary": JsonHandlerInOut(func(_ *http.Request, request clients.ToolRequest) clients.ToolResponse {
-			return clients.ToolResponse{
-				Content: []clients.ToolContent{
-					{Text: fmt.Sprintf("Q: %s, A: %s", request.Message.Content.Text, "Annual Recurring Revenue")},
-				},
-			}
-		}),
-	})
+	handler := http.NewServeMux()
+	handler.Handle("/rest/aiCopilot/v1/tools/askGlossary", JsonHandlerInOut(func(_ *http.Request, request clients.ToolRequest) (int, clients.ToolResponse) {
+		return http.StatusOK, clients.ToolResponse{
+			Content: []clients.ToolContent{
+				{Text: fmt.Sprintf("Q: %s, A: %s", request.Message.Content.Text, "Annual Recurring Revenue")},
+			},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewAskGlossaryTool(client).ToolHandler(t.Context(), tools.AskGlossaryInput{
+	output, err := tools.NewAskGlossaryTool(client).Handler(t.Context(), tools.AskGlossaryInput{
 		Question: "What is the definition of ARR?",
 	})
 	if err != nil {

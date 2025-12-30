@@ -8,7 +8,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/google/uuid"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type PullDataContractManifestInput struct {
@@ -23,11 +22,9 @@ type PullDataContractManifestOutput struct {
 
 func NewPullDataContractManifestTool(collibraClient *http.Client) *chip.Tool[PullDataContractManifestInput, PullDataContractManifestOutput] {
 	return &chip.Tool[PullDataContractManifestInput, PullDataContractManifestOutput]{
-		Tool: &mcp.Tool{
-			Name:        "data_contract_manifest_pull",
-			Description: "Download the manifest file for the currently active version of a specific data contract. Returns the manifest content as a string.",
-		},
-		ToolHandler: handlePullDataContractManifest(collibraClient),
+		Name:        "data_contract_manifest_pull",
+		Description: "Download the manifest file for the currently active version of a specific data contract. Returns the manifest content as a string.",
+		Handler:     handlePullDataContractManifest(collibraClient),
 	}
 }
 

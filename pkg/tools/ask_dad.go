@@ -6,7 +6,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type AskDadInput struct {
@@ -19,11 +18,9 @@ type AskDadOutput struct {
 
 func NewAskDadTool(collibraClient *http.Client) *chip.Tool[AskDadInput, AskDadOutput] {
 	return &chip.Tool[AskDadInput, AskDadOutput]{
-		Tool: &mcp.Tool{
-			Name:        "data_assets_discover",
-			Description: "Ask the data asset discovery agent questions about available data assets in Collibra.",
-		},
-		ToolHandler: handleAskDad(collibraClient),
+		Name:        "data_assets_discover",
+		Description: "Ask the data asset discovery agent questions about available data assets in Collibra.",
+		Handler:     handleAskDad(collibraClient),
 	}
 }
 

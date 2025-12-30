@@ -7,7 +7,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type SearchDataClassesInput struct {
@@ -27,11 +26,9 @@ type SearchDataClassesOutput struct {
 
 func NewSearchDataClassesTool(collibraClient *http.Client) *chip.Tool[SearchDataClassesInput, SearchDataClassesOutput] {
 	return &chip.Tool[SearchDataClassesInput, SearchDataClassesOutput]{
-		Tool: &mcp.Tool{
-			Name:        "data_class_search",
-			Description: "Search for data classes in Collibra's classification service. Supports filtering by name, description, and whether they contain rules.",
-		},
-		ToolHandler: handleSearchDataClasses(collibraClient),
+		Name:        "data_class_search",
+		Description: "Search for data classes in Collibra's classification service. Supports filtering by name, description, and whether they contain rules.",
+		Handler:     handleSearchDataClasses(collibraClient),
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type RemoveDataClassificationMatchInput struct {
@@ -22,11 +21,9 @@ type RemoveDataClassificationMatchOutput struct {
 
 func NewRemoveDataClassificationMatchTool(collibraClient *http.Client) *chip.Tool[RemoveDataClassificationMatchInput, RemoveDataClassificationMatchOutput] {
 	return &chip.Tool[RemoveDataClassificationMatchInput, RemoveDataClassificationMatchOutput]{
-		Tool: &mcp.Tool{
-			Name:        "data_classification_match_remove",
-			Description: "Remove a classification match (association between a data class and an asset) from Collibra. Requires the UUID of the classification match to remove.",
-		},
-		ToolHandler: handleRemoveDataClassificationMatch(collibraClient),
+		Name:        "data_classification_match_remove",
+		Description: "Remove a classification match (association between a data class and an asset) from Collibra. Requires the UUID of the classification match to remove.",
+		Handler:     handleRemoveDataClassificationMatch(collibraClient),
 	}
 }
 

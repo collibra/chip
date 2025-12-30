@@ -10,7 +10,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/google/uuid"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type AssetDetailsInput struct {
@@ -28,11 +27,9 @@ type AssetDetailsOutput struct {
 
 func NewAssetDetailsTool(collibraClient *http.Client) *chip.Tool[AssetDetailsInput, AssetDetailsOutput] {
 	return &chip.Tool[AssetDetailsInput, AssetDetailsOutput]{
-		Tool: &mcp.Tool{
-			Name:        "asset_details_get",
-			Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, and metadata. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page).",
-		},
-		ToolHandler: handleAssetDetails(collibraClient),
+		Name:        "asset_details_get",
+		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, and metadata. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page).",
+		Handler:     handleAssetDetails(collibraClient),
 	}
 }
 

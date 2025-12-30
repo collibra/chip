@@ -1,7 +1,6 @@
 package tools_test
 
 import (
-	"context"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -25,52 +24,53 @@ description: This is a sample data contract manifest`
 		"manifestId": "test-manifest-123"
 	}`
 
-	server := httptest.NewServer(&testServer{
-		"/rest/dataProduct/v1/dataContracts/addFromManifest": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != "POST" {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
+	handler := http.NewServeMux()
+	handler.Handle("/rest/dataProduct/v1/dataContracts/addFromManifest", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 
-			if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-				http.Error(w, "Expected multipart/form-data", http.StatusBadRequest)
-				return
-			}
+		if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+			http.Error(w, "Expected multipart/form-data", http.StatusBadRequest)
+			return
+		}
 
-			err := r.ParseMultipartForm(10 << 20) // 10 MB max
-			if err != nil {
-				http.Error(w, "Failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
-				return
-			}
+		err := r.ParseMultipartForm(10 << 20) // 10 MB max
+		if err != nil {
+			http.Error(w, "Failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 
-			file, _, err := r.FormFile("manifest")
-			if err != nil {
-				http.Error(w, "Missing manifest file", http.StatusBadRequest)
-				return
-			}
-			defer func(file multipart.File) {
-				_ = file.Close()
-			}(file)
+		file, _, err := r.FormFile("manifest")
+		if err != nil {
+			http.Error(w, "Missing manifest file", http.StatusBadRequest)
+			return
+		}
+		defer func(file multipart.File) {
+			_ = file.Close()
+		}(file)
 
-			content, err := io.ReadAll(file)
-			if err != nil {
-				http.Error(w, "Failed to read manifest file", http.StatusBadRequest)
-				return
-			}
+		content, err := io.ReadAll(file)
+		if err != nil {
+			http.Error(w, "Failed to read manifest file", http.StatusBadRequest)
+			return
+		}
 
-			if string(content) != manifestContent {
-				http.Error(w, "Manifest content mismatch", http.StatusBadRequest)
-				return
-			}
+		if string(content) != manifestContent {
+			http.Error(w, "Manifest content mismatch", http.StatusBadRequest)
+			return
+		}
 
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(expectedResponse))
-		}),
-	})
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(expectedResponse))
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPushDataContractManifestTool(client).ToolHandler(context.Background(), tools.PushDataContractManifestInput{
+	output, err := tools.NewPushDataContractManifestTool(client).Handler(t.Context(), tools.PushDataContractManifestInput{
 		Manifest: manifestContent,
 	})
 	if err != nil {
@@ -95,10 +95,12 @@ description: This is a sample data contract manifest`
 }
 
 func TestPushDataContractManifestWithOptionalParams(t *testing.T) {
-	manifestContent := `id: test-manifest-456
-kind: DataContract
-apiVersion: 1.0.3
-title: Another Data Contract`
+	manifestContent := `
+		id: test-manifest-456
+		kind: DataContract
+		apiVersion: 1.0.3
+		title: Another Data Contract
+	`
 
 	expectedResponse := `{
 		"id": "00000000-0000-0000-0000-000000000003",
@@ -106,43 +108,44 @@ title: Another Data Contract`
 		"manifestId": "test-manifest-456"
 	}`
 
-	server := httptest.NewServer(&testServer{
-		"/rest/dataProduct/v1/dataContracts/addFromManifest": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err := r.ParseMultipartForm(10 << 20)
-			if err != nil {
-				http.Error(w, "Failed to parse multipart form", http.StatusBadRequest)
-				return
-			}
+	handler := http.NewServeMux()
+	handler.Handle("/rest/dataProduct/v1/dataContracts/addFromManifest", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := r.ParseMultipartForm(10 << 20)
+		if err != nil {
+			http.Error(w, "Failed to parse multipart form", http.StatusBadRequest)
+			return
+		}
 
-			if r.FormValue("manifestId") != "test-manifest-456" {
-				http.Error(w, "Expected manifestId 'test-manifest-456'", http.StatusBadRequest)
-				return
-			}
+		if r.FormValue("manifestId") != "test-manifest-456" {
+			http.Error(w, "Expected manifestId 'test-manifest-456'", http.StatusBadRequest)
+			return
+		}
 
-			if r.FormValue("version") != "1.0.0" {
-				http.Error(w, "Expected version '1.0.0'", http.StatusBadRequest)
-				return
-			}
+		if r.FormValue("version") != "1.0.0" {
+			http.Error(w, "Expected version '1.0.0'", http.StatusBadRequest)
+			return
+		}
 
-			if r.FormValue("force") != "true" {
-				http.Error(w, "Expected force 'true'", http.StatusBadRequest)
-				return
-			}
+		if r.FormValue("force") != "true" {
+			http.Error(w, "Expected force 'true'", http.StatusBadRequest)
+			return
+		}
 
-			// active field should not be present when Active is false (implementation only sends it when true)
-			if r.FormValue("active") != "" {
-				http.Error(w, "Expected active field to be absent when false", http.StatusBadRequest)
-				return
-			}
+		// active field should not be present when Active is false (implementation only sends it when true)
+		if r.FormValue("active") != "" {
+			http.Error(w, "Expected active field to be absent when false", http.StatusBadRequest)
+			return
+		}
 
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(expectedResponse))
-		}),
-	})
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(expectedResponse))
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPushDataContractManifestTool(client).ToolHandler(context.Background(), tools.PushDataContractManifestInput{
+	output, err := tools.NewPushDataContractManifestTool(client).Handler(t.Context(), tools.PushDataContractManifestInput{
 		Manifest:   manifestContent,
 		ManifestID: "test-manifest-456",
 		Version:    "1.0.0",
@@ -163,11 +166,11 @@ title: Another Data Contract`
 }
 
 func TestPushDataContractManifestEmptyManifest(t *testing.T) {
-	server := httptest.NewServer(&testServer{})
+	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPushDataContractManifestTool(client).ToolHandler(context.Background(), tools.PushDataContractManifestInput{
+	output, err := tools.NewPushDataContractManifestTool(client).Handler(t.Context(), tools.PushDataContractManifestInput{
 		Manifest: "",
 	})
 	if err != nil {
@@ -187,15 +190,16 @@ func TestPushDataContractManifestServerError(t *testing.T) {
 	manifestContent := `id: test-manifest-789
 kind: DataContract`
 
-	server := httptest.NewServer(&testServer{
-		"/rest/dataProduct/v1/dataContracts/addFromManifest": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}),
-	})
+	handler := http.NewServeMux()
+	handler.Handle("/rest/dataProduct/v1/dataContracts/addFromManifest", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPushDataContractManifestTool(client).ToolHandler(context.Background(), tools.PushDataContractManifestInput{
+	output, err := tools.NewPushDataContractManifestTool(client).Handler(t.Context(), tools.PushDataContractManifestInput{
 		Manifest: manifestContent,
 	})
 	if err != nil {

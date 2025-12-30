@@ -10,33 +10,34 @@ import (
 )
 
 func TestFindClassificationMatches(t *testing.T) {
-	server := httptest.NewServer(&testServer{
-		"/rest/catalog/1.0/dataClassification/classificationMatches/bulk": JsonHandlerOut(func(httpRequest *http.Request) clients.PagedResponseDataClassificationMatch {
-			return clients.PagedResponseDataClassificationMatch{
-				Total:  1,
-				Offset: 0,
-				Limit:  50,
-				Results: []clients.DataClassificationMatch{
-					{
-						ID:     "test-match-id",
-						Status: "ACCEPTED",
-						Asset: clients.NamedResourceReference{
-							ID:   "asset-id",
-							Name: "Test Asset",
-						},
-						Classification: clients.DataClassification{
-							ID:   "classification-id",
-							Name: "Test Classification",
-						},
+	handler := http.NewServeMux()
+	handler.Handle("/rest/catalog/1.0/dataClassification/classificationMatches/bulk", JsonHandlerOut(func(httpRequest *http.Request) (int, clients.PagedResponseDataClassificationMatch) {
+		return http.StatusOK, clients.PagedResponseDataClassificationMatch{
+			Total:  1,
+			Offset: 0,
+			Limit:  50,
+			Results: []clients.DataClassificationMatch{
+				{
+					ID:     "test-match-id",
+					Status: "ACCEPTED",
+					Asset: clients.NamedResourceReference{
+						ID:   "asset-id",
+						Name: "Test Asset",
+					},
+					Classification: clients.DataClassification{
+						ID:   "classification-id",
+						Name: "Test Classification",
 					},
 				},
-			}
-		}),
-	})
+			},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewSearchClassificationMatchesTool(client).ToolHandler(t.Context(), tools.SearchClassificationMatchesInput{
+	output, err := tools.NewSearchClassificationMatchesTool(client).Handler(t.Context(), tools.SearchClassificationMatchesInput{
 		Statuses: []string{"ACCEPTED"},
 		Limit:    50,
 	})

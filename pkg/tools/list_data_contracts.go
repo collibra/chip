@@ -6,7 +6,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type ListDataContractsInput struct {
@@ -30,11 +29,9 @@ type DataContract struct {
 
 func NewListDataContractsTool(collibraClient *http.Client) *chip.Tool[ListDataContractsInput, ListDataContractsOutput] {
 	return &chip.Tool[ListDataContractsInput, ListDataContractsOutput]{
-		Tool: &mcp.Tool{
-			Name:        "data_contract_list",
-			Description: "List data contracts available in Collibra. Returns a paginated list of data contract metadata, sorted by the last modified date in descending order.",
-		},
-		ToolHandler: handleListDataContracts(collibraClient),
+		Name:        "data_contract_list",
+		Description: "List data contracts available in Collibra. Returns a paginated list of data contract metadata, sorted by the last modified date in descending order.",
+		Handler:     handleListDataContracts(collibraClient),
 	}
 }
 

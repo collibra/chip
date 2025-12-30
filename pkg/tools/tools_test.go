@@ -2,7 +2,6 @@ package tools_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -10,18 +9,6 @@ import (
 	"net/url"
 	"path"
 )
-
-type testServer map[string]http.Handler
-
-func (s testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	handler, ok := s[r.URL.Path]
-	if !ok {
-		http.Error(w, fmt.Sprintf("Handler for path: %s not found", r.URL.Path), http.StatusNotFound)
-		return
-	}
-
-	handler.ServeHTTP(w, r)
-}
 
 type testClient struct {
 	baseURL string
@@ -64,25 +51,25 @@ func (f UnmarshallerFunc[Type]) Unmarshal(data []byte) (Type, error) {
 	return f(data)
 }
 
-func JsonMarshaller[Type any](value Type) ([]byte, error) {
+func MarshallJson[Type any](value Type) ([]byte, error) {
 	return json.Marshal(value)
 }
 
-func JsonUnmarshaller[Type any](data []byte) (Type, error) {
+func UnmarshallJson[Type any](data []byte) (Type, error) {
 	var value Type
 	err := json.Unmarshal(data, &value)
 	return value, err
 }
 
-func StringMarshaller(value string) ([]byte, error) {
+func MarshallString(value string) ([]byte, error) {
 	return []byte(value), nil
 }
 
-func StringUnmarshaller(data []byte) (string, error) {
+func UnmarshallString(data []byte) (string, error) {
 	return string(data), nil
 }
 
-func HttpHandlerInOut[In, Out any](m Marshaller[Out], u Unmarshaller[In], handler func(r *http.Request, in In) Out) http.Handler {
+func HttpHandlerInOut[In, Out any](m Marshaller[Out], u Unmarshaller[In], handler func(r *http.Request, in In) (int, Out)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		request, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -94,14 +81,14 @@ func HttpHandlerInOut[In, Out any](m Marshaller[Out], u Unmarshaller[In], handle
 			http.Error(w, "Failed to unmarshall request: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		out := handler(r, in)
+		statusCode, out := handler(r, in)
 		response, err := m.Marshall(out)
 		if err != nil {
 			http.Error(w, "Failed to Marshall response: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(statusCode)
 		_, err = w.Write(response)
 		if err != nil {
 			log.Printf("Failed to write response: %v", err)
@@ -109,16 +96,16 @@ func HttpHandlerInOut[In, Out any](m Marshaller[Out], u Unmarshaller[In], handle
 	})
 }
 
-func HttpHandlerOut[Out any](m Marshaller[Out], handler func(r *http.Request) Out) http.Handler {
+func HttpHandlerOut[Out any](m Marshaller[Out], handler func(r *http.Request) (int, Out)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		out := handler(r)
+		statusCode, out := handler(r)
 		response, err := m.Marshall(out)
 		if err != nil {
 			http.Error(w, "Failed to Marshall response: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(statusCode)
 		_, err = w.Write(response)
 		if err != nil {
 			log.Printf("Failed to write response: %v", err)
@@ -126,18 +113,18 @@ func HttpHandlerOut[Out any](m Marshaller[Out], handler func(r *http.Request) Ou
 	})
 }
 
-func JsonHandlerInOut[In, Out any](handler func(r *http.Request, in In) Out) http.Handler {
-	return HttpHandlerInOut[In, Out](MarshallerFunc[Out](JsonMarshaller[Out]), UnmarshallerFunc[In](JsonUnmarshaller[In]), handler)
+func JsonHandlerInOut[In, Out any](handler func(r *http.Request, in In) (int, Out)) http.Handler {
+	return HttpHandlerInOut[In, Out](MarshallerFunc[Out](MarshallJson[Out]), UnmarshallerFunc[In](UnmarshallJson[In]), handler)
 }
 
-func JsonHandlerOut[Out any](handler func(r *http.Request) Out) http.Handler {
-	return HttpHandlerOut[Out](MarshallerFunc[Out](JsonMarshaller[Out]), handler)
+func JsonHandlerOut[Out any](handler func(r *http.Request) (int, Out)) http.Handler {
+	return HttpHandlerOut[Out](MarshallerFunc[Out](MarshallJson[Out]), handler)
 }
 
-func StringHandlerInOut(handler func(r *http.Request, in string) string) http.Handler {
-	return HttpHandlerInOut(MarshallerFunc[string](StringMarshaller), UnmarshallerFunc[string](StringUnmarshaller), handler)
+func StringHandlerInOut(handler func(r *http.Request, in string) (int, string)) http.Handler {
+	return HttpHandlerInOut(MarshallerFunc[string](MarshallString), UnmarshallerFunc[string](UnmarshallString), handler)
 }
 
-func StringHandlerOut(handler func(r *http.Request) string) http.Handler {
-	return HttpHandlerOut(MarshallerFunc[string](StringMarshaller), handler)
+func StringHandlerOut(handler func(r *http.Request) (int, string)) http.Handler {
+	return HttpHandlerOut(MarshallerFunc[string](MarshallString), handler)
 }

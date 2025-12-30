@@ -12,32 +12,33 @@ import (
 
 func TestListAssetTypes(t *testing.T) {
 	assetTypeId, _ := uuid.NewUUID()
-	server := httptest.NewServer(&testServer{
-		"/rest/2.0/assetTypes": JsonHandlerOut(func(httpRequest *http.Request) clients.AssetTypePagedResponse {
-			return clients.AssetTypePagedResponse{
-				Total:  1,
-				Offset: 0,
-				Limit:  100,
-				Results: []clients.AssetTypeDetails{
-					{
-						ID:                 assetTypeId.String(),
-						Name:               "Data Element",
-						Description:        "A data element asset type",
-						PublicId:           "DataElement",
-						DisplayNameEnabled: true,
-						RatingEnabled:      false,
-						FinalType:          false,
-						System:             false,
-						Product:            "Data Governance Center",
-					},
+	handler := http.NewServeMux()
+	handler.Handle("/rest/2.0/assetTypes", JsonHandlerOut(func(httpRequest *http.Request) (int, clients.AssetTypePagedResponse) {
+		return http.StatusOK, clients.AssetTypePagedResponse{
+			Total:  1,
+			Offset: 0,
+			Limit:  100,
+			Results: []clients.AssetTypeDetails{
+				{
+					ID:                 assetTypeId.String(),
+					Name:               "Data Element",
+					Description:        "A data element asset type",
+					PublicId:           "DataElement",
+					DisplayNameEnabled: true,
+					RatingEnabled:      false,
+					FinalType:          false,
+					System:             false,
+					Product:            "Data Governance Center",
 				},
-			}
-		}),
-	})
+			},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewListAssetTypesTool(client).ToolHandler(t.Context(), tools.ListAssetTypesInput{
+	output, err := tools.NewListAssetTypesTool(client).Handler(t.Context(), tools.ListAssetTypesInput{
 		Limit: 100,
 	})
 	if err != nil {

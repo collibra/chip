@@ -6,7 +6,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type SearchClassificationMatchesInput struct {
@@ -28,11 +27,9 @@ type SearchClassificationMatchesOutput struct {
 
 func NewSearchClassificationMatchesTool(collibraClient *http.Client) *chip.Tool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput] {
 	return &chip.Tool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput]{
-		Tool: &mcp.Tool{
-			Name:        "data_classification_match_search",
-			Description: "Search for classification matches (associations between data classes and assets) in Collibra. Supports filtering by asset IDs, statuses (ACCEPTED/REJECTED/SUGGESTED), classification IDs, and asset type IDs.",
-		},
-		ToolHandler: handleSearchClassificationMatches(collibraClient),
+		Name:        "data_classification_match_search",
+		Description: "Search for classification matches (associations between data classes and assets) in Collibra. Supports filtering by asset IDs, statuses (ACCEPTED/REJECTED/SUGGESTED), classification IDs, and asset type IDs.",
+		Handler:     handleSearchClassificationMatches(collibraClient),
 	}
 }
 

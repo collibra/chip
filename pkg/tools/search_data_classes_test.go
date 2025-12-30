@@ -10,17 +10,18 @@ import (
 )
 
 func TestFindDataClasses(t *testing.T) {
-	server := httptest.NewServer(&testServer{
-		"/rest/classification/v1/dataClasses": JsonHandlerOut(func(httpRequest *http.Request) clients.DataClassesResponse {
-			return clients.DataClassesResponse{
-				Results: []clients.DataClass{{Description: httpRequest.URL.Query().Encode()}},
-			}
-		}),
-	})
+	handler := http.NewServeMux()
+	handler.Handle("/rest/classification/v1/dataClasses", JsonHandlerOut(func(httpRequest *http.Request) (int, clients.DataClassesResponse) {
+		return http.StatusOK, clients.DataClassesResponse{
+			Results: []clients.DataClass{{Description: httpRequest.URL.Query().Encode()}},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewSearchDataClassesTool(client).ToolHandler(t.Context(), tools.SearchDataClassesInput{
+	output, err := tools.NewSearchDataClassesTool(client).Handler(t.Context(), tools.SearchDataClassesInput{
 		Name: "Question",
 	})
 	if err != nil {

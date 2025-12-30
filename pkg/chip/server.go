@@ -3,9 +3,11 @@ package chip
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"slices"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -69,17 +71,18 @@ func WithToolMiddleware(middleware ToolMiddleware) ServerOption {
 }
 
 type Tool[In, Out any] struct {
-	Tool        *mcp.Tool
-	ToolHandler ToolHandlerFunc[In, Out]
+	Name        string
+	Description string
+	Handler     ToolHandlerFunc[In, Out]
 }
 
 func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
-	slog.Info(fmt.Sprintf("Registering tool: %s", tool.Tool.Name))
+	slog.Info(fmt.Sprintf("Registering tool: %s", tool.Name))
 	handler := func(ctx context.Context, toolRequest *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		var capturedOutput Out
 
 		middlewareChain := func(ctx context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			out, err := tool.ToolHandler(ctx, input)
+			out, err := tool.Handler(ctx, input)
 			if err != nil {
 				slog.ErrorContext(ctx, "error while calling tool function", "error", err)
 			}
@@ -101,5 +104,19 @@ func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 		return res, capturedOutput, err
 	}
 
-	mcp.AddTool(&s.Server, tool.Tool, handler)
+	mcp.AddTool(&s.Server, &mcp.Tool{
+		Name:         tool.Name,
+		Description:  tool.Description,
+		InputSchema:  buildSchema[In](),
+		OutputSchema: buildSchema[Out](),
+	}, handler)
+}
+
+func buildSchema[Schema any]() *jsonschema.Schema {
+	inputSchema, err := jsonschema.For[Schema](nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	inputSchema.AdditionalProperties = nil
+	return inputSchema
 }

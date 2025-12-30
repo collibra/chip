@@ -7,7 +7,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type SearchKeywordInput struct {
@@ -39,11 +38,9 @@ type SearchKeywordResource struct {
 
 func NewSearchKeywordTool(collibraClient *http.Client) *chip.Tool[SearchKeywordInput, SearchKeywordOutput] {
 	return &chip.Tool[SearchKeywordInput, SearchKeywordOutput]{
-		Tool: &mcp.Tool{
-			Name:        "asset_keyword_search",
-			Description: "Perform a wildcard keyword search for assets in the Collibra knowledge graph. Supports filtering by resource type, community, domain, asset type, status, and creator.",
-		},
-		ToolHandler: handleSearchKeyword(collibraClient),
+		Name:        "asset_keyword_search",
+		Description: "Perform a wildcard keyword search for assets in the Collibra knowledge graph. Supports filtering by resource type, community, domain, asset type, status, and creator.",
+		Handler:     handleSearchKeyword(collibraClient),
 	}
 }
 

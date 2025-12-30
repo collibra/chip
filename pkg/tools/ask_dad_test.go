@@ -11,19 +11,20 @@ import (
 )
 
 func TestAskDad(t *testing.T) {
-	server := httptest.NewServer(&testServer{
-		"/rest/aiCopilot/v1/tools/askDad": JsonHandlerInOut(func(_ *http.Request, request clients.ToolRequest) clients.ToolResponse {
-			return clients.ToolResponse{
-				Content: []clients.ToolContent{
-					{Text: fmt.Sprintf("Q: %s, A: %s", request.Message.Content.Text, "Name, Email, Phone Number")},
-				},
-			}
-		}),
-	})
+	handler := http.NewServeMux()
+	handler.Handle("/rest/aiCopilot/v1/tools/askDad", JsonHandlerInOut(func(_ *http.Request, request clients.ToolRequest) (int, clients.ToolResponse) {
+		return http.StatusOK, clients.ToolResponse{
+			Content: []clients.ToolContent{
+				{Text: fmt.Sprintf("Q: %s, A: %s", request.Message.Content.Text, "Name, Email, Phone Number")},
+			},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewAskDadTool(client).ToolHandler(t.Context(), tools.AskDadInput{
+	output, err := tools.NewAskDadTool(client).Handler(t.Context(), tools.AskDadInput{
 		Question: "Column names with PII in table users?",
 	})
 	if err != nil {

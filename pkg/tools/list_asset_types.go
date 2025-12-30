@@ -6,7 +6,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type ListAssetTypesInput struct {
@@ -35,11 +34,9 @@ type AssetType struct {
 
 func NewListAssetTypesTool(collibraClient *http.Client) *chip.Tool[ListAssetTypesInput, ListAssetTypesOutput] {
 	return &chip.Tool[ListAssetTypesInput, ListAssetTypesOutput]{
-		Tool: &mcp.Tool{
-			Name:        "asset_types_list",
-			Description: "List asset types available in Collibra with their properties and metadata.",
-		},
-		ToolHandler: handleListAssetTypes(collibraClient),
+		Name:        "asset_types_list",
+		Description: "List asset types available in Collibra with their properties and metadata.",
+		Handler:     handleListAssetTypes(collibraClient),
 	}
 }
 

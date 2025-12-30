@@ -6,7 +6,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type AskGlossaryInput struct {
@@ -19,11 +18,9 @@ type AskGlossaryOutput struct {
 
 func NewAskGlossaryTool(collibraHttpClient *http.Client) *chip.Tool[AskGlossaryInput, AskGlossaryOutput] {
 	return &chip.Tool[AskGlossaryInput, AskGlossaryOutput]{
-		Tool: &mcp.Tool{
-			Name:        "business_glossary_discover",
-			Description: "Ask the business glossary agent questions about terms and definitions in Collibra.",
-		},
-		ToolHandler: handleAskGlossary(collibraHttpClient),
+		Name:        "business_glossary_discover",
+		Description: "Ask the business glossary agent questions about terms and definitions in Collibra.",
+		Handler:     handleAskGlossary(collibraHttpClient),
 	}
 }
 

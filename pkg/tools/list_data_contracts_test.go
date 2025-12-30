@@ -15,25 +15,26 @@ func TestListDataContracts(t *testing.T) {
 	domainId, _ := uuid.NewUUID()
 	manifestId := "test-manifest-123"
 
-	server := httptest.NewServer(&testServer{
-		"/rest/dataProduct/v1/dataContracts": JsonHandlerOut(func(httpRequest *http.Request) clients.DataContractListPaginated {
-			return clients.DataContractListPaginated{
-				Items: []clients.DataContract{
-					{
-						ID:         contractId.String(),
-						DomainID:   domainId.String(),
-						ManifestID: manifestId,
-					},
+	handler := http.NewServeMux()
+	handler.Handle("/rest/dataProduct/v1/dataContracts", JsonHandlerOut(func(httpRequest *http.Request) (int, clients.DataContractListPaginated) {
+		return http.StatusOK, clients.DataContractListPaginated{
+			Items: []clients.DataContract{
+				{
+					ID:         contractId.String(),
+					DomainID:   domainId.String(),
+					ManifestID: manifestId,
 				},
-				Limit:      100,
-				NextCursor: "",
-			}
-		}),
-	})
+			},
+			Limit:      100,
+			NextCursor: "",
+		}
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewListDataContractsTool(client).ToolHandler(t.Context(), tools.ListDataContractsInput{
+	output, err := tools.NewListDataContractsTool(client).Handler(t.Context(), tools.ListDataContractsInput{
 		Limit: 100,
 	})
 	if err != nil {
@@ -68,26 +69,27 @@ func TestListDataContractsWithTotal(t *testing.T) {
 	manifestId := "test-manifest-456"
 	total := 42
 
-	server := httptest.NewServer(&testServer{
-		"/rest/dataProduct/v1/dataContracts": JsonHandlerOut(func(httpRequest *http.Request) clients.DataContractListPaginated {
-			return clients.DataContractListPaginated{
-				Items: []clients.DataContract{
-					{
-						ID:         contractId.String(),
-						DomainID:   domainId.String(),
-						ManifestID: manifestId,
-					},
+	handler := http.NewServeMux()
+	handler.Handle("/rest/dataProduct/v1/dataContracts", JsonHandlerOut(func(httpRequest *http.Request) (int, clients.DataContractListPaginated) {
+		return http.StatusOK, clients.DataContractListPaginated{
+			Items: []clients.DataContract{
+				{
+					ID:         contractId.String(),
+					DomainID:   domainId.String(),
+					ManifestID: manifestId,
 				},
-				Limit:      100,
-				NextCursor: "nextPageCursor",
-				Total:      total,
-			}
-		}),
-	})
+			},
+			Limit:      100,
+			NextCursor: "nextPageCursor",
+			Total:      total,
+		}
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewListDataContractsTool(client).ToolHandler(t.Context(), tools.ListDataContractsInput{
+	output, err := tools.NewListDataContractsTool(client).Handler(t.Context(), tools.ListDataContractsInput{
 		Limit: 100,
 	})
 	if err != nil {

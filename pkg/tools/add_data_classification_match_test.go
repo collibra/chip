@@ -1,23 +1,20 @@
-package tools
+package tools_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/collibra/chip/pkg/tools"
 )
 
 func TestAddClassificationMatch_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.NewServeMux()
+	handler.Handle("/rest/catalog/1.0/dataClassification/classificationMatches", StringHandlerOut(func(r *http.Request) (int, string) {
 		if r.Method != "POST" {
 			t.Errorf("Expected POST request, got %s", r.Method)
 		}
-		if r.URL.Path != "/rest/catalog/1.0/dataClassification/classificationMatches" {
-			t.Errorf("Expected path /rest/catalog/1.0/dataClassification/classificationMatches, got %s", r.URL.Path)
-		}
-
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{
+		return http.StatusOK, `{
 			"id": "12345678-1234-1234-1234-123456789abc",
 			"createdBy": "4d250cc5-e583-4640-9874-b93d82c7a6cb",
 			"createdOn": 1475503010320,
@@ -36,21 +33,20 @@ func TestAddClassificationMatch_Success(t *testing.T) {
 				"id": "be45c001-b173-48ff-ac91-3f6e45868c8b",
 				"name": "Email Address"
 			}
-		}`))
+		}`
 	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	client := &http.Client{
-		Transport: &classificationMatchMockTransport{baseURL: server.URL},
-	}
+	client := newClient(server)
 
-	input := AddDataClassificationMatchInput{
+	input := tools.AddDataClassificationMatchInput{
 		AssetID:          "9179b887-04ef-4ce5-ab3a-b5bbd39ea3c8",
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	ctx := context.Background()
-	output, err := handleAddClassificationMatch(client)(ctx, input)
+	output, err := tools.NewAddDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -80,12 +76,11 @@ func TestAddClassificationMatch_Success(t *testing.T) {
 func TestAddClassificationMatch_MissingAssetID(t *testing.T) {
 	client := &http.Client{}
 
-	input := AddDataClassificationMatchInput{
+	input := tools.AddDataClassificationMatchInput{
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	ctx := context.Background()
-	output, err := handleAddClassificationMatch(client)(ctx, input)
+	output, err := tools.NewAddDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -103,12 +98,11 @@ func TestAddClassificationMatch_MissingAssetID(t *testing.T) {
 func TestAddClassificationMatch_MissingClassificationID(t *testing.T) {
 	client := &http.Client{}
 
-	input := AddDataClassificationMatchInput{
+	input := tools.AddDataClassificationMatchInput{
 		AssetID: "9179b887-04ef-4ce5-ab3a-b5bbd39ea3c8",
 	}
 
-	ctx := context.Background()
-	output, err := handleAddClassificationMatch(client)(ctx, input)
+	output, err := tools.NewAddDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -133,17 +127,14 @@ func TestAddClassificationMatch_AssetNotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &http.Client{
-		Transport: &classificationMatchMockTransport{baseURL: server.URL},
-	}
+	client := newClient(server)
 
-	input := AddDataClassificationMatchInput{
+	input := tools.AddDataClassificationMatchInput{
 		AssetID:          "00000000-0000-0000-0000-000000000000",
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	ctx := context.Background()
-	output, err := handleAddClassificationMatch(client)(ctx, input)
+	output, err := tools.NewAddDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -168,17 +159,14 @@ func TestAddClassificationMatch_AlreadyExists(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &http.Client{
-		Transport: &classificationMatchMockTransport{baseURL: server.URL},
-	}
+	client := newClient(server)
 
-	input := AddDataClassificationMatchInput{
+	input := tools.AddDataClassificationMatchInput{
 		AssetID:          "9179b887-04ef-4ce5-ab3a-b5bbd39ea3c8",
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	ctx := context.Background()
-	output, err := handleAddClassificationMatch(client)(ctx, input)
+	output, err := tools.NewAddDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -191,16 +179,4 @@ func TestAddClassificationMatch_AlreadyExists(t *testing.T) {
 	if output.Error == "" {
 		t.Error("Expected error message for already existing match")
 	}
-}
-
-type classificationMatchMockTransport struct {
-	baseURL string
-}
-
-func (t *classificationMatchMockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.URL.Scheme = "http"
-	if req.URL.Host == "" {
-		req.URL.Host = t.baseURL[7:]
-	}
-	return http.DefaultTransport.RoundTrip(req)
 }

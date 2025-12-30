@@ -1,7 +1,6 @@
 package tools_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,21 +11,24 @@ import (
 
 func TestPullDataContractManifest(t *testing.T) {
 	contractId, _ := uuid.NewUUID()
-	manifestContent := `id: test-manifest-123
-kind: DataContract
-apiVersion: 1.0.3
-title: Sample Data Contract
-description: This is a sample data contract manifest`
+	manifestContent := `
+		id: test-manifest-123
+		kind: DataContract
+		apiVersion: 1.0.3
+		title: Sample Data Contract
+		description: This is a sample data contract manifest
+	`
 
-	server := httptest.NewServer(&testServer{
-		"/rest/dataProduct/v1/dataContracts/" + contractId.String() + "/activeVersion/manifest": StringHandlerOut(func(r *http.Request) string {
-			return manifestContent
-		}),
-	})
+	handler := http.NewServeMux()
+	handler.Handle("/rest/dataProduct/v1/dataContracts/"+contractId.String()+"/activeVersion/manifest", StringHandlerOut(func(r *http.Request) (int, string) {
+		return http.StatusOK, manifestContent
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPullDataContractManifestTool(client).ToolHandler(context.Background(), tools.PullDataContractManifestInput{
+	output, err := tools.NewPullDataContractManifestTool(client).Handler(t.Context(), tools.PullDataContractManifestInput{
 		DataContractID: contractId.String(),
 	})
 	if err != nil {
@@ -47,11 +49,11 @@ description: This is a sample data contract manifest`
 }
 
 func TestPullDataContractManifestInvalidUUID(t *testing.T) {
-	server := httptest.NewServer(&testServer{})
+	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPullDataContractManifestTool(client).ToolHandler(context.Background(), tools.PullDataContractManifestInput{
+	output, err := tools.NewPullDataContractManifestTool(client).Handler(t.Context(), tools.PullDataContractManifestInput{
 		DataContractID: "invalid-uuid",
 	})
 	if err != nil {
@@ -70,13 +72,14 @@ func TestPullDataContractManifestInvalidUUID(t *testing.T) {
 func TestPullDataContractManifestNotFound(t *testing.T) {
 	contractId, _ := uuid.NewUUID()
 
-	server := httptest.NewServer(&testServer{
-		"/rest/dataProduct/v1/dataContracts/" + contractId.String() + "/activeVersion/manifest": http.NotFoundHandler(),
-	})
+	handler := http.NewServeMux()
+	handler.Handle("/rest/dataProduct/v1/dataContracts/"+contractId.String()+"/activeVersion/manifest", http.NotFoundHandler())
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewPullDataContractManifestTool(client).ToolHandler(context.Background(), tools.PullDataContractManifestInput{
+	output, err := tools.NewPullDataContractManifestTool(client).Handler(t.Context(), tools.PullDataContractManifestInput{
 		DataContractID: contractId.String(),
 	})
 	if err != nil {

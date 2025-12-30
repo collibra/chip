@@ -8,7 +8,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type AddDataClassificationMatchInput struct {
@@ -24,11 +23,9 @@ type AddDataClassificationMatchOutput struct {
 
 func NewAddDataClassificationMatchTool(collibraClient *http.Client) *chip.Tool[AddDataClassificationMatchInput, AddDataClassificationMatchOutput] {
 	return &chip.Tool[AddDataClassificationMatchInput, AddDataClassificationMatchOutput]{
-		Tool: &mcp.Tool{
-			Name:        "data_classification_match_add",
-			Description: "Associate a data classification (data class) with a specific data asset in Collibra. Requires both the asset UUID and the classification UUID.",
-		},
-		ToolHandler: handleAddClassificationMatch(collibraClient),
+		Name:        "data_classification_match_add",
+		Description: "Associate a data classification (data class) with a specific data asset in Collibra. Requires both the asset UUID and the classification UUID.",
+		Handler:     handleAddClassificationMatch(collibraClient),
 	}
 }
 

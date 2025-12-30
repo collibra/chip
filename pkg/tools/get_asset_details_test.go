@@ -1,7 +1,6 @@
 package tools_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,25 +12,25 @@ import (
 
 func TestGetAssetDetails(t *testing.T) {
 	assetId, _ := uuid.NewUUID()
-	server := httptest.NewServer(&testServer{
-		"/graphql/knowledgeGraph/v1": JsonHandlerInOut(func(httpRequest *http.Request, request clients.Request) clients.Response {
-			return clients.Response{
-				Data: &clients.AssetQueryData{
-					Assets: []clients.Asset{
-						{
-							ID:          assetId.String(),
-							DisplayName: "My Asset Name",
-						},
+	handler := http.NewServeMux()
+	handler.Handle("/graphql/knowledgeGraph/v1", JsonHandlerInOut(func(httpRequest *http.Request, request clients.Request) (int, clients.Response) {
+		return http.StatusOK, clients.Response{
+			Data: &clients.AssetQueryData{
+				Assets: []clients.Asset{
+					{
+						ID:          assetId.String(),
+						DisplayName: "My Asset Name",
 					},
 				},
-			}
-		}),
-	})
+			},
+		}
+	}))
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
 
-	output, err := tools.NewAssetDetailsTool(client).ToolHandler(context.Background(), tools.AssetDetailsInput{
+	output, err := tools.NewAssetDetailsTool(client).Handler(t.Context(), tools.AssetDetailsInput{
 		AssetID: assetId.String(),
 	})
 	if err != nil {

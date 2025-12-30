@@ -7,7 +7,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type PushDataContractManifestInput struct {
@@ -28,11 +27,9 @@ type PushDataContractManifestOutput struct {
 
 func NewPushDataContractManifestTool(collibraClient *http.Client) *chip.Tool[PushDataContractManifestInput, PushDataContractManifestOutput] {
 	return &chip.Tool[PushDataContractManifestInput, PushDataContractManifestOutput]{
-		Tool: &mcp.Tool{
-			Name:        "data_contract_manifest_push",
-			Description: "Upload a new version of a data contract manifest to Collibra. The manifestID and version are automatically parsed from the manifest content if it adheres to the Open Data Contract Standard.",
-		},
-		ToolHandler: handlePushDataContractManifest(collibraClient),
+		Name:        "data_contract_manifest_push",
+		Description: "Upload a new version of a data contract manifest to Collibra. The manifestID and version are automatically parsed from the manifest content if it adheres to the Open Data Contract Standard.",
+		Handler:     handlePushDataContractManifest(collibraClient),
 	}
 }
 

@@ -12,26 +12,27 @@ import (
 
 func TestKeywordSearch(t *testing.T) {
 	assetId, _ := uuid.NewUUID()
-	server := httptest.NewServer(&testServer{
-		"/rest/2.0/search": JsonHandlerInOut(func(httpRequest *http.Request, request clients.SearchRequest) clients.SearchResponse {
-			return clients.SearchResponse{
-				Total: 1,
-				Results: []clients.SearchResult{
-					{
-						Resource: clients.SearchResource{
-							ResourceType: "Asset",
-							ID:           assetId.String(),
-							Name:         "My Asset Name",
-						},
+	handler := http.NewServeMux()
+	handler.Handle("/rest/2.0/search", JsonHandlerInOut(func(httpRequest *http.Request, request clients.SearchRequest) (int, clients.SearchResponse) {
+		return http.StatusOK, clients.SearchResponse{
+			Total: 1,
+			Results: []clients.SearchResult{
+				{
+					Resource: clients.SearchResource{
+						ResourceType: "Asset",
+						ID:           assetId.String(),
+						Name:         "My Asset Name",
 					},
 				},
-			}
-		}),
-	})
+			},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	client := newClient(server)
-	output, err := tools.NewSearchKeywordTool(client).ToolHandler(t.Context(), tools.SearchKeywordInput{
+	output, err := tools.NewSearchKeywordTool(client).Handler(t.Context(), tools.SearchKeywordInput{
 		Query: "revenue",
 	})
 	if err != nil {

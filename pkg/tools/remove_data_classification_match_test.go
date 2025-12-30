@@ -1,35 +1,32 @@
-package tools
+package tools_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/collibra/chip/pkg/tools"
 )
 
 func TestRemoveClassificationMatch_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.NewServeMux()
+	handler.Handle("/rest/catalog/1.0/dataClassification/classificationMatches/12345678-1234-1234-1234-123456789abc", StringHandlerOut(func(r *http.Request) (int, string) {
 		if r.Method != "DELETE" {
 			t.Errorf("Expected DELETE request, got %s", r.Method)
 		}
-		if r.URL.Path != "/rest/catalog/1.0/dataClassification/classificationMatches/12345678-1234-1234-1234-123456789abc" {
-			t.Errorf("Expected path /rest/catalog/1.0/dataClassification/classificationMatches/12345678-1234-1234-1234-123456789abc, got %s", r.URL.Path)
-		}
-
-		w.WriteHeader(http.StatusNoContent)
+		return http.StatusNoContent, ""
 	}))
+
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	client := &http.Client{
-		Transport: &classificationMatchMockTransport{baseURL: server.URL},
-	}
+	client := newClient(server)
 
-	input := RemoveDataClassificationMatchInput{
+	input := tools.RemoveDataClassificationMatchInput{
 		ClassificationMatchID: "12345678-1234-1234-1234-123456789abc",
 	}
 
-	ctx := context.Background()
-	output, err := handleRemoveDataClassificationMatch(client)(ctx, input)
+	output, err := tools.NewRemoveDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -43,10 +40,9 @@ func TestRemoveClassificationMatch_Success(t *testing.T) {
 func TestRemoveClassificationMatch_MissingClassificationMatchID(t *testing.T) {
 	client := &http.Client{}
 
-	input := RemoveDataClassificationMatchInput{}
+	input := tools.RemoveDataClassificationMatchInput{}
 
-	ctx := context.Background()
-	output, err := handleRemoveDataClassificationMatch(client)(ctx, input)
+	output, err := tools.NewRemoveDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -67,16 +63,13 @@ func TestRemoveClassificationMatch_NotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &http.Client{
-		Transport: &classificationMatchMockTransport{baseURL: server.URL},
-	}
+	client := newClient(server)
 
-	input := RemoveDataClassificationMatchInput{
+	input := tools.RemoveDataClassificationMatchInput{
 		ClassificationMatchID: "00000000-0000-0000-0000-000000000000",
 	}
 
-	ctx := context.Background()
-	output, err := handleRemoveDataClassificationMatch(client)(ctx, input)
+	output, err := tools.NewRemoveDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -101,16 +94,13 @@ func TestRemoveClassificationMatch_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &http.Client{
-		Transport: &classificationMatchMockTransport{baseURL: server.URL},
-	}
+	client := newClient(server)
 
-	input := RemoveDataClassificationMatchInput{
+	input := tools.RemoveDataClassificationMatchInput{
 		ClassificationMatchID: "12345678-1234-1234-1234-123456789abc",
 	}
 
-	ctx := context.Background()
-	output, err := handleRemoveDataClassificationMatch(client)(ctx, input)
+	output, err := tools.NewRemoveDataClassificationMatchTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
