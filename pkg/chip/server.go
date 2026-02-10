@@ -74,6 +74,7 @@ type Tool[In, Out any] struct {
 	Name        string
 	Description string
 	Handler     ToolHandlerFunc[In, Out]
+	Permissions []string
 }
 
 func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {

@@ -1,3 +1,3 @@
 package chip
 
-var Version = "0.0.23-SNAPSHOT"
+var Version = "0.0.24-SNAPSHOT"

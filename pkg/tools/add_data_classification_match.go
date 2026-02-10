@@ -26,6 +26,7 @@ func NewAddDataClassificationMatchTool(collibraClient *http.Client) *chip.Tool[A
 		Name:        "data_classification_match_add",
 		Description: "Associate a data classification (data class) with a specific data asset in Collibra. Requires both the asset UUID and the classification UUID.",
 		Handler:     handleAddClassificationMatch(collibraClient),
+		Permissions: []string{"dgc.data-classes-add"},
 	}
 }
 

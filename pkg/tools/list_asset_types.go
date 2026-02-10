@@ -37,6 +37,7 @@ func NewListAssetTypesTool(collibraClient *http.Client) *chip.Tool[ListAssetType
 		Name:        "asset_types_list",
 		Description: "List asset types available in Collibra with their properties and metadata.",
 		Handler:     handleListAssetTypes(collibraClient),
+		Permissions: []string{},
 	}
 }
 

@@ -30,6 +30,7 @@ func NewSearchClassificationMatchesTool(collibraClient *http.Client) *chip.Tool[
 		Name:        "data_classification_match_search",
 		Description: "Search for classification matches (associations between data classes and assets) in Collibra. Supports filtering by asset IDs, statuses (ACCEPTED/REJECTED/SUGGESTED), classification IDs, and asset type IDs.",
 		Handler:     handleSearchClassificationMatches(collibraClient),
+		Permissions: []string{"dgc.data-classes-list-values", "dgc.data-classes-read"},
 	}
 }
 
