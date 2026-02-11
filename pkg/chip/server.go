@@ -27,12 +27,14 @@ func (f ToolMiddlewareFunc) ToolHandle(ctx context.Context, toolRequest *mcp.Cal
 
 type Server struct {
 	toolMiddlewares []ToolMiddleware
+	toolPermissions map[string][]string
 	mcp.Server
 }
 
 func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
 		toolMiddlewares: []ToolMiddleware{},
+		toolPermissions: make(map[string][]string),
 		Server: *mcp.NewServer(&mcp.Implementation{
 			Name:    "Collibra MCP server",
 			Title:   "Collibra Data Intelligence Platform MCP Server",
@@ -79,6 +81,11 @@ type Tool[In, Out any] struct {
 
 func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 	slog.Info(fmt.Sprintf("Registering tool: %s", tool.Name))
+
+	if len(tool.Permissions) > 0 {
+		s.toolPermissions[tool.Name] = tool.Permissions
+	}
+
 	handler := func(ctx context.Context, toolRequest *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		var capturedOutput Out
 
@@ -100,6 +107,7 @@ func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 		}
 
 		ctx = SetCallToolRequest(ctx, toolRequest)
+		ctx = SetToolPermissions(ctx, tool.Permissions)
 		res, err := middlewareChain(ctx, toolRequest)
 
 		return res, capturedOutput, err
