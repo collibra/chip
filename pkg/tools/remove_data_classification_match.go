@@ -24,7 +24,7 @@ func NewRemoveDataClassificationMatchTool(collibraClient *http.Client) *chip.Too
 		Name:        "data_classification_match_remove",
 		Description: "Remove a classification match (association between a data class and an asset) from Collibra. Requires the UUID of the classification match to remove.",
 		Handler:     handleRemoveDataClassificationMatch(collibraClient),
-		Permissions: []string{"dgc.classify"},
+		Permissions: []string{"dgc.classify", "dgc.catalog"},
 	}
 }
 
