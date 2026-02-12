@@ -29,7 +29,7 @@ func NewSearchDataClassesTool(collibraClient *http.Client) *chip.Tool[SearchData
 		Name:        "data_class_search",
 		Description: "Search for data classes in Collibra's classification service. Supports filtering by name, description, and whether they contain rules.",
 		Handler:     handleSearchDataClasses(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.data-classes-read"},
 	}
 }
 
