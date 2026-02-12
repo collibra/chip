@@ -6,7 +6,7 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 )
 
-func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ToolConfig) {
+func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) {
 	toolRegister(server, toolConfig, NewAskDadTool(client))
 	toolRegister(server, toolConfig, NewAskGlossaryTool(client))
 	toolRegister(server, toolConfig, NewAssetDetailsTool(client))
@@ -21,7 +21,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Tool
 	toolRegister(server, toolConfig, NewPullDataContractManifestTool(client))
 }
 
-func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ToolConfig, tool *chip.Tool[In, Out]) {
+func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {
 	if toolConfig.IsToolEnabled(tool.Name) {
 		chip.RegisterTool(server, tool)
 	}
