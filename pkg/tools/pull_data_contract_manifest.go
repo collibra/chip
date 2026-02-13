@@ -25,6 +25,7 @@ func NewPullDataContractManifestTool(collibraClient *http.Client) *chip.Tool[Pul
 		Name:        "data_contract_manifest_pull",
 		Description: "Download the manifest file for the currently active version of a specific data contract. Returns the manifest content as a string.",
 		Handler:     handlePullDataContractManifest(collibraClient),
+		Permissions: []string{},
 	}
 }
 

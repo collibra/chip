@@ -27,12 +27,14 @@ func (f ToolMiddlewareFunc) ToolHandle(ctx context.Context, toolRequest *mcp.Cal
 
 type Server struct {
 	toolMiddlewares []ToolMiddleware
+	toolMetadata    map[string]*ToolMetadata
 	mcp.Server
 }
 
 func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
 		toolMiddlewares: []ToolMiddleware{},
+		toolMetadata:    make(map[string]*ToolMetadata),
 		Server: *mcp.NewServer(&mcp.Implementation{
 			Name:    "Collibra MCP server",
 			Title:   "Collibra Data Intelligence Platform MCP Server",
@@ -47,12 +49,24 @@ func NewServer(opts ...ServerOption) *Server {
 	return s
 }
 
-type ToolConfig struct {
+// GetToolMetadata returns the metadata for a given tool
+func (s *Server) GetToolMetadata(toolName string) *ToolMetadata {
+	return s.toolMetadata[toolName]
+}
+
+// ToolMetadata stores metadata about a registered tool
+type ToolMetadata struct {
+	Name        string
+	Permissions []string
+}
+
+// ServerToolConfig is used to configure which tools are enabled/disabled at the server level
+type ServerToolConfig struct {
 	EnabledTools  []string
 	DisabledTools []string
 }
 
-func (tc *ToolConfig) IsToolEnabled(toolName string) bool {
+func (tc *ServerToolConfig) IsToolEnabled(toolName string) bool {
 	if slices.Contains(tc.DisabledTools, toolName) {
 		return false
 	}
@@ -74,10 +88,18 @@ type Tool[In, Out any] struct {
 	Name        string
 	Description string
 	Handler     ToolHandlerFunc[In, Out]
+	Permissions []string
 }
 
 func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 	slog.Info(fmt.Sprintf("Registering tool: %s", tool.Name))
+
+	// Store tool metadata
+	s.toolMetadata[tool.Name] = &ToolMetadata{
+		Name:        tool.Name,
+		Permissions: tool.Permissions,
+	}
+
 	handler := func(ctx context.Context, toolRequest *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		var capturedOutput Out
 

@@ -21,6 +21,7 @@ func NewAskGlossaryTool(collibraHttpClient *http.Client) *chip.Tool[AskGlossaryI
 		Name:        "business_glossary_discover",
 		Description: "Ask the business glossary agent questions about terms and definitions in Collibra.",
 		Handler:     handleAskGlossary(collibraHttpClient),
+		Permissions: []string{"dgc.ai-copilot"},
 	}
 }
 

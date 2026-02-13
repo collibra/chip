@@ -21,6 +21,7 @@ func NewAskDadTool(collibraClient *http.Client) *chip.Tool[AskDadInput, AskDadOu
 		Name:        "data_assets_discover",
 		Description: "Ask the data asset discovery agent questions about available data assets in Collibra.",
 		Handler:     handleAskDad(collibraClient),
+		Permissions: []string{"dgc.ai-copilot"},
 	}
 }
 

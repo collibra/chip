@@ -32,6 +32,7 @@ func NewListDataContractsTool(collibraClient *http.Client) *chip.Tool[ListDataCo
 		Name:        "data_contract_list",
 		Description: "List data contracts available in Collibra. Returns a paginated list of data contract metadata, sorted by the last modified date in descending order.",
 		Handler:     handleListDataContracts(collibraClient),
+		Permissions: []string{},
 	}
 }
 
