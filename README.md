@@ -18,6 +18,10 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`data_contract_list`](pkg/tools/list_data_contracts.go) - List data contracts with pagination
 - [`data_contract_manifest_pull`](pkg/tools/pull_data_contract_manifest.go) - Download manifest for a data contract
 - [`data_contract_manifest_push`](pkg/tools/push_data_contract_manifest.go) - Upload manifest for a data contract
+- [`column_semantics_get`](pkg/tools/column_semantics_get.go) - Retrieve data attributes, measures, and business assets connected to a column
+- [`table_semantics_get`](pkg/tools/table_semantics_get.go) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
+- [`measure_data_get`](pkg/tools/measure_data_get.go) - Trace a measure back to its underlying physical columns and tables
+- [`business_term_data_get`](pkg/tools/business_term_data_get.go) - Trace a business term back to its connected physical data assets
 
 ## Quick Start
 

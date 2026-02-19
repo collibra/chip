@@ -19,7 +19,7 @@ type AskDadOutput struct {
 func NewAskDadTool(collibraClient *http.Client) *chip.Tool[AskDadInput, AskDadOutput] {
 	return &chip.Tool[AskDadInput, AskDadOutput]{
 		Name:        "data_assets_discover",
-		Description: "Ask the data asset discovery agent questions about available data assets in Collibra.",
+		Description: "Perform a semantic search across available data assets in Collibra. Ask natural language questions to discover tables, columns, datasets, and other data assets.",
 		Handler:     handleAskDad(collibraClient),
 		Permissions: []string{"dgc.ai-copilot"},
 	}

@@ -19,7 +19,7 @@ type AskGlossaryOutput struct {
 func NewAskGlossaryTool(collibraHttpClient *http.Client) *chip.Tool[AskGlossaryInput, AskGlossaryOutput] {
 	return &chip.Tool[AskGlossaryInput, AskGlossaryOutput]{
 		Name:        "business_glossary_discover",
-		Description: "Ask the business glossary agent questions about terms and definitions in Collibra.",
+		Description: "Perform a semantic search across business glossary content in Collibra. Ask natural language questions to discover business terms, acronyms, KPIs, and other business glossary content.",
 		Handler:     handleAskGlossary(collibraHttpClient),
 		Permissions: []string{"dgc.ai-copilot"},
 	}
