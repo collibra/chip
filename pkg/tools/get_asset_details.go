@@ -27,7 +27,7 @@ type AssetDetailsOutput struct {
 
 func NewAssetDetailsTool(collibraClient *http.Client) *chip.Tool[AssetDetailsInput, AssetDetailsOutput] {
 	return &chip.Tool[AssetDetailsInput, AssetDetailsOutput]{
-		Name:        "asset_details_get",
+		Name:        "get_asset_details",
 		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, and metadata. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page).",
 		Handler:     handleAssetDetails(collibraClient),
 		Permissions: []string{},
