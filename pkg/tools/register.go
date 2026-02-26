@@ -15,6 +15,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/search_assets"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
 )
 
@@ -31,6 +32,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, list_data_contracts.NewTool(client))
 	toolRegister(server, toolConfig, push_data_contract_manifest.NewTool(client))
 	toolRegister(server, toolConfig, pull_data_contract_manifest.NewTool(client))
+	toolRegister(server, toolConfig, search_assets.NewTool(client))
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {
