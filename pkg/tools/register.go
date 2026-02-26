@@ -9,6 +9,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/ask_glossary"
 	"github.com/collibra/chip/pkg/tools/find_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
+	"github.com/collibra/chip/pkg/tools/get_business_term"
 	"github.com/collibra/chip/pkg/tools/keyword_search"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
@@ -31,6 +32,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, list_data_contracts.NewTool(client))
 	toolRegister(server, toolConfig, push_data_contract_manifest.NewTool(client))
 	toolRegister(server, toolConfig, pull_data_contract_manifest.NewTool(client))
+	toolRegister(server, toolConfig, get_business_term.NewTool(client))
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {
