@@ -38,7 +38,7 @@ type SearchKeywordResource struct {
 
 func NewSearchKeywordTool(collibraClient *http.Client) *chip.Tool[SearchKeywordInput, SearchKeywordOutput] {
 	return &chip.Tool[SearchKeywordInput, SearchKeywordOutput]{
-		Name:        "asset_keyword_search",
+		Name:        "search_asset_keyword",
 		Description: "Perform a wildcard keyword search for assets in the Collibra knowledge graph. Supports filtering by resource type, community, domain, asset type, status, and creator.",
 		Handler:     handleSearchKeyword(collibraClient),
 		Permissions: []string{},

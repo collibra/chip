@@ -26,7 +26,7 @@ type SearchDataClassesOutput struct {
 
 func NewSearchDataClassesTool(collibraClient *http.Client) *chip.Tool[SearchDataClassesInput, SearchDataClassesOutput] {
 	return &chip.Tool[SearchDataClassesInput, SearchDataClassesOutput]{
-		Name:        "data_class_search",
+		Name:        "search_data_class",
 		Description: "Search for data classes in Collibra's classification service. Supports filtering by name, description, and whether they contain rules.",
 		Handler:     handleSearchDataClasses(collibraClient),
 		Permissions: []string{"dgc.data-classes-read"},

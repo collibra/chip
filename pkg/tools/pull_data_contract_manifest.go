@@ -22,7 +22,7 @@ type PullDataContractManifestOutput struct {
 
 func NewPullDataContractManifestTool(collibraClient *http.Client) *chip.Tool[PullDataContractManifestInput, PullDataContractManifestOutput] {
 	return &chip.Tool[PullDataContractManifestInput, PullDataContractManifestOutput]{
-		Name:        "data_contract_manifest_pull",
+		Name:        "pull_data_contract_manifest",
 		Description: "Download the manifest file for the currently active version of a specific data contract. Returns the manifest content as a string.",
 		Handler:     handlePullDataContractManifest(collibraClient),
 		Permissions: []string{},

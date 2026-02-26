@@ -21,7 +21,7 @@ type RemoveDataClassificationMatchOutput struct {
 
 func NewRemoveDataClassificationMatchTool(collibraClient *http.Client) *chip.Tool[RemoveDataClassificationMatchInput, RemoveDataClassificationMatchOutput] {
 	return &chip.Tool[RemoveDataClassificationMatchInput, RemoveDataClassificationMatchOutput]{
-		Name:        "data_classification_match_remove",
+		Name:        "remove_data_classification_match",
 		Description: "Remove a classification match (association between a data class and an asset) from Collibra. Requires the UUID of the classification match to remove.",
 		Handler:     handleRemoveDataClassificationMatch(collibraClient),
 		Permissions: []string{"dgc.classify", "dgc.catalog", "dgc.data-classes-edit"},
