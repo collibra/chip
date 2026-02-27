@@ -142,7 +142,7 @@ func TestCreateDataElement_DuplicateNameConflict(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"message": "Asset with name 'duplicate_element' already exists in domain",
+			"userMessage": "Asset with name 'duplicate_element' already exists in domain",
 		})
 	}))
 

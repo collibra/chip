@@ -73,7 +73,7 @@ func CreateDataElement(ctx context.Context, client *http.Client, reqBody CreateD
 
 	if resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusBadRequest {
 		var errBody struct {
-			Message string `json:"message"`
+			Message string `json:"userMessage"`
 		}
 		if decErr := json.NewDecoder(resp.Body).Decode(&errBody); decErr == nil && errBody.Message != "" {
 			return nil, fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, errBody.Message)
