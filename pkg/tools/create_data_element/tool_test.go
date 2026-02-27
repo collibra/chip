@@ -162,6 +162,43 @@ func TestCreateDataElement_WhitespaceOnlyName(t *testing.T) {
 	}
 }
 
+func TestCreateDataElement_InvalidDomainID(t *testing.T) {
+	server := httptest.NewServer(http.NewServeMux())
+	defer server.Close()
+
+	client := testutil.NewClient(server)
+	_, err := create_data_element.NewTool(client).Handler(t.Context(), create_data_element.Input{
+		Name:     "Customer Email Address",
+		DomainID: "not-a-valid-uuid",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid domainId, got nil")
+	}
+	expected := "domainId is not a valid UUID: not-a-valid-uuid"
+	if err.Error() != expected {
+		t.Errorf("got error %q, want %q", err.Error(), expected)
+	}
+}
+
+func TestCreateDataElement_InvalidStatusID(t *testing.T) {
+	server := httptest.NewServer(http.NewServeMux())
+	defer server.Close()
+
+	client := testutil.NewClient(server)
+	_, err := create_data_element.NewTool(client).Handler(t.Context(), create_data_element.Input{
+		Name:     "Customer Email Address",
+		DomainID: "12345678-1234-5678-9012-123456789012",
+		StatusID: "bad-status-id",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid statusId, got nil")
+	}
+	expected := "statusId is not a valid UUID: bad-status-id"
+	if err.Error() != expected {
+		t.Errorf("got error %q, want %q", err.Error(), expected)
+	}
+}
+
 func TestCreateDataElement_DuplicateNameConflict(t *testing.T) {
 	handler := http.NewServeMux()
 	handler.Handle("POST /rest/2.0/assets", testutil.JsonHandlerInOut(

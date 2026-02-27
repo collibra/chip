@@ -8,6 +8,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/google/uuid"
 )
 
 // DataElementTypeID is the Collibra asset type UUID for Data Element.
@@ -45,6 +46,14 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 		if input.DomainID == "" {
 			return Output{}, fmt.Errorf("domainId is required")
+		}
+		if _, err := uuid.Parse(input.DomainID); err != nil {
+			return Output{}, fmt.Errorf("domainId is not a valid UUID: %s", input.DomainID)
+		}
+		if input.StatusID != "" {
+			if _, err := uuid.Parse(input.StatusID); err != nil {
+				return Output{}, fmt.Errorf("statusId is not a valid UUID: %s", input.StatusID)
+			}
 		}
 
 		request := clients.CreateDataElementRequest{
