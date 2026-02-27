@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
@@ -15,15 +16,15 @@ const DataElementTypeID = "00000000-0000-0000-0000-000000031302"
 // Input defines the parameters for creating a Data Element asset.
 type Input struct {
 	Name        string `json:"name" jsonschema:"The name of the Data Element asset to create"`
-	DomainID    string `json:"domain_id" jsonschema:"The UUID of the domain in which to create the Data Element"`
-	DisplayName string `json:"display_name,omitempty" jsonschema:"Optional. The display name for the Data Element. Defaults to name if not provided."`
-	StatusID    string `json:"status_id,omitempty" jsonschema:"Optional. The UUID of the status to assign to the Data Element."`
+	DomainID    string `json:"domainId" jsonschema:"The UUID of the domain in which to create the Data Element"`
+	DisplayName string `json:"displayName,omitempty" jsonschema:"Optional. The display name for the Data Element. Defaults to name if not provided."`
+	StatusID    string `json:"statusId,omitempty" jsonschema:"Optional. The UUID of the status to assign to the Data Element."`
 }
 
 // Output defines the result of creating a Data Element asset.
 type Output struct {
 	ID           string `json:"id" jsonschema:"The UUID of the created Data Element asset"`
-	ResourceType string `json:"resource_type" jsonschema:"The resource type of the created asset"`
+	ResourceType string `json:"resourceType" jsonschema:"The resource type of the created asset"`
 }
 
 // NewTool creates a new create_data_element tool.
@@ -38,11 +39,12 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
+		input.Name = strings.TrimSpace(input.Name)
 		if input.Name == "" {
 			return Output{}, fmt.Errorf("name is required")
 		}
 		if input.DomainID == "" {
-			return Output{}, fmt.Errorf("domain_id is required")
+			return Output{}, fmt.Errorf("domainId is required")
 		}
 
 		request := clients.CreateDataElementRequest{

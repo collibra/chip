@@ -140,8 +140,25 @@ func TestCreateDataElement_MissingDomainID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing domain_id, got nil")
 	}
-	if err.Error() != "domain_id is required" {
-		t.Errorf("got error %q, want %q", err.Error(), "domain_id is required")
+	if err.Error() != "domainId is required" {
+		t.Errorf("got error %q, want %q", err.Error(), "domainId is required")
+	}
+}
+
+func TestCreateDataElement_WhitespaceOnlyName(t *testing.T) {
+	server := httptest.NewServer(http.NewServeMux())
+	defer server.Close()
+
+	client := testutil.NewClient(server)
+	_, err := create_data_element.NewTool(client).Handler(t.Context(), create_data_element.Input{
+		Name:     "   ",
+		DomainID: "12345678-1234-5678-9012-123456789012",
+	})
+	if err == nil {
+		t.Fatal("expected error for whitespace-only name, got nil")
+	}
+	if err.Error() != "name is required" {
+		t.Errorf("got error %q, want %q", err.Error(), "name is required")
 	}
 }
 

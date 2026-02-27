@@ -39,7 +39,7 @@ type CreateDataElementReference struct {
 // CreateDataElementErrorResponse represents an error response from the API.
 type CreateDataElementErrorResponse struct {
 	ErrorCode string `json:"errorCode"`
-	Message   string `json:"message"`
+	Message   string `json:"userMessage"`
 }
 
 // CreateDataElement creates a new Data Element asset via the Collibra REST API.
