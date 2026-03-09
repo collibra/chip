@@ -27,15 +27,15 @@ type MeasureDataGetOutput struct {
 }
 
 type MeasureDataAttribute struct {
-	ID               string           `json:"id"`
-	Name             string           `json:"name"`
-	AssetType        string           `json:"assetType"`
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	AssetType        string            `json:"assetType"`
 	ConnectedColumns []ColumnWithTable `json:"connectedColumns"`
 }
 
 func NewMeasureDataGetTool(collibraClient *http.Client) *chip.Tool[MeasureDataGetInput, MeasureDataGetOutput] {
 	return &chip.Tool[MeasureDataGetInput, MeasureDataGetOutput]{
-		Name:        "measure_data_get",
+		Name:        "get_measure_data",
 		Description: "Retrieve all underlying Column assets connected to a Measure via the path Measure → Data Attribute → Column, including each Column's description and parent Table.",
 		Handler:     handleMeasureDataGet(collibraClient),
 		Permissions: []string{},

@@ -13,22 +13,22 @@ type BusinessTermDataGetInput struct {
 }
 
 type BusinessTermDataGetOutput struct {
-	BusinessTermID        string                        `json:"businessTermId" jsonschema:"The Business Term asset ID."`
+	BusinessTermID        string                      `json:"businessTermId" jsonschema:"The Business Term asset ID."`
 	ConnectedPhysicalData []BusinessTermDataAttribute `json:"connectedPhysicalData" jsonschema:"The data attributes with their connected columns and tables."`
-	Error                 string                        `json:"error,omitempty" jsonschema:"Error message if the operation failed."`
+	Error                 string                      `json:"error,omitempty" jsonschema:"Error message if the operation failed."`
 }
 
 type BusinessTermDataAttribute struct {
-	ID               string           `json:"id"`
-	Name             string           `json:"name"`
-	AssetType        string           `json:"assetType"`
-	Description      string           `json:"description"`
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	AssetType        string            `json:"assetType"`
+	Description      string            `json:"description"`
 	ConnectedColumns []ColumnWithTable `json:"connectedColumns"`
 }
 
 func NewBusinessTermDataGetTool(collibraClient *http.Client) *chip.Tool[BusinessTermDataGetInput, BusinessTermDataGetOutput] {
 	return &chip.Tool[BusinessTermDataGetInput, BusinessTermDataGetOutput]{
-		Name:        "business_term_data_get",
+		Name:        "get_business_term_data",
 		Description: "Retrieve the physical data assets (Columns and Tables) associated with a Business Term via the path Business Term → Data Attribute → Column → Table.",
 		Handler:     handleBusinessTermDataGet(collibraClient),
 		Permissions: []string{},

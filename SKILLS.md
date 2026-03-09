@@ -21,9 +21,9 @@ Reach for Collibra tools when the user's question is about **understanding, disc
 
 **`business_glossary_discover`** — Natural language semantic search over the business glossary (terms, acronyms, KPIs, definitions). Use when the user asks about the meaning of a business concept. Requires `dgc.ai-copilot` permission.
 
-**`asset_keyword_search`** — Wildcard keyword search. Returns names, IDs, and metadata but not full asset details. Use this to find an asset's UUID when you only know its name. Supports filtering by resource type, community, domain, asset type, status, and creator. Paginated via `limit`/`offset`.
+**`search_asset_keyword`** — Wildcard keyword search. Returns names, IDs, and metadata but not full asset details. Use this to find an asset's UUID when you only know its name. Supports filtering by resource type, community, domain, asset type, status, and creator. Paginated via `limit`/`offset`.
 
-**`asset_types_list`** — List all asset type names and UUIDs. Use this when you need a type UUID to filter `asset_keyword_search` results.
+**`asset_types_list`** — List all asset type names and UUIDs. Use this when you need a type UUID to filter `search_asset_keyword` results.
 
 ### Asset Details
 
@@ -33,13 +33,13 @@ Reach for Collibra tools when the user's question is about **understanding, disc
 
 These tools walk the Collibra asset relation graph to answer lineage and semantic questions. All require asset UUIDs as input.
 
-**`column_semantics_get`** — Given a column UUID, returns all connected Data Attributes with their descriptions, linked Measures, and generic business assets. Use to answer "what does this column mean semantically?".
+**`get_column_semantics`** — Given a column UUID, returns all connected Data Attributes with their descriptions, linked Measures, and generic business assets. Use to answer "what does this column mean semantically?".
 
-**`table_semantics_get`** — Given a table UUID, returns all columns with their Data Attributes and connected Measures. Use to answer "what metrics use data from this table?" or "what is the semantic context of this table?".
+**`get_table_semantics`** — Given a table UUID, returns all columns with their Data Attributes and connected Measures. Use to answer "what metrics use data from this table?" or "what is the semantic context of this table?".
 
-**`measure_data_get`** — Given a measure UUID, traces backward through Data Attributes to the underlying Columns and their parent Tables. Use to answer "what physical data feeds this metric?".
+**`get_measure_data`** — Given a measure UUID, traces backward through Data Attributes to the underlying Columns and their parent Tables. Use to answer "what physical data feeds this metric?".
 
-**`business_term_data_get`** — Given a business term UUID, traces through Data Attributes to connected Columns and Tables. Use to answer "what physical data is associated with this business term?".
+**`get_business_term_data`** — Given a business term UUID, traces through Data Attributes to connected Columns and Tables. Use to answer "what physical data is associated with this business term?".
 
 ### Data Classification
 
@@ -64,25 +64,25 @@ These tools walk the Collibra asset relation graph to answer lineage and semanti
 ## Common Workflows
 
 ### Find an asset and get its details
-1. `asset_keyword_search` with the asset name → get UUID from results
+1. `search_asset_keyword` with the asset name → get UUID from results
 2. `asset_details_get` with the UUID → get full attributes and relations
 
 ### Classify a column
-1. `asset_keyword_search` to find the column UUID
+1. `search_asset_keyword` to find the column UUID
 2. `data_class_search` to find the data class UUID
 3. `data_classification_match_add` with both UUIDs
 
 ### Understand what a table means
-1. `asset_keyword_search` to find the table UUID
-2. `table_semantics_get` → columns → data attributes → measures
+1. `search_asset_keyword` to find the table UUID
+2. `get_table_semantics` → columns → data attributes → measures
 
 ### Trace a metric to its source data
-1. `asset_keyword_search` to find the measure UUID
-2. `measure_data_get` → data attributes → columns → tables
+1. `search_asset_keyword` to find the measure UUID
+2. `get_measure_data` → data attributes → columns → tables
 
 ### Trace a business term to physical data
-1. `asset_keyword_search` to find the business term UUID
-2. `business_term_data_get` → data attributes → columns → tables
+1. `search_asset_keyword` to find the business term UUID
+2. `get_business_term_data` → data attributes → columns → tables
 
 ### Manage a data contract
 1. `data_contract_list` to find the contract UUID
@@ -92,8 +92,8 @@ These tools walk the Collibra asset relation graph to answer lineage and semanti
 
 ## Tips
 
-- **UUIDs are required for most tools.** When you only have a name, start with `asset_keyword_search` or the natural language discovery tools to get the UUID first.
-- **`data_assets_discover` vs `asset_keyword_search`**: Prefer `data_assets_discover` for open-ended semantic questions; prefer `asset_keyword_search` when you know the exact name or need to filter by type/community/domain.
+- **UUIDs are required for most tools.** When you only have a name, start with `search_asset_keyword` or the natural language discovery tools to get the UUID first.
+- **`data_assets_discover` vs `search_asset_keyword`**: Prefer `data_assets_discover` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.
 - **Permissions**: `data_assets_discover` and `business_glossary_discover` require the `dgc.ai-copilot` permission. Classification tools require `dgc.classify` + `dgc.catalog`. If a tool fails with a permission error, let the user know which permission is needed.
-- **Pagination**: `asset_keyword_search`, `asset_types_list`, `data_class_search`, and `data_classification_match_search` use `limit`/`offset`. `data_contract_list` and `asset_details_get` (for relations) use cursor-based pagination — carry the cursor from the previous response.
+- **Pagination**: `search_asset_keyword`, `asset_types_list`, `data_class_search`, and `data_classification_match_search` use `limit`/`offset`. `data_contract_list` and `asset_details_get` (for relations) use cursor-based pagination — carry the cursor from the previous response.
 - **Error handling**: Validation errors are returned in the output `error` field (not as Go errors), so always check `error` and `success`/`found` fields in the response before using the data.
