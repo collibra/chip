@@ -27,7 +27,7 @@ type PushDataContractManifestOutput struct {
 
 func NewPushDataContractManifestTool(collibraClient *http.Client) *chip.Tool[PushDataContractManifestInput, PushDataContractManifestOutput] {
 	return &chip.Tool[PushDataContractManifestInput, PushDataContractManifestOutput]{
-		Name:        "data_contract_manifest_push",
+		Name:        "push_data_contract_manifest",
 		Description: "Upload a new version of a data contract manifest to Collibra. The manifestID and version are automatically parsed from the manifest content if it adheres to the Open Data Contract Standard.",
 		Handler:     handlePushDataContractManifest(collibraClient),
 		Permissions: []string{"dgc.data-contract"},

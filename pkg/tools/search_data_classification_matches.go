@@ -27,7 +27,7 @@ type SearchClassificationMatchesOutput struct {
 
 func NewSearchClassificationMatchesTool(collibraClient *http.Client) *chip.Tool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput] {
 	return &chip.Tool[SearchClassificationMatchesInput, SearchClassificationMatchesOutput]{
-		Name:        "data_classification_match_search",
+		Name:        "search_data_classification_match",
 		Description: "Search for classification matches (associations between data classes and assets) in Collibra. Supports filtering by asset IDs, statuses (ACCEPTED/REJECTED/SUGGESTED), classification IDs, and asset type IDs.",
 		Handler:     handleSearchClassificationMatches(collibraClient),
 		Permissions: []string{"dgc.classify", "dgc.catalog"},

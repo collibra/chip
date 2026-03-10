@@ -34,7 +34,7 @@ type AssetType struct {
 
 func NewListAssetTypesTool(collibraClient *http.Client) *chip.Tool[ListAssetTypesInput, ListAssetTypesOutput] {
 	return &chip.Tool[ListAssetTypesInput, ListAssetTypesOutput]{
-		Name:        "asset_types_list",
+		Name:        "list_asset_types",
 		Description: "List asset types available in Collibra with their properties and metadata.",
 		Handler:     handleListAssetTypes(collibraClient),
 		Permissions: []string{},
