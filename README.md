@@ -166,7 +166,7 @@ Here's how to integrate with some popular clients assuming you have a configurat
 ## Enabling or disabling specific tools
 
 You can enable or disable specific tools by passing command line parameters, setting environment variables, or customizing the `mcp.yaml` configuration file.
-You can specify tools to enable or disable by using the tool names listed above (e.g. `asset_details_get`).  For more information, see the [CONFIG.md](docs/CONFIG.md) documentation.
+You can specify tools to enable or disable by using the tool names listed above (e.g. `get_asset_details`).  For more information, see the [CONFIG.md](docs/CONFIG.md) documentation.
 
 By default, all tools are enabled. Specifying tools to be enabled will enable *only* those tools.  Disabling tools will disable *only* those tools and leave all others enabled.
 At present, enabling and disabling at the same time is not supported. 
