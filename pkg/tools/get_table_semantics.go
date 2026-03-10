@@ -27,16 +27,16 @@ type ColumnWithSemantics struct {
 }
 
 type DataAttributeWithMeasures struct {
-	ID                string                `json:"id"`
-	Name              string                `json:"name"`
-	AssetType         string                `json:"assetType"`
-	Description       string                `json:"description"`
+	ID                string                 `json:"id"`
+	Name              string                 `json:"name"`
+	AssetType         string                 `json:"assetType"`
+	Description       string                 `json:"description"`
 	ConnectedMeasures []AssetWithDescription `json:"connectedMeasures"`
 }
 
 func NewTableSemanticsGetTool(collibraClient *http.Client) *chip.Tool[TableSemanticsGetInput, TableSemanticsGetOutput] {
 	return &chip.Tool[TableSemanticsGetInput, TableSemanticsGetOutput]{
-		Name:        "table_semantics_get",
+		Name:        "get_table_semantics",
 		Description: "Retrieve the semantic layer for a Table asset: Columns, their Data Attributes, and connected Measures. Answers 'What is the semantic context of this table?' or 'Which metrics use data from this table?'.",
 		Handler:     handleTableSemanticsGet(collibraClient),
 		Permissions: []string{},

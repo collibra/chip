@@ -134,7 +134,7 @@ export COLLIBRA_MCP_API_PROXY="http://proxy.example.com:8080" # Or use HTTP_PROX
 export COLLIBRA_MCP_API_URL="https://your-instance.collibra.com"
 export COLLIBRA_MCP_API_USR="your-username"
 export COLLIBRA_MCP_API_PWD="your-password"
-export COLLIBRA_MCP_ENABLED_TOOLS="asset_keyword_search,asset_details_get,asset_types_list"
+export COLLIBRA_MCP_ENABLED_TOOLS="search_asset_keyword,asset_details_get,asset_types_list"
 ./mcp-server
 ```
 

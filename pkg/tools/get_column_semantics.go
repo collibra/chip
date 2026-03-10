@@ -26,17 +26,17 @@ type ColumnSemanticsGetOutput struct {
 }
 
 type DataAttributeSemantics struct {
-	ID                      string                `json:"id"`
-	Name                    string                `json:"name"`
-	AssetType               string                `json:"assetType"`
-	Description             string                `json:"description"`
+	ID                      string                 `json:"id"`
+	Name                    string                 `json:"name"`
+	AssetType               string                 `json:"assetType"`
+	Description             string                 `json:"description"`
 	ConnectedMeasures       []AssetWithDescription `json:"connectedMeasures"`
 	ConnectedBusinessAssets []AssetWithDescription `json:"connectedBusinessAssets"`
 }
 
 func NewColumnSemanticsGetTool(collibraClient *http.Client) *chip.Tool[ColumnSemanticsGetInput, ColumnSemanticsGetOutput] {
 	return &chip.Tool[ColumnSemanticsGetInput, ColumnSemanticsGetOutput]{
-		Name:        "column_semantics_get",
+		Name:        "get_column_semantics",
 		Description: "Retrieve all connected Data Attribute assets for a Column, including descriptions and related Measures and generic business assets with their descriptions.",
 		Handler:     handleColumnSemanticsGet(collibraClient),
 		Permissions: []string{},
