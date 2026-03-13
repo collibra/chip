@@ -51,6 +51,22 @@ These tools walk the Collibra asset relation graph to answer lineage and semanti
 
 **`data_classification_match_remove`** — Remove a classification match. Requires `dgc.classify` + `dgc.catalog`.
 
+### Technical Lineage
+
+These tools query the technical lineage graph — a map of all data objects and transformations across external systems, including unregistered assets, temporary tables, and source code. Unlike business lineage (which only covers assets in the Collibra Data Catalog), technical lineage covers the full physical data flow.
+
+**`search_lineage_entities`** — Search for data entities in the technical lineage graph by name, type, or DGC UUID. Use this as a starting point when you don't have an entity ID. Supports partial name matching and type filtering (e.g. `table`, `column`, `report`). Paginated.
+
+**`get_lineage_entity`** — Get full metadata for a specific lineage entity by ID: name, type, source systems, parent entity, and linked DGC identifier. Use after obtaining an entity ID from a search or lineage traversal.
+
+**`get_lineage_upstream`** — Get all upstream entities (sources) for a data entity, along with the transformations connecting them. Use to answer "where does this data come from?". Paginated.
+
+**`get_lineage_downstream`** — Get all downstream entities (consumers) for a data entity, along with the transformations connecting them. Use to answer "what depends on this data?" or "what is impacted if this changes?". Paginated.
+
+**`search_lineage_transformations`** — Search for transformations by name. Returns lightweight summaries. Use to discover ETL jobs or SQL queries by name.
+
+**`get_lineage_transformation`** — Get the full details of a transformation, including its SQL or script logic. Use after finding a transformation ID in an upstream/downstream result or search.
+
 ### Data Contracts
 
 **`data_contract_list`** — List data contracts with cursor-based pagination. Filter by `manifestId`. Use this to find a contract's UUID.
@@ -84,6 +100,17 @@ These tools walk the Collibra asset relation graph to answer lineage and semanti
 1. `search_asset_keyword` to find the business term UUID
 2. `get_business_term_data` → data attributes → columns → tables
 
+### Trace upstream lineage for a data asset
+1. `search_lineage_entities` with the asset name → get entity ID
+2. `get_lineage_upstream` → relations with source entity IDs and transformation IDs
+3. `get_lineage_entity` for any source entity to get its details
+4. `get_lineage_transformation` for any transformation ID to see the logic
+
+### Perform impact analysis (downstream)
+1. `search_lineage_entities` with the asset name → get entity ID
+2. `get_lineage_downstream` → relations with consumer entity IDs
+3. Follow up with `get_lineage_entity` for specific consumers as needed
+
 ### Manage a data contract
 1. `data_contract_list` to find the contract UUID
 2. `data_contract_manifest_pull` to download, edit, then `data_contract_manifest_push` to update
@@ -95,5 +122,5 @@ These tools walk the Collibra asset relation graph to answer lineage and semanti
 - **UUIDs are required for most tools.** When you only have a name, start with `search_asset_keyword` or the natural language discovery tools to get the UUID first.
 - **`data_assets_discover` vs `search_asset_keyword`**: Prefer `data_assets_discover` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.
 - **Permissions**: `data_assets_discover` and `business_glossary_discover` require the `dgc.ai-copilot` permission. Classification tools require `dgc.classify` + `dgc.catalog`. If a tool fails with a permission error, let the user know which permission is needed.
-- **Pagination**: `search_asset_keyword`, `asset_types_list`, `data_class_search`, and `data_classification_match_search` use `limit`/`offset`. `data_contract_list` and `asset_details_get` (for relations) use cursor-based pagination — carry the cursor from the previous response.
+- **Pagination**: `search_asset_keyword`, `asset_types_list`, `data_class_search`, and `data_classification_match_search` use `limit`/`offset`. `data_contract_list` and `asset_details_get` (for relations) use cursor-based pagination — carry the cursor from the previous response. Lineage tools (`search_lineage_entities`, `get_lineage_upstream`, `get_lineage_downstream`, `search_lineage_transformations`) also use cursor-based pagination.
 - **Error handling**: Validation errors are returned in the output `error` field (not as Go errors), so always check `error` and `success`/`found` fields in the response before using the data.

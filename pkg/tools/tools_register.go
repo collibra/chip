@@ -23,6 +23,12 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, NewMeasureDataGetTool(client))
 	toolRegister(server, toolConfig, NewTableSemanticsGetTool(client))
 	toolRegister(server, toolConfig, NewBusinessTermDataGetTool(client))
+	toolRegister(server, toolConfig, NewGetLineageEntityTool(client))
+	toolRegister(server, toolConfig, NewGetLineageUpstreamTool(client))
+	toolRegister(server, toolConfig, NewGetLineageDownstreamTool(client))
+	toolRegister(server, toolConfig, NewSearchLineageEntitiesTool(client))
+	toolRegister(server, toolConfig, NewGetLineageTransformationTool(client))
+	toolRegister(server, toolConfig, NewSearchLineageTransformationsTool(client))
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {
