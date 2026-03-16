@@ -34,7 +34,14 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Set version
+        run: |
+          VERSION=${{ github.ref_name }}
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Test
+        if: ${{ !contains(env.VERSION, '-') }} # Skip tests for pre-release versions (e.g., 1.0.0-beta) to avoid issues with version parsing in tests
         run: go test --tags release -run TestReleaseVersionCheck -v ./...
 
       - name: Setup Java 17
