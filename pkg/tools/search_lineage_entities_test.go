@@ -10,7 +10,7 @@ import (
 
 func TestSearchLineageEntities(t *testing.T) {
 	handler := http.NewServeMux()
-	handler.Handle("/rest/lineage/v1/entities", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/entities", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
 		return http.StatusOK, map[string]any{
 			"results": []map[string]any{
 				{

@@ -11,7 +11,7 @@ import (
 
 func TestGetLineageEntity(t *testing.T) {
 	handler := http.NewServeMux()
-	handler.Handle("/rest/lineage/v1/entities/entity-1", JsonHandlerOut(func(r *http.Request) (int, clients.LineageEntity) {
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/entities/entity-1", JsonHandlerOut(func(r *http.Request) (int, clients.LineageEntity) {
 		return http.StatusOK, clients.LineageEntity{
 			Id:   "entity-1",
 			Name: "my_table",

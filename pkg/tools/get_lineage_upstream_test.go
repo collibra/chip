@@ -11,7 +11,7 @@ import (
 
 func TestGetLineageUpstream(t *testing.T) {
 	handler := http.NewServeMux()
-	handler.Handle("/rest/lineage/v1/entities/entity-1/upstream", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/entities/entity-1/upstream", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
 		return http.StatusOK, map[string]any{
 			"relations": []map[string]any{
 				{

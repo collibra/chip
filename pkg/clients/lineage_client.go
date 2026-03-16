@@ -112,6 +112,14 @@ type LineageDirection string
 const (
 	LineageDirectionUpstream   LineageDirection = "upstream"
 	LineageDirectionDownstream LineageDirection = "downstream"
+
+	// lineageDGCProxyPath is the path prefix targeting the lineage proxy on DGC
+	lineageDGCProxyPath = "/technical_lineage_resource"
+
+	// lineageReadAPIPath is the API prefix for the lineage read API (LineageRead.yaml).
+	lineageReadAPIPath = "/rest/lineageGraphRead/v1"
+
+	lineageAPIBasePath = lineageDGCProxyPath + lineageReadAPIPath
 )
 
 // --- Query param structs ---
@@ -139,7 +147,7 @@ type lineageSearchTransformationsParams struct {
 // --- Client functions ---
 
 func GetLineageEntity(ctx context.Context, collibraHttpClient *http.Client, entityId string) (*GetLineageEntityOutput, error) {
-	endpoint := fmt.Sprintf("/rest/lineage/v1/entities/%s", entityId)
+	endpoint := fmt.Sprintf("%s/entities/%s", lineageAPIBasePath, entityId)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
@@ -169,7 +177,7 @@ func GetLineageDownstream(ctx context.Context, collibraHttpClient *http.Client, 
 }
 
 func getLineageDirectional(ctx context.Context, collibraHttpClient *http.Client, entityId string, direction LineageDirection, entityType string, limit int, cursor string) (*GetLineageDirectionalOutput, error) {
-	basePath := fmt.Sprintf("/rest/lineage/v1/entities/%s/%s", entityId, direction)
+	basePath := fmt.Sprintf("%s/entities/%s/%s", lineageAPIBasePath, entityId, direction)
 
 	params := lineageDirectionalParams{
 		EntityType: entityType,
@@ -215,7 +223,7 @@ func SearchLineageEntities(ctx context.Context, collibraHttpClient *http.Client,
 		Cursor:       cursor,
 	}
 
-	endpoint, err := buildUrl("/rest/lineage/v1/entities", params)
+	endpoint, err := buildUrl(lineageAPIBasePath+"/entities", params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build endpoint: %w", err)
 	}
@@ -243,7 +251,7 @@ func SearchLineageEntities(ctx context.Context, collibraHttpClient *http.Client,
 }
 
 func GetLineageTransformation(ctx context.Context, collibraHttpClient *http.Client, transformationId string) (*GetLineageTransformationOutput, error) {
-	endpoint := fmt.Sprintf("/rest/lineage/v1/transformations/%s", transformationId)
+	endpoint := fmt.Sprintf("%s/transformations/%s", lineageAPIBasePath, transformationId)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
@@ -271,7 +279,7 @@ func SearchLineageTransformations(ctx context.Context, collibraHttpClient *http.
 		Cursor:       cursor,
 	}
 
-	endpoint, err := buildUrl("/rest/lineage/v1/transformations", params)
+	endpoint, err := buildUrl(lineageAPIBasePath+"/transformations", params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build endpoint: %w", err)
 	}

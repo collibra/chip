@@ -10,7 +10,7 @@ import (
 
 func TestGetLineageTransformation(t *testing.T) {
 	handler := http.NewServeMux()
-	handler.Handle("/rest/lineage/v1/transformations/transform-1", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/transformations/transform-1", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
 		return http.StatusOK, map[string]any{
 			"id":                  "transform-1",
 			"name":                "etl_sales_daily",
