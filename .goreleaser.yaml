@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: chip
+dist: ./build/dist
+
+builds:
+  - id: default
+    main: ./cmd/chip
+    env:
+      - CGO_ENABLED=0
+      - GOFIPS140=v1.0.0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    binary: chip
+    ldflags:
+      - -X github.com/collibra/chip/pkg/chip.Version={{.Version}}
+    # Sign Windows binaries using AWS KMS and JSign (the signature is embedded in the binary)
+    hooks:
+      post:
+        - >
+          bash -c '
+          if [ -n "${SKIP_SIGNING}" ]; then
+            echo "Skipping signing Windows binaries (SKIP_SIGNING is set)";
+            exit 0;
+          fi;
+          if [ "{{ .Os }}" = "windows" ]; then
+            echo "Signing Windows binary {{ .Path }}";
+            if [ ! -f "{{ .Path }}" ]; then
+              echo "ERROR Binary file does not exist: {{ .Path }}";
+              exit 1;
+            fi;
+            java -jar "${JSIGN_JAR_PATH}" --storetype AWS --keystore "${CODE_SIGNING_AWS_REGION}" --alias "${KMS_SIGNING_KEY_ARN}" --certfile "${CODE_SIGNING_CERT_CHAIN_FILE}" --tsaurl http://timestamp.digicert.com "{{ .Path }}" || {
+                echo "ERROR Failed to sign {{ .Path }}";
+                exit 1;
+              };
+            if [ ! -f "{{ .Path }}" ]; then
+              echo "ERROR Binary file disappeared after signing {{ .Path }}";
+              exit 1;
+            fi;
+            echo "✓ Signed {{ .Path }}";
+          else
+            echo "Skipping non-Windows binary ({{ .Os }}) {{ .Path }}";
+          fi
+          '
+
+archives:
+  - id: default
+    formats: ["binary"]
+    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ if eq .Os "darwin" }}mac{{ else }}{{ .Os }}{{ end }}-{{ .Arch }}'
+
+checksum:
+  name_template: 'checksums.txt'
+
+release:
+  draft: false
+  prerelease: auto
+  make_latest: true
+
+changelog:
+  use: github-native
+
