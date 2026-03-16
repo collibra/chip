@@ -46,8 +46,8 @@ jobs:
 
       - name: Setup Java 17
         run: |
-          mkdir -p tmp
-          pushd tmp
+          mkdir -p /tmp/chip-signing
+          pushd /tmp/chip-signing
           wget -q https://corretto.aws/downloads/latest/amazon-corretto-17-x64-linux-jdk.tar.gz
           tar -xzf amazon-corretto-17-x64-linux-jdk.tar.gz
           JAVA_DIR=$(find . -maxdepth 1 -type d -name "amazon-corretto-*" -print -quit | sed 's|^\./||')
@@ -57,20 +57,20 @@ jobs:
 
       - name: Download JSign
         run: |
-          mkdir -p tmp
-          wget -q https://github.com/ebourg/jsign/releases/download/7.4/jsign-7.4.jar -O tmp/jsign.jar
-          echo "JSIGN_JAR_PATH=${GITHUB_WORKSPACE}/tmp/jsign.jar" >> $GITHUB_ENV
+          mkdir -p /tmp/chip-signing
+          wget -q https://github.com/ebourg/jsign/releases/download/7.4/jsign-7.4.jar -O /tmp/chip-signing/jsign.jar
+          echo "JSIGN_JAR_PATH=/tmp/chip-signing/jsign.jar" >> $GITHUB_ENV
           echo "JSign downloaded successfully"
 
       - name: Create certificate chain file
         run: |
-          mkdir -p tmp
-          echo "${{ secrets.CODE_SIGNING_CERTIFICATE_CHAIN }}" > tmp/signing_chain.pem
-          if [ ! -s tmp/signing_chain.pem ]; then
+          mkdir -p /tmp/chip-signing
+          echo "${{ secrets.CODE_SIGNING_CERTIFICATE_CHAIN }}" > /tmp/chip-signing/signing_chain.pem
+          if [ ! -s /tmp/chip-signing/signing_chain.pem ]; then
             echo "ERROR: CODE_SIGNING_CERTIFICATE_CHAIN secret is empty or not set"
             exit 1
           fi
-          echo "CODE_SIGNING_CERT_CHAIN_FILE=${GITHUB_WORKSPACE}/tmp/signing_chain.pem" >> $GITHUB_ENV
+          echo "CODE_SIGNING_CERT_CHAIN_FILE=/tmp/chip-signing/signing_chain.pem" >> $GITHUB_ENV
           echo "Certificate chain file created"
 
       # RunsOn workers have the CodeSigningPolicy attached, which grants
@@ -122,6 +122,6 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -rf tmp ~/.aws
+          rm -rf /tmp/chip-signing ~/.aws
           echo "Cleanup completed"
 
