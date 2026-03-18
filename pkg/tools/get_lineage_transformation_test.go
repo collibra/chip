@@ -47,6 +47,32 @@ func TestGetLineageTransformation(t *testing.T) {
 	}
 }
 
+func TestGetLineageTransformationNotFound(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/transformations/transform-unknown", JsonHandlerOut(func(r *http.Request) (int, string) {
+		return http.StatusNotFound, "transformation not found"
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := newClient(server)
+	output, err := tools.NewGetLineageTransformationTool(client).Handler(t.Context(), tools.GetLineageTransformationInput{
+		TransformationId: "transform-unknown",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if output.Found {
+		t.Fatalf("Expected transformation not to be found")
+	}
+
+	if output.Error == "" {
+		t.Fatalf("Expected an error message")
+	}
+}
+
 func TestGetLineageTransformationMissingId(t *testing.T) {
 	server := httptest.NewServer(http.NewServeMux())
 	defer server.Close()

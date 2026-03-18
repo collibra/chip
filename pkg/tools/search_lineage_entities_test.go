@@ -57,3 +57,28 @@ func TestSearchLineageEntities(t *testing.T) {
 		t.Fatalf("Expected nextCursor 'cursor-abc'")
 	}
 }
+
+func TestSearchLineageEntitiesNotFound(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/entities", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+		return http.StatusOK, map[string]any{
+			"results":    []map[string]any{},
+			"pagination": map[string]any{},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := newClient(server)
+	output, err := tools.NewSearchLineageEntitiesTool(client).Handler(t.Context(), tools.SearchLineageEntitiesInput{
+		NameContains: "nonexistent_table",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(output.Results) != 0 {
+		t.Fatalf("Expected 0 results, got: %d", len(output.Results))
+	}
+}

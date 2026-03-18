@@ -63,6 +63,28 @@ func TestGetLineageUpstream(t *testing.T) {
 	}
 }
 
+func TestGetLineageUpstreamNotFound(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/entities/entity-unknown/upstream", JsonHandlerOut(func(r *http.Request) (int, string) {
+		return http.StatusNotFound, "entity not found"
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := newClient(server)
+	output, err := tools.NewGetLineageUpstreamTool(client).Handler(t.Context(), tools.GetLineageUpstreamInput{
+		EntityId: "entity-unknown",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if output.Error == "" {
+		t.Fatalf("Expected an error message")
+	}
+}
+
 func TestGetLineageUpstreamMissingId(t *testing.T) {
 	server := httptest.NewServer(http.NewServeMux())
 	defer server.Close()

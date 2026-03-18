@@ -53,3 +53,28 @@ func TestSearchLineageTransformations(t *testing.T) {
 		t.Fatalf("Expected nextCursor 'cursor-abc'")
 	}
 }
+
+func TestSearchLineageTransformationsNotFound(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/transformations", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+		return http.StatusOK, map[string]any{
+			"results":    []map[string]any{},
+			"pagination": map[string]any{},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := newClient(server)
+	output, err := tools.NewSearchLineageTransformationsTool(client).Handler(t.Context(), tools.SearchLineageTransformationsInput{
+		NameContains: "nonexistent_etl",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(output.Results) != 0 {
+		t.Fatalf("Expected 0 results, got: %d", len(output.Results))
+	}
+}

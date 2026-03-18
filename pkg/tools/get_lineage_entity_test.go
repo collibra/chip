@@ -47,6 +47,32 @@ func TestGetLineageEntity(t *testing.T) {
 	}
 }
 
+func TestGetLineageEntityNotFound(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/entities/entity-unknown", JsonHandlerOut(func(r *http.Request) (int, string) {
+		return http.StatusNotFound, "entity not found"
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := newClient(server)
+	output, err := tools.NewGetLineageEntityTool(client).Handler(t.Context(), tools.GetLineageEntityInput{
+		EntityId: "entity-unknown",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if output.Found {
+		t.Fatalf("Expected entity not to be found")
+	}
+
+	if output.Error == "" {
+		t.Fatalf("Expected an error message")
+	}
+}
+
 func TestGetLineageEntityMissingId(t *testing.T) {
 	server := httptest.NewServer(http.NewServeMux())
 	defer server.Close()

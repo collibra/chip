@@ -63,6 +63,28 @@ func TestGetLineageDownstream(t *testing.T) {
 	}
 }
 
+func TestGetLineageDownstreamNotFound(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/entities/entity-unknown/downstream", JsonHandlerOut(func(r *http.Request) (int, string) {
+		return http.StatusNotFound, "entity not found"
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := newClient(server)
+	output, err := tools.NewGetLineageDownstreamTool(client).Handler(t.Context(), tools.GetLineageDownstreamInput{
+		EntityId: "entity-unknown",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if output.Error == "" {
+		t.Fatalf("Expected an error message")
+	}
+}
+
 func TestGetLineageDownstreamMissingId(t *testing.T) {
 	server := httptest.NewServer(http.NewServeMux())
 	defer server.Close()
