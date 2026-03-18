@@ -16,6 +16,40 @@ type LineageEntity struct {
 	ParentId  string   `json:"parentId,omitempty"`
 }
 
+// UnmarshalJSON handles both plain string values and JsonNullable-wrapped objects
+// for the DgcId and ParentId fields. The server may serialize JsonNullable<T> as
+// {"present": false, "undefined": true} when JsonNullableModule is not on the classpath.
+func (e *LineageEntity) UnmarshalJSON(data []byte) error {
+	type lineageEntityAlias LineageEntity
+	var raw struct {
+		lineageEntityAlias
+		DgcId    json.RawMessage `json:"dgcId"`
+		ParentId json.RawMessage `json:"parentId"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*e = LineageEntity(raw.lineageEntityAlias)
+	e.DgcId = extractJsonNullableString(raw.DgcId)
+	e.ParentId = extractJsonNullableString(raw.ParentId)
+	return nil
+}
+
+// extractJsonNullableString extracts a string from either a plain JSON string
+// or a JsonNullable object. Returns empty string for null, undefined, or objects
+// where the value is not recoverable.
+func extractJsonNullableString(data json.RawMessage) string {
+	if len(data) == 0 || string(data) == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		return s
+	}
+	// JsonNullable object format — actual value is not serialized without the module
+	return ""
+}
+
 type LineageRelation struct {
 	SourceEntityId    string   `json:"sourceEntityId"`
 	TargetEntityId    string   `json:"targetEntityId"`
