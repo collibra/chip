@@ -60,7 +60,7 @@ checksum:
 release:
   draft: false
   prerelease: auto
-  make_latest: true
+  make_latest: auto
 
 changelog:
   use: github-native
