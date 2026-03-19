@@ -11,21 +11,20 @@ jobs:
     uses: ./.github/workflows/build.yaml
   release:
     needs: build
-    runs-on: ubuntu-latest
-    env:
-      BUILD_DIR: 'build'
+    runs-on:
+      - runs-on
+      - run-id=${{ github.run_id }}
+      - runner=md
+      - env=production-eu
+      - tag=build-${{ github.event.repository.name }}
+    environment: Release
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
-      - name: Set version
-        run: |
-          VERSION=${{ github.ref_name }}
-          VERSION=${VERSION#v}
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -35,29 +34,94 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Set version
+        run: |
+          VERSION=${{ github.ref_name }}
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Test
+        if: ${{ !contains(env.VERSION, '-') }} # Skip tests for pre-release versions (e.g., 1.0.0-beta) to avoid issues with version parsing in tests
         run: go test --tags release -run TestReleaseVersionCheck -v ./...
 
-      - name: Build
+      - name: Setup Java 17
         run: |
-          GOFIPS140=v1.0.0 GOOS=linux GOARCH=amd64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-amd64 ./cmd/chip
-          GOFIPS140=v1.0.0 GOOS=linux GOARCH=arm64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-arm64 ./cmd/chip
-          GOFIPS140=v1.0.0 GOOS=darwin GOARCH=amd64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-mac-amd64 ./cmd/chip
-          GOFIPS140=v1.0.0 GOOS=darwin GOARCH=arm64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-mac-arm64 ./cmd/chip
-          GOFIPS140=v1.0.0 GOOS=windows GOARCH=amd64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-windows-amd64.exe ./cmd/chip
-          GOFIPS140=v1.0.0 GOOS=windows GOARCH=arm64 go build -ldflags="-X 'github.com/collibra/chip/pkg/chip.Version=${{ env.VERSION }}'" -o ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-windows-arm64.exe ./cmd/chip
+          mkdir -p /tmp/chip-signing
+          pushd /tmp/chip-signing
+          wget -q https://corretto.aws/downloads/latest/amazon-corretto-17-x64-linux-jdk.tar.gz
+          tar -xzf amazon-corretto-17-x64-linux-jdk.tar.gz
+          JAVA_DIR=$(find . -maxdepth 1 -type d -name "amazon-corretto-*" -print -quit | sed 's|^\./||')
+          echo "$PWD/$JAVA_DIR/bin" >> $GITHUB_PATH
+          echo "Java 17 installed: $JAVA_DIR"
+          popd
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
+      - name: Download JSign
+        run: |
+          mkdir -p /tmp/chip-signing
+          wget -q https://github.com/ebourg/jsign/releases/download/7.4/jsign-7.4.jar -O /tmp/chip-signing/jsign.jar
+          echo "JSIGN_JAR_PATH=/tmp/chip-signing/jsign.jar" >> $GITHUB_ENV
+          echo "JSign downloaded successfully"
+
+      - name: Create certificate chain file
+        run: |
+          mkdir -p /tmp/chip-signing
+          echo "${{ secrets.CODE_SIGNING_CERTIFICATE_CHAIN }}" > /tmp/chip-signing/signing_chain.pem
+          if [ ! -s /tmp/chip-signing/signing_chain.pem ]; then
+            echo "ERROR: CODE_SIGNING_CERTIFICATE_CHAIN secret is empty or not set"
+            exit 1
+          fi
+          echo "CODE_SIGNING_CERT_CHAIN_FILE=/tmp/chip-signing/signing_chain.pem" >> $GITHUB_ENV
+          echo "Certificate chain file created"
+
+      # RunsOn workers have the CodeSigningPolicy attached, which grants
+      # access to the KMS signing key via EC2 instance metadata (IMDSv2).
+      - name: Configure AWS credentials
+        run: |
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+          ROLE_NAME=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/iam/security-credentials/)
+          CREDENTIALS=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/iam/security-credentials/$ROLE_NAME)
+
+          ACCESS_KEY=$(echo $CREDENTIALS | jq -r .AccessKeyId)
+          SECRET_KEY=$(echo $CREDENTIALS | jq -r .SecretAccessKey)
+          SESSION_TOKEN=$(echo $CREDENTIALS | jq -r .Token)
+
+          mkdir -p ~/.aws
+          echo "[default]" > ~/.aws/credentials
+          echo "aws_access_key_id = ${ACCESS_KEY}" >> ~/.aws/credentials
+          echo "aws_secret_access_key = ${SECRET_KEY}" >> ~/.aws/credentials
+          echo "aws_session_token = ${SESSION_TOKEN}" >> ~/.aws/credentials
+
+          echo "[default]" > ~/.aws/config
+          echo "region = ${{ vars.CODE_SIGNING_AWS_REGION || 'eu-west-1' }}" >> ~/.aws/config
+
+          echo "AWS credentials configured successfully"
+
+      - name: Set signing environment variables
+        run: |
+          echo "CODE_SIGNING_AWS_REGION=${{ vars.CODE_SIGNING_AWS_REGION || 'eu-west-1' }}" >> $GITHUB_ENV
+          if [ -z "${{ secrets.KMS_SIGNING_KEY_ARN }}" ]; then
+            echo "ERROR: KMS_SIGNING_KEY_ARN secret is not set"
+            exit 1
+          fi
+          echo "KMS_SIGNING_KEY_ARN=${{ secrets.KMS_SIGNING_KEY_ARN }}" >> $GITHUB_ENV
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          files: |
-            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-amd64
-            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-linux-arm64
-            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-mac-amd64
-            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-mac-arm64
-            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-windows-amd64.exe
-            ${{ env.BUILD_DIR }}/chip-${{ env.VERSION }}-windows-arm64.exe
-          generate_release_notes: true
-          make_latest: true
-          draft: false
-          prerelease: false
+          distribution: goreleaser
+          version: latest
+          args: release --clean --verbose
+        env:
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JSIGN_JAR_PATH: ${{ env.JSIGN_JAR_PATH }}
+          CODE_SIGNING_CERT_CHAIN_FILE: ${{ env.CODE_SIGNING_CERT_CHAIN_FILE }}
+          CODE_SIGNING_AWS_REGION: ${{ env.CODE_SIGNING_AWS_REGION }}
+          KMS_SIGNING_KEY_ARN: ${{ env.KMS_SIGNING_KEY_ARN }}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/chip-signing ~/.aws
+          echo "Cleanup completed"
+
