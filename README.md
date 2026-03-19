@@ -22,6 +22,12 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`search_asset_keyword`](pkg/tools/search_asset_keyword.go) - Wildcard keyword search for assets
 - [`search_data_class`](pkg/tools/search_data_classes.go) - Search for data classes with filters
 - [`search_data_classification_match`](pkg/tools/search_data_classification_matches.go) - Search for associations between data classes and assets
+- [`get_lineage_entity`](pkg/tools/get_lineage_entity.go) - Get metadata about a specific entity in the technical lineage graph
+- [`get_lineage_upstream`](pkg/tools/get_lineage_upstream.go) - Get upstream technical lineage (sources) for a data entity
+- [`get_lineage_downstream`](pkg/tools/get_lineage_downstream.go) - Get downstream technical lineage (consumers) for a data entity
+- [`search_lineage_entities`](pkg/tools/search_lineage_entities.go) - Search for entities in the technical lineage graph
+- [`get_lineage_transformation`](pkg/tools/get_lineage_transformation.go) - Get details and logic of a specific data transformation
+- [`search_lineage_transformations`](pkg/tools/search_lineage_transformations.go) - Search for transformations in the technical lineage graph
 
 ## Quick Start
 
