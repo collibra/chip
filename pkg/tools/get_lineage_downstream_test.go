@@ -20,9 +20,7 @@ func TestGetLineageDownstream(t *testing.T) {
 					"transformationIds": []string{"transform-2"},
 				},
 			},
-			"pagination": map[string]any{
-				"nextCursor": "cursor-xyz",
-			},
+			"nextCursor": "cursor-xyz",
 		}
 	}))
 
@@ -82,6 +80,10 @@ func TestGetLineageDownstreamNotFound(t *testing.T) {
 
 	if output.Error == "" {
 		t.Fatalf("Expected an error message")
+	}
+
+	if output.Relations == nil {
+		t.Fatalf("Expected Relations to be a non-nil slice, got nil")
 	}
 }
 

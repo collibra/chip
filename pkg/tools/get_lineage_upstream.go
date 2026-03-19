@@ -26,15 +26,25 @@ func NewGetLineageUpstreamTool(collibraClient *http.Client) *chip.Tool[GetLineag
 
 func handleGetLineageUpstream(collibraClient *http.Client) chip.ToolHandlerFunc[GetLineageUpstreamInput, clients.GetLineageDirectionalOutput] {
 	return func(ctx context.Context, input GetLineageUpstreamInput) (clients.GetLineageDirectionalOutput, error) {
-		if input.EntityId == "" {
-			return clients.GetLineageDirectionalOutput{Error: "entityId is required"}, nil
-		}
-
-		result, err := clients.GetLineageUpstream(ctx, collibraClient, input.EntityId, input.EntityType, input.Limit, input.Cursor)
-		if err != nil {
-			return clients.GetLineageDirectionalOutput{}, err
-		}
-
-		return *result, nil
+		return handleLineageDirectional(ctx, collibraClient, input.EntityId, input.EntityType, input.Limit, input.Cursor, clients.GetLineageUpstream)
 	}
+}
+
+// handleLineageDirectional is a shared helper for the upstream and downstream tool handlers.
+func handleLineageDirectional(
+	ctx context.Context,
+	collibraClient *http.Client,
+	entityId, entityType string,
+	limit int,
+	cursor string,
+	fetch func(context.Context, *http.Client, string, string, int, string) (*clients.GetLineageDirectionalOutput, error),
+) (clients.GetLineageDirectionalOutput, error) {
+	if entityId == "" {
+		return clients.GetLineageDirectionalOutput{Error: "entityId is required"}, nil
+	}
+	result, err := fetch(ctx, collibraClient, entityId, entityType, limit, cursor)
+	if err != nil {
+		return clients.GetLineageDirectionalOutput{}, err
+	}
+	return *result, nil
 }

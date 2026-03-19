@@ -19,9 +19,7 @@ func TestSearchLineageTransformations(t *testing.T) {
 					"description": "Daily ETL for sales data",
 				},
 			},
-			"pagination": map[string]any{
-				"nextCursor": "cursor-abc",
-			},
+			"nextCursor": "cursor-abc",
 		}
 	}))
 
@@ -58,8 +56,7 @@ func TestSearchLineageTransformationsNotFound(t *testing.T) {
 	handler := http.NewServeMux()
 	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/transformations", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
 		return http.StatusOK, map[string]any{
-			"results":    []map[string]any{},
-			"pagination": map[string]any{},
+			"results": []map[string]any{},
 		}
 	}))
 

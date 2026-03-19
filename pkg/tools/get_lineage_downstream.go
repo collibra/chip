@@ -26,15 +26,6 @@ func NewGetLineageDownstreamTool(collibraClient *http.Client) *chip.Tool[GetLine
 
 func handleGetLineageDownstream(collibraClient *http.Client) chip.ToolHandlerFunc[GetLineageDownstreamInput, clients.GetLineageDirectionalOutput] {
 	return func(ctx context.Context, input GetLineageDownstreamInput) (clients.GetLineageDirectionalOutput, error) {
-		if input.EntityId == "" {
-			return clients.GetLineageDirectionalOutput{Error: "entityId is required"}, nil
-		}
-
-		result, err := clients.GetLineageDownstream(ctx, collibraClient, input.EntityId, input.EntityType, input.Limit, input.Cursor)
-		if err != nil {
-			return clients.GetLineageDirectionalOutput{}, err
-		}
-
-		return *result, nil
+		return handleLineageDirectional(ctx, collibraClient, input.EntityId, input.EntityType, input.Limit, input.Cursor, clients.GetLineageDownstream)
 	}
 }

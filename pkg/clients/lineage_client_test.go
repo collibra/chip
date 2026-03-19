@@ -124,7 +124,7 @@ func TestGetLineageUpstream_RoutesCorrectly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
 		capturedQuery = r.URL.Query()
-		writeJSON(w, http.StatusOK, map[string]any{"relations": []any{}, "pagination": nil})
+		writeJSON(w, http.StatusOK, map[string]any{"relations": []any{}})
 	}))
 	defer server.Close()
 
@@ -152,13 +152,15 @@ func TestGetLineageUpstream_RoutesCorrectly(t *testing.T) {
 
 func TestGetLineageDownstream_RoutesCorrectly(t *testing.T) {
 	var capturedPath string
+	var capturedQuery url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
-		writeJSON(w, http.StatusOK, map[string]any{"relations": []any{}, "pagination": nil})
+		capturedQuery = r.URL.Query()
+		writeJSON(w, http.StatusOK, map[string]any{"relations": []any{}})
 	}))
 	defer server.Close()
 
-	_, err := GetLineageDownstream(context.Background(), newTestClient(server), "entity-2", "", 0, "")
+	_, err := GetLineageDownstream(context.Background(), newTestClient(server), "entity-2", "Table", 5, "cursor-xyz")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -166,6 +168,70 @@ func TestGetLineageDownstream_RoutesCorrectly(t *testing.T) {
 	expected := "/technical_lineage_resource/rest/lineageGraphRead/v1/entities/entity-2/downstream"
 	if capturedPath != expected {
 		t.Errorf("expected path %q, got %q", expected, capturedPath)
+	}
+	if capturedQuery.Get("entityType") != "Table" {
+		t.Errorf("expected entityType=Table, got %q", capturedQuery.Get("entityType"))
+	}
+	if capturedQuery.Get("limit") != "5" {
+		t.Errorf("expected limit=5, got %q", capturedQuery.Get("limit"))
+	}
+	if capturedQuery.Get("cursor") != "cursor-xyz" {
+		t.Errorf("expected cursor=cursor-xyz, got %q", capturedQuery.Get("cursor"))
+	}
+}
+
+func TestGetLineageDownstream_ErrorReturnsEmptyRelations(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	out, err := GetLineageDownstream(context.Background(), newTestClient(server), "entity-x", "", 0, "")
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if out.Error == "" {
+		t.Errorf("expected error message in output")
+	}
+	if out.Relations == nil {
+		t.Errorf("expected non-nil Relations slice on error, got nil")
+	}
+}
+
+func TestGetLineageUpstream_ErrorReturnsEmptyRelations(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	out, err := GetLineageUpstream(context.Background(), newTestClient(server), "entity-x", "", 0, "")
+	if err != nil {
+		t.Fatalf("unexpected hard error: %v", err)
+	}
+	if out.Error == "" {
+		t.Errorf("expected error message in output")
+	}
+	if out.Relations == nil {
+		t.Errorf("expected non-nil Relations slice on error, got nil")
+	}
+}
+
+func TestGetLineageDirectional_NoCursorInResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"relations": []map[string]any{
+				{"sourceEntityId": "a", "targetEntityId": "b", "transformationIds": []string{"t1"}},
+			},
+		})
+	}))
+	defer server.Close()
+
+	out, err := GetLineageDownstream(context.Background(), newTestClient(server), "a", "", 0, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Pagination != nil {
+		t.Errorf("expected nil Pagination when server omits nextCursor, got %+v", out.Pagination)
 	}
 }
 
@@ -177,11 +243,11 @@ func TestSearchLineageEntities_RoutesCorrectly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
 		capturedQuery = r.URL.Query()
-		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}, "pagination": nil})
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}})
 	}))
 	defer server.Close()
 
-	_, err := SearchLineageEntities(context.Background(), newTestClient(server), "orders", "Table", "dgc-id-1", 5, "")
+	_, err := SearchLineageEntities(context.Background(), newTestClient(server), "orders", "Table", "dgc-id-1", 5, "cur-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -201,6 +267,9 @@ func TestSearchLineageEntities_RoutesCorrectly(t *testing.T) {
 	}
 	if capturedQuery.Get("limit") != "5" {
 		t.Errorf("expected limit=5, got %q", capturedQuery.Get("limit"))
+	}
+	if capturedQuery.Get("cursor") != "cur-1" {
+		t.Errorf("expected cursor=cur-1, got %q", capturedQuery.Get("cursor"))
 	}
 }
 
@@ -258,7 +327,7 @@ func TestSearchLineageTransformations_RoutesCorrectly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
 		capturedQuery = r.URL.Query()
-		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}, "pagination": nil})
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}})
 	}))
 	defer server.Close()
 

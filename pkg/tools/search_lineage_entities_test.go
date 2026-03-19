@@ -19,9 +19,7 @@ func TestSearchLineageEntities(t *testing.T) {
 					"type": "table",
 				},
 			},
-			"pagination": map[string]any{
-				"nextCursor": "cursor-abc",
-			},
+			"nextCursor": "cursor-abc",
 		}
 	}))
 
@@ -62,8 +60,7 @@ func TestSearchLineageEntitiesNotFound(t *testing.T) {
 	handler := http.NewServeMux()
 	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/entities", JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
 		return http.StatusOK, map[string]any{
-			"results":    []map[string]any{},
-			"pagination": map[string]any{},
+			"results": []map[string]any{},
 		}
 	}))
 

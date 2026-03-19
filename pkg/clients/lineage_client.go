@@ -80,29 +80,21 @@ type TransformationSummary struct {
 
 // --- API response types ---
 
-type lineageEntityResponse struct {
-	LineageEntity
-}
-
 type lineageUpstreamDownstreamResponse struct {
 	Relations  []LineageRelation        `json:"relations"`
-	Pagination *LineagePagination       `json:"pagination"`
+	NextCursor string                   `json:"nextCursor,omitempty"`
 	Warnings   []LineageResponseWarning `json:"warnings,omitempty"`
 }
 
 type lineageEntitiesResponse struct {
 	Results    []LineageEntity          `json:"results"`
-	Pagination *LineagePagination       `json:"pagination"`
+	NextCursor string                   `json:"nextCursor,omitempty"`
 	Warnings   []LineageResponseWarning `json:"warnings,omitempty"`
-}
-
-type lineageTransformationResponse struct {
-	LineageTransformation
 }
 
 type lineageTransformationsResponse struct {
 	Results    []TransformationSummary  `json:"results"`
-	Pagination *LineagePagination       `json:"pagination"`
+	NextCursor string                   `json:"nextCursor,omitempty"`
 	Warnings   []LineageResponseWarning `json:"warnings,omitempty"`
 }
 
@@ -118,14 +110,14 @@ type GetLineageDirectionalOutput struct {
 	EntityId   string                   `json:"entityId"`
 	Direction  LineageDirection         `json:"direction"`
 	Relations  []LineageRelation        `json:"relations"`
-	Pagination *LineagePagination       `json:"pagination"`
+	Pagination *LineagePagination       `json:"pagination,omitempty"`
 	Warnings   []LineageResponseWarning `json:"warnings,omitempty"`
 	Error      string                   `json:"error,omitempty"`
 }
 
 type SearchLineageEntitiesOutput struct {
 	Results    []LineageEntity          `json:"results"`
-	Pagination *LineagePagination       `json:"pagination"`
+	Pagination *LineagePagination       `json:"pagination,omitempty"`
 	Warnings   []LineageResponseWarning `json:"warnings,omitempty"`
 }
 
@@ -137,7 +129,7 @@ type GetLineageTransformationOutput struct {
 
 type SearchLineageTransformationsOutput struct {
 	Results    []TransformationSummary  `json:"results"`
-	Pagination *LineagePagination       `json:"pagination"`
+	Pagination *LineagePagination       `json:"pagination,omitempty"`
 	Warnings   []LineageResponseWarning `json:"warnings,omitempty"`
 }
 
@@ -193,12 +185,11 @@ func GetLineageEntity(ctx context.Context, collibraHttpClient *http.Client, enti
 		return &GetLineageEntityOutput{Found: false, Error: err.Error()}, nil
 	}
 
-	var resp lineageEntityResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	var entity LineageEntity
+	if err := json.Unmarshal(body, &entity); err != nil {
 		return nil, fmt.Errorf("failed to parse entity response: %w", err)
 	}
 
-	entity := resp.LineageEntity
 	return &GetLineageEntityOutput{Entity: &entity, Found: true}, nil
 }
 
@@ -231,7 +222,7 @@ func getLineageDirectional(ctx context.Context, collibraHttpClient *http.Client,
 
 	body, err := executeRequest(collibraHttpClient, req)
 	if err != nil {
-		return &GetLineageDirectionalOutput{EntityId: entityId, Direction: direction, Error: err.Error()}, nil
+		return &GetLineageDirectionalOutput{EntityId: entityId, Direction: direction, Relations: []LineageRelation{}, Error: err.Error()}, nil
 	}
 
 	var resp lineageUpstreamDownstreamResponse
@@ -239,13 +230,16 @@ func getLineageDirectional(ctx context.Context, collibraHttpClient *http.Client,
 		return nil, fmt.Errorf("failed to parse %s response: %w", direction, err)
 	}
 
-	return &GetLineageDirectionalOutput{
-		EntityId:   entityId,
-		Direction:  direction,
-		Relations:  resp.Relations,
-		Pagination: resp.Pagination,
-		Warnings:   resp.Warnings,
-	}, nil
+	out := &GetLineageDirectionalOutput{
+		EntityId:  entityId,
+		Direction: direction,
+		Relations: resp.Relations,
+		Warnings:  resp.Warnings,
+	}
+	if resp.NextCursor != "" {
+		out.Pagination = &LineagePagination{NextCursor: resp.NextCursor}
+	}
+	return out, nil
 }
 
 func SearchLineageEntities(ctx context.Context, collibraHttpClient *http.Client, nameContains string, entityType string, dgcId string, limit int, cursor string) (*SearchLineageEntitiesOutput, error) {
@@ -277,11 +271,14 @@ func SearchLineageEntities(ctx context.Context, collibraHttpClient *http.Client,
 		return nil, fmt.Errorf("failed to parse entities response: %w", err)
 	}
 
-	return &SearchLineageEntitiesOutput{
-		Results:    resp.Results,
-		Pagination: resp.Pagination,
-		Warnings:   resp.Warnings,
-	}, nil
+	out := &SearchLineageEntitiesOutput{
+		Results:  resp.Results,
+		Warnings: resp.Warnings,
+	}
+	if resp.NextCursor != "" {
+		out.Pagination = &LineagePagination{NextCursor: resp.NextCursor}
+	}
+	return out, nil
 }
 
 func GetLineageTransformation(ctx context.Context, collibraHttpClient *http.Client, transformationId string) (*GetLineageTransformationOutput, error) {
@@ -297,12 +294,11 @@ func GetLineageTransformation(ctx context.Context, collibraHttpClient *http.Clie
 		return &GetLineageTransformationOutput{Found: false, Error: err.Error()}, nil
 	}
 
-	var resp lineageTransformationResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	var t LineageTransformation
+	if err := json.Unmarshal(body, &t); err != nil {
 		return nil, fmt.Errorf("failed to parse transformation response: %w", err)
 	}
 
-	t := resp.LineageTransformation
 	return &GetLineageTransformationOutput{Transformation: &t, Found: true}, nil
 }
 
@@ -333,9 +329,12 @@ func SearchLineageTransformations(ctx context.Context, collibraHttpClient *http.
 		return nil, fmt.Errorf("failed to parse transformations response: %w", err)
 	}
 
-	return &SearchLineageTransformationsOutput{
-		Results:    resp.Results,
-		Pagination: resp.Pagination,
-		Warnings:   resp.Warnings,
-	}, nil
+	out := &SearchLineageTransformationsOutput{
+		Results:  resp.Results,
+		Warnings: resp.Warnings,
+	}
+	if resp.NextCursor != "" {
+		out.Pagination = &LineagePagination{NextCursor: resp.NextCursor}
+	}
+	return out, nil
 }
