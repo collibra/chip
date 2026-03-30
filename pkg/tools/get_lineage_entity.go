@@ -9,13 +9,16 @@ import (
 )
 
 type GetLineageEntityInput struct {
-	EntityId string `json:"entityId" jsonschema:"Required. Unique identifier of the data entity. Can be a numeric string (e.g. '12345') or a DGC UUID (e.g. '550e8400-e29b-41d4-a716-446655440000')."`
+	EntityId string `json:"entityId" jsonschema:"Required. The lineage entity ID (obtained from search_lineage_entities, get_lineage_upstream, or get_lineage_downstream). This is NOT a DGC asset UUID."`
 }
 
 func NewGetLineageEntityTool(collibraClient *http.Client) *chip.Tool[GetLineageEntityInput, clients.GetLineageEntityOutput] {
 	return &chip.Tool[GetLineageEntityInput, clients.GetLineageEntityOutput]{
-		Name:        "get_lineage_entity",
-		Description: "Get detailed metadata about a specific data entity in the technical lineage graph. Technical lineage covers all data objects across external systems -- including source code, transformations, and temporary tables -- regardless of whether they are registered in Collibra (unlike business lineage, which only covers assets ingested into the Data Catalog). An entity represents any tracked data asset such as a table, column, file, report, API endpoint, or topic. Returns the entity's name, type, source systems, parent entity, and linked Data Governance Catalog (DGC) identifier. Use this when you have an entity ID from a lineage traversal, search result, or user input and need its full details.",
+		Name: "get_lineage_entity",
+		Description: `WORKFLOW: This is a FOLLOW-UP tool for resolving entity IDs you already have. Do not call this as a first step — start with search_lineage_entities instead.
+					  Use when you have an entity ID from get_lineage_upstream or get_lineage_downstream results and need to know the entity's name, type, or other metadata. Returns: name, type, source systems, parent entity, and linked DGC identifier.
+					  IMPORTANT: Upstream/downstream results return entity IDs only. You do NOT need to resolve every ID — summarize based on entity IDs and only call this tool for the most relevant entities the user asked about. Resolving all IDs wastes tool calls.
+					  Do not call this if search_lineage_entities already returned the information you need.`,
 		Handler:     handleGetLineageEntity(collibraClient),
 		Permissions: []string{},
 	}

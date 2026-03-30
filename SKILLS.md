@@ -55,17 +55,23 @@ These tools walk the Collibra asset relation graph to answer lineage and semanti
 
 These tools query the technical lineage graph — a map of all data objects and transformations across external systems, including unregistered assets, temporary tables, and source code. Unlike business lineage (which only covers assets in the Collibra Data Catalog), technical lineage covers the full physical data flow.
 
-**`search_lineage_entities`** — Search for data entities in the technical lineage graph by name, type, or DGC UUID. Use this as a starting point when you don't have an entity ID. Supports partial name matching and type filtering (e.g. `table`, `column`, `report`). Paginated.
+**Workflow**: Almost all lineage questions follow the same pattern: **(1)** `search_lineage_entities` → **(2)** `get_lineage_upstream` or `get_lineage_downstream` → **(3)** optionally `get_lineage_entity` for the most relevant entities only. Do not resolve every entity ID — summarize from the graph structure and only look up entities the user specifically needs details on. Only call `get_lineage_transformation` when the user asks to see actual SQL or logic.
 
-**`get_lineage_entity`** — Get full metadata for a specific lineage entity by ID: name, type, source systems, parent entity, and linked DGC identifier. Use after obtaining an entity ID from a search or lineage traversal.
+**IMPORTANT — ID types**: Lineage tools use their own internal entity IDs, which are **not** the same as DGC asset UUIDs. You cannot pass a DGC asset UUID directly to `get_lineage_upstream` or `get_lineage_downstream`. To bridge from the catalog to the lineage graph, call `search_lineage_entities` with the asset's UUID as `dgcId` to obtain the lineage entity ID first.
 
-**`get_lineage_upstream`** — Get all upstream entities (sources) for a data entity, along with the transformations connecting them. Use to answer "where does this data come from?". Paginated.
+**LIMITATION — Column-level lineage**: Columns cannot be searched by name in `search_lineage_entities` (`nameContains` does not work for columns). The `dgcId` parameter also does not reliably resolve columns because there is no consistent mapping between Collibra catalog column UUIDs and technical lineage entity IDs. To reach a column in the lineage graph, first find its parent table (by name or `dgcId`), then use `get_lineage_upstream` or `get_lineage_downstream` on the table to discover its columns in the lineage graph.
 
-**`get_lineage_downstream`** — Get all downstream entities (consumers) for a data entity, along with the transformations connecting them. Use to answer "what depends on this data?" or "what is impacted if this changes?". Paginated.
+**`search_lineage_entities`** *(entry point)* — Search by name, type, or DGC UUID. **Start here** for almost all lineage questions to resolve an entity name or DGC asset UUID to a lineage entity ID. Supports partial name matching and type filtering (e.g. `table`, `column`, `report`). Paginated. **Note**: name search and DGC UUID lookup do not work reliably for columns — see limitation above.
 
-**`search_lineage_transformations`** — Search for transformations by name. Returns lightweight summaries. Use to discover ETL jobs or SQL queries by name.
+**`get_lineage_upstream`** *(step 2: trace sources)* — Given a lineage entity ID (not a DGC UUID), returns all upstream source entities and connecting transformations. Use to answer "where does this data come from?". Results contain entity IDs only. Paginated.
 
-**`get_lineage_transformation`** — Get the full details of a transformation, including its SQL or script logic. Use after finding a transformation ID in an upstream/downstream result or search.
+**`get_lineage_downstream`** *(step 2: trace consumers)* — Given a lineage entity ID (not a DGC UUID), returns all downstream consumer entities and connecting transformations. Use for impact analysis: "what depends on this?", "what breaks if this changes?". Results contain entity IDs only. Paginated.
+
+**`get_lineage_entity`** *(follow-up: resolve IDs)* — Get full metadata for a specific lineage entity by its lineage ID (not a DGC UUID): name, type, source systems, parent entity, and linked DGC identifier. Only call this for the most relevant entity IDs from upstream/downstream results — do not resolve every ID.
+
+**`get_lineage_transformation`** *(terminal: view logic)* — Get the full details of a transformation, including its SQL or script logic. Only call when the user explicitly asks about the transformation code. Do not call just to understand the lineage graph.
+
+**`search_lineage_transformations`** *(specialized)* — Search for transformations by name. Only use when the user explicitly asks about a transformation by name. This is **not** a general entry point for lineage questions — start with `search_lineage_entities` instead.
 
 ### Data Contracts
 
@@ -103,13 +109,13 @@ These tools query the technical lineage graph — a map of all data objects and 
 ### Trace upstream lineage for a data asset
 1. `search_lineage_entities` with the asset name → get entity ID
 2. `get_lineage_upstream` → relations with source entity IDs and transformation IDs
-3. `get_lineage_entity` for any source entity to get its details
-4. `get_lineage_transformation` for any transformation ID to see the logic
+3. Summarize based on the graph structure — only call `get_lineage_entity` for the most relevant source entities, not all of them
+4. Only call `get_lineage_transformation` if the user explicitly asks to see the SQL or logic
 
 ### Perform impact analysis (downstream)
 1. `search_lineage_entities` with the asset name → get entity ID
 2. `get_lineage_downstream` → relations with consumer entity IDs
-3. Follow up with `get_lineage_entity` for specific consumers as needed
+3. Summarize based on the graph structure — only call `get_lineage_entity` for the most relevant consumers, not all of them
 
 ### Manage a data contract
 1. `list_data_contract` to find the contract UUID

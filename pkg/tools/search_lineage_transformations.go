@@ -16,8 +16,10 @@ type SearchLineageTransformationsInput struct {
 
 func NewSearchLineageTransformationsTool(collibraClient *http.Client) *chip.Tool[SearchLineageTransformationsInput, clients.SearchLineageTransformationsOutput] {
 	return &chip.Tool[SearchLineageTransformationsInput, clients.SearchLineageTransformationsOutput]{
-		Name:        "search_lineage_transformations",
-		Description: "Search for transformations in the technical lineage graph by name. Returns a paginated list of matching transformation summaries. Use this to discover ETL jobs, SQL queries, or other processing activities without knowing their IDs. For example, find all transformations with \"etl\" or \"sales\" in the name. To see the full transformation logic (SQL/script), use get_lineage_transformation with the returned ID.",
+		Name: "search_lineage_transformations",
+		Description: `WORKFLOW: This is a SPECIALIZED tool — only use it when the user explicitly asks about a transformation by name (e.g. "find the ETL job called X"). This is NOT a general entry point for lineage questions.
+					  For most lineage questions ("where does this data come from?", "what depends on this?"), start with search_lineage_entities instead — that is the correct entry point. Transformation IDs are normally obtained from get_lineage_upstream or get_lineage_downstream results, not from this search.
+					  Use when the user asks: "find the transformation named X", "search for ETL jobs matching Y", "list transformations with 'sales' in the name". Returns paginated transformation summaries (ID and name). Use get_lineage_transformation with a returned ID to see the full SQL/logic.`,
 		Handler:     handleSearchLineageTransformations(collibraClient),
 		Permissions: []string{},
 	}

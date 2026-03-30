@@ -14,8 +14,11 @@ type GetLineageTransformationInput struct {
 
 func NewGetLineageTransformationTool(collibraClient *http.Client) *chip.Tool[GetLineageTransformationInput, clients.GetLineageTransformationOutput] {
 	return &chip.Tool[GetLineageTransformationInput, clients.GetLineageTransformationOutput]{
-		Name:        "get_lineage_transformation",
-		Description: "Get detailed information about a specific data transformation, including its SQL or script logic. A transformation represents a data processing activity (ETL job, SQL query, script, etc.) that connects source entities to target entities in the lineage graph. Use this when you found a transformation ID in an upstream/downstream lineage result and want to see what the transformation actually does -- the SQL query, script content, or processing logic.",
+		Name: "get_lineage_transformation",
+		Description: `WORKFLOW: This is a TERMINAL tool — only call it when the user explicitly wants to see the actual SQL, script, or transformation logic. Requires a transformation ID from a prior get_lineage_upstream or get_lineage_downstream result.
+					  Use when the user asks: "show me the SQL", "what logic transforms this data?", "how is this ETL job defined?".
+					  Do NOT call this just to understand the lineage graph — get_lineage_upstream and get_lineage_downstream already show which transformations connect entities, which is sufficient for most lineage questions. Only call this when the user wants the actual code or logic.
+					  Do NOT call search_lineage_transformations to find a transformation ID if you already have it from upstream/downstream results.`,
 		Handler:     handleGetLineageTransformation(collibraClient),
 		Permissions: []string{},
 	}
