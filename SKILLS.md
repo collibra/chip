@@ -17,17 +17,17 @@ Reach for Collibra tools when the user's question is about **understanding, disc
 
 ### Discovery & Search
 
-**`data_assets_discover`** — Natural language semantic search over data assets (tables, columns, datasets). Use when the user asks open-ended questions like "what data do we have about customers?". Requires `dgc.ai-copilot` permission.
+**`discover_data_assets`** — Natural language semantic search over data assets (tables, columns, datasets). Use when the user asks open-ended questions like "what data do we have about customers?". Requires `dgc.ai-copilot` permission.
 
-**`business_glossary_discover`** — Natural language semantic search over the business glossary (terms, acronyms, KPIs, definitions). Use when the user asks about the meaning of a business concept. Requires `dgc.ai-copilot` permission.
+**`discover_business_glossary`** — Natural language semantic search over the business glossary (terms, acronyms, KPIs, definitions). Use when the user asks about the meaning of a business concept. Requires `dgc.ai-copilot` permission.
 
 **`search_asset_keyword`** — Wildcard keyword search. Returns names, IDs, and metadata but not full asset details. Use this to find an asset's UUID when you only know its name. Supports filtering by resource type, community, domain, asset type, status, and creator. Paginated via `limit`/`offset`.
 
-**`asset_types_list`** — List all asset type names and UUIDs. Use this when you need a type UUID to filter `search_asset_keyword` results.
+**`list_asset_types`** — List all asset type names and UUIDs. Use this when you need a type UUID to filter `search_asset_keyword` results.
 
 ### Asset Details
 
-**`asset_details_get`** — Retrieve full details for a single asset by UUID: attributes, relations, and metadata. Returns a direct link to the asset in the Collibra UI. Relations are paginated (50 per page); use `outgoingRelationsCursor` and `incomingRelationsCursor` from the previous response to page through them.
+**`get_asset_details`** — Retrieve full details for a single asset by UUID: attributes, relations, and metadata. Returns a direct link to the asset in the Collibra UI. Relations are paginated (50 per page); use `outgoingRelationsCursor` and `incomingRelationsCursor` from the previous response to page through them.
 
 ### Semantic Graph Traversal
 
@@ -43,13 +43,13 @@ These tools walk the Collibra asset relation graph to answer lineage and semanti
 
 ### Data Classification
 
-**`data_class_search`** — Search for data classes by name or description. Use this to find a classification UUID before applying it to an asset. Requires `dgc.data-classes-read` permission.
+**`search_data_class`** — Search for data classes by name or description. Use this to find a classification UUID before applying it to an asset. Requires `dgc.data-classes-read` permission.
 
-**`data_classification_match_search`** — Search existing classification matches (associations between data classes and assets). Filter by asset IDs, classification IDs, or status (`ACCEPTED`, `REJECTED`, `SUGGESTED`). Requires `dgc.classify` + `dgc.catalog`.
+**`search_data_classification_match`** — Search existing classification matches (associations between data classes and assets). Filter by asset IDs, classification IDs, or status (`ACCEPTED`, `REJECTED`, `SUGGESTED`). Requires `dgc.classify` + `dgc.catalog`.
 
-**`data_classification_match_add`** — Apply a data class to an asset. Requires both the asset UUID and classification UUID. Requires `dgc.classify` + `dgc.catalog`.
+**`add_data_classification_match`** — Apply a data class to an asset. Requires both the asset UUID and classification UUID. Requires `dgc.classify` + `dgc.catalog`.
 
-**`data_classification_match_remove`** — Remove a classification match. Requires `dgc.classify` + `dgc.catalog`.
+**`remove_data_classification_match`** — Remove a classification match. Requires `dgc.classify` + `dgc.catalog`.
 
 ### Technical Lineage
 
@@ -69,11 +69,11 @@ These tools query the technical lineage graph — a map of all data objects and 
 
 ### Data Contracts
 
-**`data_contract_list`** — List data contracts with cursor-based pagination. Filter by `manifestId`. Use this to find a contract's UUID.
+**`list_data_contract`** — List data contracts with cursor-based pagination. Filter by `manifestId`. Use this to find a contract's UUID.
 
-**`data_contract_manifest_pull`** — Download the manifest for a data contract by UUID.
+**`pull_data_contract_manifest`** — Download the manifest for a data contract by UUID.
 
-**`data_contract_manifest_push`** — Upload/update a manifest for a data contract by UUID.
+**`push_data_contract_manifest`** — Upload/update a manifest for a data contract by UUID.
 
 ---
 
@@ -81,12 +81,12 @@ These tools query the technical lineage graph — a map of all data objects and 
 
 ### Find an asset and get its details
 1. `search_asset_keyword` with the asset name → get UUID from results
-2. `asset_details_get` with the UUID → get full attributes and relations
+2. `get_asset_details` with the UUID → get full attributes and relations
 
 ### Classify a column
 1. `search_asset_keyword` to find the column UUID
-2. `data_class_search` to find the data class UUID
-3. `data_classification_match_add` with both UUIDs
+2. `search_data_class` to find the data class UUID
+3. `add_data_classification_match` with both UUIDs
 
 ### Understand what a table means
 1. `search_asset_keyword` to find the table UUID
@@ -112,15 +112,15 @@ These tools query the technical lineage graph — a map of all data objects and 
 3. Follow up with `get_lineage_entity` for specific consumers as needed
 
 ### Manage a data contract
-1. `data_contract_list` to find the contract UUID
-2. `data_contract_manifest_pull` to download, edit, then `data_contract_manifest_push` to update
+1. `list_data_contract` to find the contract UUID
+2. `pull_data_contract_manifest` to download, edit, then `push_data_contract_manifest` to update
 
 ---
 
 ## Tips
 
 - **UUIDs are required for most tools.** When you only have a name, start with `search_asset_keyword` or the natural language discovery tools to get the UUID first.
-- **`data_assets_discover` vs `search_asset_keyword`**: Prefer `data_assets_discover` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.
-- **Permissions**: `data_assets_discover` and `business_glossary_discover` require the `dgc.ai-copilot` permission. Classification tools require `dgc.classify` + `dgc.catalog`. If a tool fails with a permission error, let the user know which permission is needed.
-- **Pagination**: `search_asset_keyword`, `asset_types_list`, `data_class_search`, and `data_classification_match_search` use `limit`/`offset`. `data_contract_list` and `asset_details_get` (for relations) use cursor-based pagination — carry the cursor from the previous response. Lineage tools (`search_lineage_entities`, `get_lineage_upstream`, `get_lineage_downstream`, `search_lineage_transformations`) also use cursor-based pagination.
+- **`discover_data_assets` vs `search_asset_keyword`**: Prefer `discover_data_assets` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.
+- **Permissions**: `discover_data_assets` and `discover_business_glossary` require the `dgc.ai-copilot` permission. Classification tools require `dgc.classify` + `dgc.catalog`. If a tool fails with a permission error, let the user know which permission is needed.
+- **Pagination**: `search_asset_keyword`, `list_asset_types`, `search_data_class`, and `search_data_classification_match` use `limit`/`offset`. `list_data_contract` and `get_asset_details` (for relations) use cursor-based pagination — carry the cursor from the previous response. Lineage tools (`search_lineage_entities`, `get_lineage_upstream`, `get_lineage_downstream`, `search_lineage_transformations`) also use cursor-based pagination.
 - **Error handling**: Validation errors are returned in the output `error` field (not as Go errors), so always check `error` and `success`/`found` fields in the response before using the data.
