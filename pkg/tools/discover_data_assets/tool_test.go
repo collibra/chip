@@ -1,4 +1,4 @@
-package ask_dad_test
+package discover_data_assets_test
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/ask_dad"
+	tools "github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
@@ -25,7 +25,7 @@ func TestAskDad(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := ask_dad.NewTool(client).Handler(t.Context(), ask_dad.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Question: "Column names with PII in table users?",
 	})
 	if err != nil {

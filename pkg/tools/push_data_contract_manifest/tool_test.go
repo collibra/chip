@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
+	tools "github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
@@ -71,7 +71,7 @@ description: This is a sample data contract manifest`
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := push_data_contract_manifest.NewTool(client).Handler(t.Context(), push_data_contract_manifest.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Manifest: manifestContent,
 	})
 	if err != nil {
@@ -146,7 +146,7 @@ func TestPushDataContractManifestWithOptionalParams(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := push_data_contract_manifest.NewTool(client).Handler(t.Context(), push_data_contract_manifest.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Manifest:   manifestContent,
 		ManifestID: "test-manifest-456",
 		Version:    "1.0.0",
@@ -171,7 +171,7 @@ func TestPushDataContractManifestEmptyManifest(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := push_data_contract_manifest.NewTool(client).Handler(t.Context(), push_data_contract_manifest.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Manifest: "",
 	})
 	if err != nil {
@@ -200,7 +200,7 @@ kind: DataContract`
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := push_data_contract_manifest.NewTool(client).Handler(t.Context(), push_data_contract_manifest.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Manifest: manifestContent,
 	})
 	if err != nil {

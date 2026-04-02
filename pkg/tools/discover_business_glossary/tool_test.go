@@ -1,4 +1,4 @@
-package ask_glossary_test
+package discover_business_glossary_test
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/ask_glossary"
+	tools "github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
@@ -25,7 +25,7 @@ func TestAskGlossary(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := ask_glossary.NewTool(client).Handler(t.Context(), ask_glossary.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Question: "What is the definition of ARR?",
 	})
 	if err != nil {

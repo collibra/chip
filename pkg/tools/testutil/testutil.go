@@ -88,6 +88,7 @@ func HttpHandlerInOut[In, Out any](m Marshaller[Out], u Unmarshaller[In], handle
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
 		_, err = w.Write(response)
 		if err != nil {
@@ -105,6 +106,7 @@ func HttpHandlerOut[Out any](m Marshaller[Out], handler func(r *http.Request) (i
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
 		_, err = w.Write(response)
 		if err != nil {

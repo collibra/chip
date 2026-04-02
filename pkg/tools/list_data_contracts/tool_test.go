@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/list_data_contracts"
+	tools "github.com/collibra/chip/pkg/tools/list_data_contracts"
 	"github.com/collibra/chip/pkg/tools/testutil"
 	"github.com/google/uuid"
 )
@@ -35,7 +35,7 @@ func TestListDataContracts(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := list_data_contracts.NewTool(client).Handler(t.Context(), list_data_contracts.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Limit: 100,
 	})
 	if err != nil {
@@ -90,7 +90,7 @@ func TestListDataContractsWithTotal(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := list_data_contracts.NewTool(client).Handler(t.Context(), list_data_contracts.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Limit: 100,
 	})
 	if err != nil {

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
+	tools "github.com/collibra/chip/pkg/tools/remove_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
@@ -23,11 +23,11 @@ func TestRemoveClassificationMatch_Success(t *testing.T) {
 
 	client := testutil.NewClient(server)
 
-	input := remove_data_classification_match.Input{
+	input := tools.Input{
 		ClassificationMatchID: "12345678-1234-1234-1234-123456789abc",
 	}
 
-	output, err := remove_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -41,9 +41,9 @@ func TestRemoveClassificationMatch_Success(t *testing.T) {
 func TestRemoveClassificationMatch_MissingClassificationMatchID(t *testing.T) {
 	client := &http.Client{}
 
-	input := remove_data_classification_match.Input{}
+	input := tools.Input{}
 
-	output, err := remove_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -66,11 +66,11 @@ func TestRemoveClassificationMatch_NotFound(t *testing.T) {
 
 	client := testutil.NewClient(server)
 
-	input := remove_data_classification_match.Input{
+	input := tools.Input{
 		ClassificationMatchID: "00000000-0000-0000-0000-000000000000",
 	}
 
-	output, err := remove_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -97,11 +97,11 @@ func TestRemoveClassificationMatch_ServerError(t *testing.T) {
 
 	client := testutil.NewClient(server)
 
-	input := remove_data_classification_match.Input{
+	input := tools.Input{
 		ClassificationMatchID: "12345678-1234-1234-1234-123456789abc",
 	}
 
-	output, err := remove_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

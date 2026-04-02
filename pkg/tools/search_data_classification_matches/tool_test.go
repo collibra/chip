@@ -1,4 +1,4 @@
-package find_data_classification_matches_test
+package search_data_classification_matches_test
 
 import (
 	"net/http"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/find_data_classification_matches"
+	tools "github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
@@ -38,7 +38,7 @@ func TestFindClassificationMatches(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := find_data_classification_matches.NewTool(client).Handler(t.Context(), find_data_classification_matches.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Statuses: []string{"ACCEPTED"},
 		Limit:    50,
 	})

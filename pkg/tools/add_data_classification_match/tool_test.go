@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
+	tools "github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
@@ -42,12 +42,12 @@ func TestAddClassificationMatch_Success(t *testing.T) {
 
 	client := testutil.NewClient(server)
 
-	input := add_data_classification_match.Input{
+	input := tools.Input{
 		AssetID:          "9179b887-04ef-4ce5-ab3a-b5bbd39ea3c8",
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	output, err := add_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -77,11 +77,11 @@ func TestAddClassificationMatch_Success(t *testing.T) {
 func TestAddClassificationMatch_MissingAssetID(t *testing.T) {
 	client := &http.Client{}
 
-	input := add_data_classification_match.Input{
+	input := tools.Input{
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	output, err := add_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -99,11 +99,11 @@ func TestAddClassificationMatch_MissingAssetID(t *testing.T) {
 func TestAddClassificationMatch_MissingClassificationID(t *testing.T) {
 	client := &http.Client{}
 
-	input := add_data_classification_match.Input{
+	input := tools.Input{
 		AssetID: "9179b887-04ef-4ce5-ab3a-b5bbd39ea3c8",
 	}
 
-	output, err := add_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -130,12 +130,12 @@ func TestAddClassificationMatch_AssetNotFound(t *testing.T) {
 
 	client := testutil.NewClient(server)
 
-	input := add_data_classification_match.Input{
+	input := tools.Input{
 		AssetID:          "00000000-0000-0000-0000-000000000000",
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	output, err := add_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -162,12 +162,12 @@ func TestAddClassificationMatch_AlreadyExists(t *testing.T) {
 
 	client := testutil.NewClient(server)
 
-	input := add_data_classification_match.Input{
+	input := tools.Input{
 		AssetID:          "9179b887-04ef-4ce5-ab3a-b5bbd39ea3c8",
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	output, err := add_data_classification_match.NewTool(client).Handler(t.Context(), input)
+	output, err := tools.NewTool(client).Handler(t.Context(), input)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)

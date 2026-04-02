@@ -1,4 +1,4 @@
-package ask_dad
+package discover_data_assets
 
 import (
 	"context"
@@ -18,8 +18,8 @@ type Output struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:        "data_assets_discover",
-		Description: "Ask the data asset discovery agent questions about available data assets in Collibra.",
+		Name:        "discover_data_assets",
+		Description: "Perform a semantic search across available data assets in Collibra. Ask natural language questions to discover tables, columns, datasets, and other data assets.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.ai-copilot"},
 	}

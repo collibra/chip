@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/search_data_classes"
+	tools "github.com/collibra/chip/pkg/tools/search_data_classes"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
@@ -22,7 +22,7 @@ func TestFindDataClasses(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := search_data_classes.NewTool(client).Handler(t.Context(), search_data_classes.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Name: "Question",
 	})
 	if err != nil {

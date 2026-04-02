@@ -1,0 +1,78 @@
+package search_lineage_transformations_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	tools "github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/tools/testutil"
+)
+
+func TestSearchLineageTransformations(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/transformations", testutil.JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+		return http.StatusOK, map[string]any{
+			"results": []map[string]any{
+				{
+					"id":          "transform-1",
+					"name":        "etl_sales_daily",
+					"description": "Daily ETL for sales data",
+				},
+			},
+			"nextCursor": "cursor-abc",
+		}
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := testutil.NewClient(server)
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
+		NameContains: "etl",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(output.Results) != 1 {
+		t.Fatalf("Expected 1 result, got: %d", len(output.Results))
+	}
+
+	transformation := output.Results[0]
+	if transformation.Id != "transform-1" {
+		t.Fatalf("Expected transformation ID 'transform-1', got: '%s'", transformation.Id)
+	}
+
+	if transformation.Name != "etl_sales_daily" {
+		t.Fatalf("Expected transformation name 'etl_sales_daily', got: '%s'", transformation.Name)
+	}
+
+	if output.Pagination == nil || output.Pagination.NextCursor != "cursor-abc" {
+		t.Fatalf("Expected nextCursor 'cursor-abc'")
+	}
+}
+
+func TestSearchLineageTransformationsNotFound(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/technical_lineage_resource/rest/lineageGraphRead/v1/transformations", testutil.JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+		return http.StatusOK, map[string]any{
+			"results": []map[string]any{},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := testutil.NewClient(server)
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
+		NameContains: "nonexistent_etl",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(output.Results) != 0 {
+		t.Fatalf("Expected 0 results, got: %d", len(output.Results))
+	}
+}
