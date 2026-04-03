@@ -43,7 +43,7 @@ func TestGetLineageDownstream(t *testing.T) {
 		t.Fatalf("Expected entityId 'entity-1', got: '%s'", output.EntityId)
 	}
 
-	if output.Direction != clients.LineageDirectionDownstream {
+	if output.Direction != string(clients.LineageDirectionDownstream) {
 		t.Fatalf("Expected direction 'downstream', got: '%s'", output.Direction)
 	}
 

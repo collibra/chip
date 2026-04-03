@@ -55,6 +55,8 @@ These tools walk the Collibra asset relation graph to answer lineage and semanti
 
 These tools query the technical lineage graph — a map of all data objects and transformations across external systems, including unregistered assets, temporary tables, and source code. Unlike business lineage (which only covers assets in the Collibra Data Catalog), technical lineage covers the full physical data flow.
 
+**CRITICAL — Reuse IDs from the conversation.** If you have already retrieved asset details, table semantics, or column information earlier in the conversation, you already have the asset UUIDs and context you need. Do NOT search globally for an entity you have already seen — use the IDs you already have. This is especially important for columns: column names like "id", "name", "status", and "created_date" exist in hundreds of tables. Searching by name alone will return the wrong results.
+
 **Workflow**: Almost all lineage questions follow the same pattern: **(1)** `search_lineage_entities` → **(2)** `get_lineage_upstream` or `get_lineage_downstream` → **(3)** optionally `get_lineage_entity` for the most relevant entities only. Do not resolve every entity ID — summarize from the graph structure and only look up entities the user specifically needs details on. Only call `get_lineage_transformation` when the user asks to see actual SQL or logic.
 
 **IMPORTANT — ID types**: Lineage tools use their own internal entity IDs, which are **not** the same as DGC asset UUIDs. You cannot pass a DGC asset UUID directly to `get_lineage_upstream` or `get_lineage_downstream`. To bridge from the catalog to the lineage graph, call `search_lineage_entities` with the asset's UUID as `dgcId` to obtain the lineage entity ID first.
@@ -106,6 +108,14 @@ These tools query the technical lineage graph — a map of all data objects and 
 1. `search_asset_keyword` to find the business term UUID
 2. `get_business_term_data` → data attributes → columns → tables
 
+### Trace lineage for a column you already found in a table
+If you already retrieved table details or table semantics earlier in the conversation:
+1. You already know the table name and column name — do NOT search for the column by name
+2. `search_lineage_entities` with the TABLE name → get the table's lineage entity ID
+3. `get_lineage_upstream` or `get_lineage_downstream` on the table
+4. Find the specific column in the results by matching the name you already know
+5. Use that column's lineage entity ID for further upstream/downstream calls if needed
+
 ### Trace upstream lineage for a data asset
 1. `search_lineage_entities` with the asset name → get entity ID
 2. `get_lineage_upstream` → relations with source entity IDs and transformation IDs
@@ -129,4 +139,5 @@ These tools query the technical lineage graph — a map of all data objects and 
 - **`discover_data_assets` vs `search_asset_keyword`**: Prefer `discover_data_assets` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.
 - **Permissions**: `discover_data_assets` and `discover_business_glossary` require the `dgc.ai-copilot` permission. Classification tools require `dgc.classify` + `dgc.catalog`. If a tool fails with a permission error, let the user know which permission is needed.
 - **Pagination**: `search_asset_keyword`, `list_asset_types`, `search_data_class`, and `search_data_classification_match` use `limit`/`offset`. `list_data_contract` and `get_asset_details` (for relations) use cursor-based pagination — carry the cursor from the previous response. Lineage tools (`search_lineage_entities`, `get_lineage_upstream`, `get_lineage_downstream`, `search_lineage_transformations`) also use cursor-based pagination.
+- **Reuse conversation context.** When you have already fetched asset details, table semantics, or search results earlier in the conversation, use the UUIDs and entity names from those results directly. Never re-search for something you already have. This prevents ambiguous matches, especially for common column names.
 - **Error handling**: Validation errors are returned in the output `error` field (not as Go errors), so always check `error` and `success`/`found` fields in the response before using the data.
