@@ -6,18 +6,28 @@ A Model Context Protocol (MCP) server that provides AI agents with access to Col
 
 This Go-based MCP server acts as a bridge between AI applications and Collibra, enabling intelligent data discovery and governance operations through the following tools:
 
-- [`asset_details_get`](pkg/tools/get_asset_details.go) - Retrieve detailed information about specific assets by UUID
-- [`asset_keyword_search`](pkg/tools/keyword_search.go) - Wildcard keyword search for assets
-- [`asset_types_list`](pkg/tools/list_asset_types.go) - List available asset types
-- [`business_glossary_discover`](pkg/tools/ask_glossary.go) - Ask questions about terms and definitions
-- [`data_classification_match_add`](pkg/tools/add_data_classification_match.go) - Associate a data class with an asset
-- [`data_classification_match_remove`](pkg/tools/remove_data_classification_match.go) - Remove a classification match
-- [`data_classification_match_search`](pkg/tools/find_data_classification_matches.go) - Find associations between data classes and assets
-- [`data_assets_discover`](pkg/tools/ask_dad.go) - Query available data assets using natural language
-- [`data_class_search`](pkg/tools/search_data_classes.go) - Search for data classes with filters
-- [`data_contract_list`](pkg/tools/list_data_contracts.go) - List data contracts with pagination
-- [`data_contract_manifest_pull`](pkg/tools/pull_data_contract_manifest.go) - Download manifest for a data contract
-- [`data_contract_manifest_push`](pkg/tools/push_data_contract_manifest.go) - Upload manifest for a data contract
+- [`add_data_classification_match`](pkg/tools/add_data_classification_match.go) - Associate a data class with an asset
+- [`discover_business_glossary`](pkg/tools/discover_business_glossary.go) - Ask questions about terms and definitions
+- [`discover_data_assets`](pkg/tools/discover_data_assets.go) - Query available data assets using natural language
+- [`get_asset_details`](pkg/tools/get_asset_details.go) - Retrieve detailed information about specific assets by UUID
+- [`get_business_term_data`](pkg/tools/get_business_term_data.go) - Trace a business term back to its connected physical data assets
+- [`get_column_semantics`](pkg/tools/get_column_semantics.go) - Retrieve data attributes, measures, and business assets connected to a column
+- [`get_measure_data`](pkg/tools/get_measure_data.go) - Trace a measure back to its underlying physical columns and tables
+- [`get_table_semantics`](pkg/tools/get_table_semantics.go) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
+- [`list_asset_types`](pkg/tools/list_asset_types.go) - List available asset types
+- [`list_data_contract`](pkg/tools/list_data_contracts.go) - List data contracts with pagination
+- [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest.go) - Download manifest for a data contract
+- [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest.go) - Upload manifest for a data contract
+- [`removedata_classification_match`](pkg/tools/remove_data_classification_match.go) - Remove a classification match
+- [`search_asset_keyword`](pkg/tools/search_asset_keyword.go) - Wildcard keyword search for assets
+- [`search_data_class`](pkg/tools/search_data_classes.go) - Search for data classes with filters
+- [`search_data_classification_match`](pkg/tools/search_data_classification_matches.go) - Search for associations between data classes and assets
+- [`get_lineage_entity`](pkg/tools/get_lineage_entity.go) - Get metadata about a specific entity in the technical lineage graph
+- [`get_lineage_upstream`](pkg/tools/get_lineage_upstream.go) - Get upstream technical lineage (sources) for a data entity
+- [`get_lineage_downstream`](pkg/tools/get_lineage_downstream.go) - Get downstream technical lineage (consumers) for a data entity
+- [`search_lineage_entities`](pkg/tools/search_lineage_entities.go) - Search for entities in the technical lineage graph
+- [`get_lineage_transformation`](pkg/tools/get_lineage_transformation.go) - Get details and logic of a specific data transformation
+- [`search_lineage_transformations`](pkg/tools/search_lineage_transformations.go) - Search for transformations in the technical lineage graph
 
 ## Quick Start
 
@@ -162,7 +172,7 @@ Here's how to integrate with some popular clients assuming you have a configurat
 ## Enabling or disabling specific tools
 
 You can enable or disable specific tools by passing command line parameters, setting environment variables, or customizing the `mcp.yaml` configuration file.
-You can specify tools to enable or disable by using the tool names listed above (e.g. `asset_details_get`).  For more information, see the [CONFIG.md](docs/CONFIG.md) documentation.
+You can specify tools to enable or disable by using the tool names listed above (e.g. `get_asset_details`).  For more information, see the [CONFIG.md](docs/CONFIG.md) documentation.
 
 By default, all tools are enabled. Specifying tools to be enabled will enable *only* those tools.  Disabling tools will disable *only* those tools and leave all others enabled.
 At present, enabling and disabling at the same time is not supported. 

@@ -1,4 +1,4 @@
-package keyword_search_test
+package search_asset_keyword_test
 
 import (
 	"net/http"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/keyword_search"
+	tools "github.com/collibra/chip/pkg/tools/search_asset_keyword"
 	"github.com/collibra/chip/pkg/tools/testutil"
 	"github.com/google/uuid"
 )
@@ -33,7 +33,7 @@ func TestKeywordSearch(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := keyword_search.NewTool(client).Handler(t.Context(), keyword_search.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Query: "revenue",
 	})
 	if err != nil {

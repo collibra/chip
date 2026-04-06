@@ -23,7 +23,7 @@ type Output struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:        "data_classification_match_add",
+		Name:        "add_data_classification_match",
 		Description: "Associate a data classification (data class) with a specific data asset in Collibra. Requires both the asset UUID and the classification UUID.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.classify", "dgc.catalog"},

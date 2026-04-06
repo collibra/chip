@@ -1,4 +1,4 @@
-package keyword_search
+package search_asset_keyword
 
 import (
 	"context"
@@ -38,7 +38,7 @@ type Resource struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:        "asset_keyword_search",
+		Name:        "search_asset_keyword",
 		Description: "Perform a wildcard keyword search for assets in the Collibra knowledge graph. Supports filtering by resource type, community, domain, asset type, status, and creator.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

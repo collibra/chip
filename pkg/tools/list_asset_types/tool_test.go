@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/list_asset_types"
+	tools "github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/testutil"
 	"github.com/google/uuid"
 )
@@ -39,7 +39,7 @@ func TestListAssetTypes(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := list_asset_types.NewTool(client).Handler(t.Context(), list_asset_types.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		Limit: 100,
 	})
 	if err != nil {

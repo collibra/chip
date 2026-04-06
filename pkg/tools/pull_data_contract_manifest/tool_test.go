@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
+	tools "github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/testutil"
 	"github.com/google/uuid"
 )
@@ -29,7 +29,7 @@ func TestPullDataContractManifest(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := pull_data_contract_manifest.NewTool(client).Handler(t.Context(), pull_data_contract_manifest.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		DataContractID: contractId.String(),
 	})
 	if err != nil {
@@ -54,7 +54,7 @@ func TestPullDataContractManifestInvalidUUID(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := pull_data_contract_manifest.NewTool(client).Handler(t.Context(), pull_data_contract_manifest.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		DataContractID: "invalid-uuid",
 	})
 	if err != nil {
@@ -80,7 +80,7 @@ func TestPullDataContractManifestNotFound(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := pull_data_contract_manifest.NewTool(client).Handler(t.Context(), pull_data_contract_manifest.Input{
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		DataContractID: contractId.String(),
 	})
 	if err != nil {

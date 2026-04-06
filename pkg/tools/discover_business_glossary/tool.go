@@ -1,4 +1,4 @@
-package ask_glossary
+package discover_business_glossary
 
 import (
 	"context"
@@ -18,8 +18,8 @@ type Output struct {
 
 func NewTool(collibraHttpClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:        "business_glossary_discover",
-		Description: "Ask the business glossary agent questions about terms and definitions in Collibra.",
+		Name:        "discover_business_glossary",
+		Description: "Perform a semantic search across business glossary content in Collibra. Ask natural language questions to discover business terms, acronyms, KPIs, and other business glossary content.",
 		Handler:     handler(collibraHttpClient),
 		Permissions: []string{"dgc.ai-copilot"},
 	}

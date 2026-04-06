@@ -21,7 +21,7 @@ type Output struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:        "data_classification_match_remove",
+		Name:        "remove_data_classification_match",
 		Description: "Remove a classification match (association between a data class and an asset) from Collibra. Requires the UUID of the classification match to remove.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.classify", "dgc.catalog", "dgc.data-classes-edit"},
