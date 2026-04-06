@@ -12,17 +12,25 @@ const maxOptions = 20
 
 // Input defines the input parameters for the prepare_create_asset tool.
 type Input struct {
-	AssetName       string   `json:"asset_name" jsonschema:"The name of the asset to create"`
-	AssetTypeID     string   `json:"asset_type_id,omitempty" jsonschema:"Optional. The publicId of the asset type"`
-	DomainID        string   `json:"domain_id,omitempty" jsonschema:"Optional. The ID of the target domain"`
-	AttributeTypeIDs []string `json:"attribute_type_ids,omitempty" jsonschema:"Optional. List of attribute type IDs to hydrate schema for"`
+	AssetName        string   `json:"assetName" jsonschema:"The name of the asset to create"`
+	AssetTypeID      string   `json:"assetTypeId,omitempty" jsonschema:"Optional. The publicId of the asset type"`
+	DomainID         string   `json:"domainId,omitempty" jsonschema:"Optional. The ID of the target domain"`
+	AttributeTypeIDs []string `json:"attributeTypeIds,omitempty" jsonschema:"Optional. List of attribute type IDs to hydrate schema for"`
 }
 
 // AssetTypeOption represents an asset type option returned when the asset type is missing.
 type AssetTypeOption struct {
 	ID       string `json:"id" jsonschema:"The internal ID of the asset type"`
-	PublicID string `json:"public_id" jsonschema:"The public ID of the asset type"`
+	PublicID string `json:"publicId" jsonschema:"The public ID of the asset type"`
 	Name     string `json:"name" jsonschema:"The name of the asset type"`
+}
+
+// ResolvedInfo contains the resolved UUIDs needed by create_asset.
+type ResolvedInfo struct {
+	AssetTypeID   string `json:"assetTypeId" jsonschema:"The resolved UUID of the asset type — pass this to create_asset"`
+	AssetTypeName string `json:"assetTypeName" jsonschema:"The resolved name of the asset type"`
+	DomainID      string `json:"domainId" jsonschema:"The resolved UUID of the domain — pass this to create_asset"`
+	DomainName    string `json:"domainName" jsonschema:"The resolved name of the domain"`
 }
 
 // DomainOption represents a domain option returned when the domain is missing.
@@ -38,9 +46,9 @@ type AttributeSchema struct {
 	Kind            string                         `json:"kind" jsonschema:"The data type of the attribute"`
 	Required        bool                           `json:"required" jsonschema:"Whether the attribute is mandatory"`
 	Constraints     *clients.PrepareCreateConstraints `json:"constraints,omitempty" jsonschema:"Optional. Validation constraints for the attribute"`
-	AllowedValues   []string                       `json:"allowed_values,omitempty" jsonschema:"Optional. List of permitted values if restricted"`
+	AllowedValues   []string                       `json:"allowedValues,omitempty" jsonschema:"Optional. List of permitted values if restricted"`
 	Direction       string                         `json:"direction,omitempty" jsonschema:"Optional. Direction for relation attributes"`
-	TargetAssetType *AssetTypeOption               `json:"target_asset_type,omitempty" jsonschema:"Optional. Target asset type for relation attributes"`
+	TargetAssetType *AssetTypeOption               `json:"targetAssetType,omitempty" jsonschema:"Optional. Target asset type for relation attributes"`
 }
 
 // DuplicateAsset represents an existing asset found during duplicate checking.
@@ -53,10 +61,11 @@ type DuplicateAsset struct {
 type Output struct {
 	Status           string            `json:"status" jsonschema:"The preparation status: ready, incomplete, needs_clarification, or duplicate_found"`
 	Message          string            `json:"message" jsonschema:"A human-readable message explaining the status"`
-	AssetTypeOptions []AssetTypeOption `json:"asset_type_options,omitempty" jsonschema:"Optional. Available asset types when asset type is missing"`
-	DomainOptions    []DomainOption    `json:"domain_options,omitempty" jsonschema:"Optional. Available domains when domain is missing"`
-	OptionsTruncated bool             `json:"options_truncated" jsonschema:"Whether options were truncated to the maximum limit of 20"`
-	AttributeSchema  []AttributeSchema `json:"attribute_schema,omitempty" jsonschema:"Optional. Full attribute schemas for the asset type"`
+	Resolved         *ResolvedInfo     `json:"resolved,omitempty" jsonschema:"Optional. Resolved UUIDs for asset type and domain — present when status is ready. Pass these to create_asset."`
+	AssetTypeOptions []AssetTypeOption `json:"assetTypeOptions,omitempty" jsonschema:"Optional. Available asset types when asset type is missing"`
+	DomainOptions    []DomainOption    `json:"domainOptions,omitempty" jsonschema:"Optional. Available domains when domain is missing"`
+	OptionsTruncated bool             `json:"optionsTruncated" jsonschema:"Whether options were truncated to the maximum limit of 20"`
+	AttributeSchema  []AttributeSchema `json:"attributeSchema,omitempty" jsonschema:"Optional. Full attribute schemas for the asset type"`
 	Duplicates       []DuplicateAsset  `json:"duplicates,omitempty" jsonschema:"Optional. Existing assets that may be duplicates"`
 }
 
@@ -210,8 +219,14 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 
 		return Output{
-			Status:          string(clients.StatusReady),
-			Message:         "All validations passed. Ready to create asset \"" + input.AssetName + "\" of type \"" + assetType.Name + "\" in domain \"" + domain.Name + "\".",
+			Status:  string(clients.StatusReady),
+			Message: "All validations passed. Ready to create asset \"" + input.AssetName + "\" of type \"" + assetType.Name + "\" in domain \"" + domain.Name + "\".",
+			Resolved: &ResolvedInfo{
+				AssetTypeID:   assetType.ID,
+				AssetTypeName: assetType.Name,
+				DomainID:      domain.ID,
+				DomainName:    domain.Name,
+			},
 			AttributeSchema: schemas,
 		}, nil
 	}
