@@ -12,15 +12,15 @@ import (
 // Input defines the parameters for the create_asset tool.
 type Input struct {
 	Name        string            `json:"name" jsonschema:"The name of the asset to create"`
-	AssetTypeID string            `json:"asset_type_id" jsonschema:"The UUID of the asset type"`
-	DomainID    string            `json:"domain_id" jsonschema:"The UUID of the domain to create the asset in"`
-	DisplayName string            `json:"display_name,omitempty" jsonschema:"Optional. The display name of the asset"`
+	AssetTypeID string            `json:"assetTypeId" jsonschema:"The UUID of the asset type (from prepare_create_asset resolved.assetTypeId)"`
+	DomainID    string            `json:"domainId" jsonschema:"The UUID of the domain to create the asset in (from prepare_create_asset resolved.domainId)"`
+	DisplayName string            `json:"displayName,omitempty" jsonschema:"Optional. The display name of the asset"`
 	Attributes  map[string]string `json:"attributes,omitempty" jsonschema:"Optional. Map of attribute type UUID to attribute value"`
 }
 
 // Output defines the result of the create_asset tool.
 type Output struct {
-	AssetID string `json:"asset_id" jsonschema:"The UUID of the newly created asset"`
+	AssetID string `json:"assetId" jsonschema:"The UUID of the newly created asset"`
 }
 
 // NewTool creates a new create_asset tool instance.
