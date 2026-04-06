@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
+	"github.com/collibra/chip/pkg/tools/add_business_term"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
@@ -51,6 +52,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_table_semantics.NewTool(client))
 	toolRegister(server, toolConfig, search_lineage_entities.NewTool(client))
 	toolRegister(server, toolConfig, search_lineage_transformations.NewTool(client))
+	toolRegister(server, toolConfig, add_business_term.NewTool(client))
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {
