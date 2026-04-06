@@ -20,6 +20,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
+	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/prepare_add_business_term"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
@@ -55,6 +56,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_table_semantics.NewTool(client))
 	toolRegister(server, toolConfig, search_lineage_entities.NewTool(client))
 	toolRegister(server, toolConfig, search_lineage_transformations.NewTool(client))
+	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, add_business_term.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 }
