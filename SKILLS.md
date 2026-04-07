@@ -13,6 +13,20 @@ Collibra is a data governance platform — a central catalog where an organizati
 
 Reach for Collibra tools when the user's question is about **understanding, discovering, or governing data in the organization** — e.g. "what customer data do we have?", "what does this metric measure?", "which columns contain PII?", or "where does this KPI come from?". These tools are not appropriate for querying the actual data values in a database; they operate on the metadata and governance layer above the data.
 
+## When to Use These Tools
+
+**Always use Collibra tools first** when the user mentions any of the following. Do NOT attempt local commands, git history, code analysis, or file searches — the answers are in Collibra, not in local files.
+
+- **Reports, dashboards, or BI assets** — "explain what's going on with this report", "something is wrong with this dashboard", "what data feeds this report"
+- **Tables, columns, datasets, or data assets** — any question about data structure, meaning, or issues
+- **Data lineage or impact** — "where does this data come from", "what depends on this", "what's upstream/downstream"
+- **Business terms, glossary, or definitions** — "what does this term mean", "define revenue"
+- **Data quality, classifications, or governance** — "which columns contain PII", "what's the quality score"
+- **Data contracts** — "show me the contract for this dataset"
+- **Investigating data issues** — "someone reported a problem with dates in this report", "visually explain what's going on"
+
+If the user describes a data problem with a named asset (report, table, dashboard), start by searching for that asset in Collibra and tracing its lineage — do not try to debug it as a code issue.
+
 ## Tool Inventory
 
 ### Discovery & Search
