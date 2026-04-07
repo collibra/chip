@@ -32,6 +32,14 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 )
 
+// CopilotToolNames lists tool names that are routed to the copilot service.
+// Used by chip-service to direct these requests to the copilot backend
+// instead of the standard DGC API.
+var CopilotToolNames = []string{
+	"discover_data_assets",
+	"discover_business_glossary",
+}
+
 func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) {
 	toolRegister(server, toolConfig, discover_data_assets.NewTool(client))
 	toolRegister(server, toolConfig, discover_business_glossary.NewTool(client))
