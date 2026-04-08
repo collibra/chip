@@ -44,13 +44,13 @@ type DuplicateAssetInfo struct {
 
 // AttributeSchemaEntry represents the full schema for a single attribute type.
 type AttributeSchemaEntry struct {
-	ID            string             `json:"id" jsonschema:"Attribute type ID"`
-	Name          string             `json:"name" jsonschema:"Attribute type name"`
-	Kind          string             `json:"kind" jsonschema:"Attribute data type"`
-	Required      bool               `json:"required" jsonschema:"Whether this attribute is mandatory"`
+	ID            string                `json:"id" jsonschema:"Attribute type ID"`
+	Name          string                `json:"name" jsonschema:"Attribute type name"`
+	Kind          string                `json:"kind" jsonschema:"Attribute data type"`
+	Required      bool                  `json:"required" jsonschema:"Whether this attribute is mandatory"`
 	Constraints   *AttributeConstraints `json:"constraints,omitempty" jsonschema:"Optional. Validation rules and limits"`
-	AllowedValues []string           `json:"allowed_values,omitempty" jsonschema:"Optional. Permitted values if constrained"`
-	RelationType  *RelationTypeInfo  `json:"relation_type,omitempty" jsonschema:"Optional. Relation type with direction and target"`
+	AllowedValues []string              `json:"allowed_values,omitempty" jsonschema:"Optional. Permitted values if constrained"`
+	RelationType  *RelationTypeInfo     `json:"relation_type,omitempty" jsonschema:"Optional. Relation type with direction and target"`
 }
 
 // AttributeConstraints represents validation constraints for an attribute.
@@ -80,7 +80,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:        "prepare_add_business_term",
 		Description: "Validate business term data, resolve domains, check for duplicates, and hydrate attribute schemas. Returns structured status with pre-fetched options for missing fields.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{"dgc.ai-copilot"},
+		Permissions: []string{},
 	}
 }
 

@@ -40,7 +40,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:        "add_business_term",
 		Description: "Create a business term asset with definition and optional attributes in Collibra.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{"dgc.ai-copilot"},
+		Permissions: []string{},
 	}
 }
 

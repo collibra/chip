@@ -41,14 +41,14 @@ type DomainOption struct {
 
 // AttributeSchema represents the full schema for an attribute type.
 type AttributeSchema struct {
-	ID              string                         `json:"id" jsonschema:"The ID of the attribute type"`
-	Name            string                         `json:"name" jsonschema:"The name of the attribute type"`
-	Kind            string                         `json:"kind" jsonschema:"The data type of the attribute"`
-	Required        bool                           `json:"required" jsonschema:"Whether the attribute is mandatory"`
+	ID              string                            `json:"id" jsonschema:"The ID of the attribute type"`
+	Name            string                            `json:"name" jsonschema:"The name of the attribute type"`
+	Kind            string                            `json:"kind" jsonschema:"The data type of the attribute"`
+	Required        bool                              `json:"required" jsonschema:"Whether the attribute is mandatory"`
 	Constraints     *clients.PrepareCreateConstraints `json:"constraints,omitempty" jsonschema:"Optional. Validation constraints for the attribute"`
-	AllowedValues   []string                       `json:"allowedValues,omitempty" jsonschema:"Optional. List of permitted values if restricted"`
-	Direction       string                         `json:"direction,omitempty" jsonschema:"Optional. Direction for relation attributes"`
-	TargetAssetType *AssetTypeOption               `json:"targetAssetType,omitempty" jsonschema:"Optional. Target asset type for relation attributes"`
+	AllowedValues   []string                          `json:"allowedValues,omitempty" jsonschema:"Optional. List of permitted values if restricted"`
+	Direction       string                            `json:"direction,omitempty" jsonschema:"Optional. Direction for relation attributes"`
+	TargetAssetType *AssetTypeOption                  `json:"targetAssetType,omitempty" jsonschema:"Optional. Target asset type for relation attributes"`
 }
 
 // DuplicateAsset represents an existing asset found during duplicate checking.
@@ -64,7 +64,7 @@ type Output struct {
 	Resolved         *ResolvedInfo     `json:"resolved,omitempty" jsonschema:"Optional. Resolved UUIDs for asset type and domain — present when status is ready. Pass these to create_asset."`
 	AssetTypeOptions []AssetTypeOption `json:"assetTypeOptions,omitempty" jsonschema:"Optional. Available asset types when asset type is missing"`
 	DomainOptions    []DomainOption    `json:"domainOptions,omitempty" jsonschema:"Optional. Available domains when domain is missing"`
-	OptionsTruncated bool             `json:"optionsTruncated" jsonschema:"Whether options were truncated to the maximum limit of 20"`
+	OptionsTruncated bool              `json:"optionsTruncated" jsonschema:"Whether options were truncated to the maximum limit of 20"`
 	AttributeSchema  []AttributeSchema `json:"attributeSchema,omitempty" jsonschema:"Optional. Full attribute schemas for the asset type"`
 	Duplicates       []DuplicateAsset  `json:"duplicates,omitempty" jsonschema:"Optional. Existing assets that may be duplicates"`
 }
@@ -75,7 +75,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:        "prepare_create_asset",
 		Description: "Resolve asset type, domain, hydrate full attribute schema, check duplicates — return structured status for asset creation readiness.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{"dgc.ai-copilot"},
+		Permissions: []string{},
 	}
 }
 
