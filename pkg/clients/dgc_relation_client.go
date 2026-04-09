@@ -10,7 +10,7 @@ import (
 
 // Well-known Collibra UUIDs for relation and attribute types.
 const (
-	DefinitionAttributeTypeID           = "00000000-0000-0000-0000-000000003008"
+	DefinitionAttributeTypeID           = "00000000-0000-0000-0000-000000000202"
 	DataAttributeRepresentsMeasureRelID = "00000000-0000-0000-0000-000000007200"
 	GenericConnectedAssetRelID          = "00000000-0000-0000-0000-000000007038"
 	ColumnToTableRelID                  = "00000000-0000-0000-0000-000000007042"
