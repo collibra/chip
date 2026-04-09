@@ -58,7 +58,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		for _, da := range dataAttributes {
 			description := clients.FetchDescription(ctx, collibraClient, da.ID)
 
-			rawMeasures, err := clients.FindConnectedAssets(ctx, collibraClient, da.ID, clients.DataAttributeRepresentsMeasureRelID)
+			rawMeasures, err := clients.FindConnectedAssets(ctx, collibraClient, da.ID, clients.MeasureIsCalculatedUsingDataElementRelID)
 			if err != nil {
 				return Output{}, err
 			}
@@ -73,7 +73,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				})
 			}
 
-			rawGenericAssets, err := clients.FindConnectedAssets(ctx, collibraClient, da.ID, clients.GenericConnectedAssetRelID)
+			rawGenericAssets, err := clients.FindConnectedAssets(ctx, collibraClient, da.ID, clients.BusinessAssetRepresentsDataAssetRelID)
 			if err != nil {
 				return Output{}, err
 			}

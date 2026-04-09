@@ -56,7 +56,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{Error: "businessTermId is required"}, nil
 		}
 
-		dataAttributes, err := clients.FindConnectedAssets(ctx, collibraClient, input.BusinessTermID, clients.GenericConnectedAssetRelID)
+		dataAttributes, err := clients.FindConnectedAssets(ctx, collibraClient, input.BusinessTermID, clients.BusinessAssetRepresentsDataAssetRelID)
 		if err != nil {
 			return Output{}, err
 		}
@@ -79,7 +79,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 					Description: clients.FetchDescription(ctx, collibraClient, col.ID),
 				}
 
-				tables, err := clients.FindConnectedAssets(ctx, collibraClient, col.ID, clients.ColumnToTableRelID)
+				tables, err := clients.FindConnectedAssets(ctx, collibraClient, col.ID, clients.ColumnIsPartOfTableRelID)
 				if err != nil {
 					return Output{}, err
 				}

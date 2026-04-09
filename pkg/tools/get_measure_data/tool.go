@@ -55,7 +55,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{Error: "measureId is required"}, nil
 		}
 
-		dataAttributes, err := clients.FindConnectedAssets(ctx, collibraClient, input.MeasureID, clients.DataAttributeRepresentsMeasureRelID)
+		dataAttributes, err := clients.FindConnectedAssets(ctx, collibraClient, input.MeasureID, clients.MeasureIsCalculatedUsingDataElementRelID)
 		if err != nil {
 			return Output{}, err
 		}
@@ -76,7 +76,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 					Description: clients.FetchDescription(ctx, collibraClient, col.ID),
 				}
 
-				tables, err := clients.FindConnectedAssets(ctx, collibraClient, col.ID, clients.ColumnToTableRelID)
+				tables, err := clients.FindConnectedAssets(ctx, collibraClient, col.ID, clients.ColumnIsPartOfTableRelID)
 				if err != nil {
 					return Output{}, err
 				}

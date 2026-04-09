@@ -10,12 +10,12 @@ import (
 
 // Well-known Collibra UUIDs for relation and attribute types.
 const (
-	DefinitionAttributeTypeID           = "00000000-0000-0000-0000-000000000202"
-	DataAttributeRepresentsMeasureRelID = "00000000-0000-0000-0000-000000007200"
-	GenericConnectedAssetRelID          = "00000000-0000-0000-0000-000000007038"
-	ColumnToTableRelID                  = "00000000-0000-0000-0000-000000007042"
-	DataAttributeRelID1                 = "00000000-0000-0000-0000-000000007094"
-	DataAttributeRelID2                 = "cd000000-0000-0000-0000-000000000023"
+	DefinitionAttributeTypeID                = "00000000-0000-0000-0000-000000000202"
+	MeasureIsCalculatedUsingDataElementRelID = "00000000-0000-0000-0000-000000007200"
+	BusinessAssetRepresentsDataAssetRelID    = "00000000-0000-0000-0000-000000007038"
+	ColumnIsPartOfTableRelID                 = "00000000-0000-0000-0000-000000007042"
+	DataAttributeRepresentsColumnRelID       = "00000000-0000-0000-0000-000000007094"
+	ColumnIsSourceForDataAttributeRelID      = "00000000-0000-0000-0000-120000000011"
 )
 
 type RelationsQueryParams struct {
@@ -164,7 +164,7 @@ func FindColumnsForDataAttribute(ctx context.Context, client *http.Client, dataA
 	seen := make(map[string]struct{})
 	result := make([]ConnectedAsset, 0)
 
-	for _, relID := range []string{DataAttributeRelID1, DataAttributeRelID2} {
+	for _, relID := range []string{DataAttributeRepresentsColumnRelID, ColumnIsSourceForDataAttributeRelID} {
 		assets, err := FindConnectedAssets(ctx, client, dataAttributeID, relID)
 		if err != nil {
 			return nil, err
