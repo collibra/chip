@@ -30,8 +30,8 @@ func TestAddBusinessTermSuccess(t *testing.T) {
 		if req.AssetId != "new-asset-uuid-456" {
 			t.Errorf("expected assetId 'new-asset-uuid-456', got '%s'", req.AssetId)
 		}
-		if req.TypeId != "00000000-0000-0000-0000-000000003114" {
-			t.Errorf("expected definition typeId '00000000-0000-0000-0000-000000003114', got '%s'", req.TypeId)
+		if req.TypeId != "00000000-0000-0000-0000-000000000202" {
+			t.Errorf("expected definition typeId '00000000-0000-0000-0000-000000000202', got '%s'", req.TypeId)
 		}
 		if req.Value != "Total income generated from sales" {
 			t.Errorf("expected value 'Total income generated from sales', got '%s'", req.Value)
