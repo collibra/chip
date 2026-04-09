@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // PrepareCreateAssetStatus represents the status of asset creation readiness.
@@ -243,6 +244,77 @@ func GetAttributeTypeByID(ctx context.Context, client *http.Client, attrTypeID s
 		return nil, fmt.Errorf("decoding attribute type response: %w", err)
 	}
 	return &result, nil
+}
+
+// prepareCreateResourceRef is a resource reference with a discriminator.
+type prepareCreateResourceRef struct {
+	ID                    string `json:"id"`
+	Name                  string `json:"name"`
+	ResourceDiscriminator string `json:"resourceDiscriminator"`
+}
+
+// prepareCreateCharacteristicTypeRef represents a characteristic type reference from the API.
+type prepareCreateCharacteristicTypeRef struct {
+	ID                        string                   `json:"id"`
+	AssignedResourceReference prepareCreateResourceRef `json:"assignedResourceReference"`
+	MinimumOccurrences        int                      `json:"minimumOccurrences"`
+	MaximumOccurrences        *int                     `json:"maximumOccurrences"`
+}
+
+// prepareCreateRawAssignment represents the raw API response for an assignment.
+type prepareCreateRawAssignment struct {
+	ID                                   string                               `json:"id"`
+	AssignedCharacteristicTypeReferences []prepareCreateCharacteristicTypeRef `json:"assignedCharacteristicTypeReferences"`
+}
+
+// PrepareCreateAssignment represents a flattened attribute assignment for an asset type.
+type PrepareCreateAssignment struct {
+	AttributeTypeID string
+	Name            string
+	Min             int
+}
+
+// GetScopedAssignments fetches attribute assignments for an asset type and flattens them.
+func GetScopedAssignments(ctx context.Context, client *http.Client, assetTypeID string) ([]PrepareCreateAssignment, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/assignments/assetType/%s", url.PathEscape(assetTypeID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating get assignments request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("getting assignments for asset type %s: %w", assetTypeID, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getting assignments for asset type %s: status %d: %s", assetTypeID, resp.StatusCode, string(body))
+	}
+
+	var rawAssignments []prepareCreateRawAssignment
+	if err := json.NewDecoder(resp.Body).Decode(&rawAssignments); err != nil {
+		return nil, fmt.Errorf("decoding assignments response: %w", err)
+	}
+
+	var assignments []PrepareCreateAssignment
+	for _, raw := range rawAssignments {
+		for _, ref := range raw.AssignedCharacteristicTypeReferences {
+			disc := ref.AssignedResourceReference.ResourceDiscriminator
+			if disc != "" && !strings.HasSuffix(disc, "AttributeType") {
+				continue
+			}
+			assignments = append(assignments, PrepareCreateAssignment{
+				AttributeTypeID: ref.AssignedResourceReference.ID,
+				Name:            ref.AssignedResourceReference.Name,
+				Min:             ref.MinimumOccurrences,
+			})
+		}
+	}
+
+	return assignments, nil
 }
 
 // SearchAssetsForDuplicate searches for existing assets by name, type, and domain.

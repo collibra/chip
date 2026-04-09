@@ -12,10 +12,9 @@ const maxOptions = 20
 
 // Input defines the input parameters for the prepare_create_asset tool.
 type Input struct {
-	AssetName        string   `json:"assetName" jsonschema:"The name of the asset to create"`
-	AssetTypeID      string   `json:"assetTypeId,omitempty" jsonschema:"Optional. The publicId of the asset type"`
-	DomainID         string   `json:"domainId,omitempty" jsonschema:"Optional. The ID of the target domain"`
-	AttributeTypeIDs []string `json:"attributeTypeIds,omitempty" jsonschema:"Optional. List of attribute type IDs to hydrate schema for"`
+	AssetName   string `json:"assetName" jsonschema:"The name of the asset to create"`
+	AssetTypeID string `json:"assetTypeId,omitempty" jsonschema:"Optional. The publicId of the asset type"`
+	DomainID    string `json:"domainId,omitempty" jsonschema:"Optional. The ID of the target domain"`
 }
 
 // AssetTypeOption represents an asset type option returned when the asset type is missing.
@@ -186,10 +185,15 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}, nil
 		}
 
-		// Hydrate attribute schemas
+		// Auto-hydrate attribute schemas from scoped assignments
+		assignments, err := clients.GetScopedAssignments(ctx, collibraClient, assetType.ID)
+		if err != nil {
+			return Output{}, err
+		}
+
 		var schemas []AttributeSchema
-		for _, attrID := range input.AttributeTypeIDs {
-			attrType, err := clients.GetAttributeTypeByID(ctx, collibraClient, attrID)
+		for _, assignment := range assignments {
+			attrType, err := clients.GetAttributeTypeByID(ctx, collibraClient, assignment.AttributeTypeID)
 			if err != nil {
 				return Output{}, err
 			}
@@ -197,7 +201,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				ID:       attrType.ID,
 				Name:     attrType.Name,
 				Kind:     attrType.Kind,
-				Required: attrType.Required,
+				Required: attrType.Required || assignment.Min > 0,
 			}
 			if attrType.Constraints != nil {
 				schema.Constraints = attrType.Constraints

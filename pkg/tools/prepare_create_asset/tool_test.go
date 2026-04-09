@@ -1,6 +1,7 @@
 package prepare_create_asset_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -43,10 +44,32 @@ func TestReadyStatus(t *testing.T) {
 		}
 	}))
 
+	// Scoped assignments for auto-hydration
+	handler.Handle("/rest/2.0/assignments/assetType/at-123", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Raw API format with nested assignedCharacteristicTypeReferences
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{
+				"id": "assign-1",
+				"assignedCharacteristicTypeReferences": []map[string]interface{}{
+					{
+						"id": "ref-1",
+						"assignedResourceReference": map[string]interface{}{
+							"id":                    "attr-1",
+							"name":                  "Description",
+							"resourceDiscriminator": "StringAttributeType",
+						},
+						"minimumOccurrences": 1,
+					},
+				},
+			},
+		})
+	}))
+
 	// Attribute type hydration
 	handler.Handle("/rest/2.0/attributeTypes/attr-1", testutil.JsonHandlerOut(func(_ *http.Request) (int, clients.PrepareCreateAttributeType) {
 		return http.StatusOK, clients.PrepareCreateAttributeType{
-			ID: "attr-1", Name: "Description", Kind: "STRING", Required: true,
+			ID: "attr-1", Name: "Description", Kind: "STRING", Required: false,
 			AllowedValues: []string{"A", "B"},
 		}
 	}))
@@ -56,10 +79,9 @@ func TestReadyStatus(t *testing.T) {
 
 	client := testutil.NewClient(server)
 	output, err := prepare_create_asset.NewTool(client).Handler(t.Context(), prepare_create_asset.Input{
-		AssetName:        "Campaign Data",
-		AssetTypeID:      "DataSet",
-		DomainID:         "dom-456",
-		AttributeTypeIDs: []string{"attr-1"},
+		AssetName:   "Campaign Data",
+		AssetTypeID: "DataSet",
+		DomainID:    "dom-456",
 	})
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -74,8 +96,9 @@ func TestReadyStatus(t *testing.T) {
 	if output.AttributeSchema[0].Kind != "STRING" {
 		t.Errorf("Expected kind 'STRING', got: %s", output.AttributeSchema[0].Kind)
 	}
+	// Required should be true because assignment.Min > 0
 	if !output.AttributeSchema[0].Required {
-		t.Errorf("Expected attribute to be required")
+		t.Errorf("Expected attribute to be required (min occurrences = 1)")
 	}
 	if len(output.AttributeSchema[0].AllowedValues) != 2 {
 		t.Errorf("Expected 2 allowed values, got: %d", len(output.AttributeSchema[0].AllowedValues))
@@ -342,6 +365,27 @@ func TestReadyWithRelationAttribute(t *testing.T) {
 		}
 	}))
 
+	// Scoped assignments returning a relation attribute
+	handler.Handle("/rest/2.0/assignments/assetType/at-123", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{
+				"id": "assign-1",
+				"assignedCharacteristicTypeReferences": []map[string]interface{}{
+					{
+						"id": "ref-1",
+						"assignedResourceReference": map[string]interface{}{
+							"id":                    "rel-1",
+							"name":                  "Owner",
+							"resourceDiscriminator": "StringAttributeType",
+						},
+						"minimumOccurrences": 0,
+					},
+				},
+			},
+		})
+	}))
+
 	handler.Handle("/rest/2.0/attributeTypes/rel-1", testutil.JsonHandlerOut(func(_ *http.Request) (int, clients.PrepareCreateAttributeType) {
 		return http.StatusOK, clients.PrepareCreateAttributeType{
 			ID: "rel-1", Name: "Owner", Kind: "RELATION", Required: false,
@@ -357,10 +401,9 @@ func TestReadyWithRelationAttribute(t *testing.T) {
 
 	client := testutil.NewClient(server)
 	output, err := prepare_create_asset.NewTool(client).Handler(t.Context(), prepare_create_asset.Input{
-		AssetName:        "Campaign Data",
-		AssetTypeID:      "DataSet",
-		DomainID:         "dom-456",
-		AttributeTypeIDs: []string{"rel-1"},
+		AssetName:   "Campaign Data",
+		AssetTypeID: "DataSet",
+		DomainID:    "dom-456",
 	})
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -410,6 +453,12 @@ func TestReadyNoAttributes(t *testing.T) {
 			Results: []clients.PrepareCreateAssetResult{},
 			Total:   0,
 		}
+	}))
+
+	// Empty scoped assignments
+	handler.Handle("/rest/2.0/assignments/assetType/at-123", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
 	}))
 
 	server := httptest.NewServer(handler)
