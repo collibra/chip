@@ -12,7 +12,7 @@ const (
 	// BusinessTermTypeID is the fixed type public ID for Business Term assets.
 	BusinessTermTypeID = "BusinessTerm"
 	// DefinitionAttributeTypeID is the type ID for the Definition attribute.
-	DefinitionAttributeTypeID = "00000000-0000-0000-0000-000000003114"
+	DefinitionAttributeTypeID = "00000000-0000-0000-0000-000000000202"
 )
 
 // InputAttribute represents an additional attribute to add to the business term.
