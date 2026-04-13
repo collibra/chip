@@ -28,7 +28,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Associate a data classification (data class) with a specific data asset in Collibra. Requires both the asset UUID and the classification UUID.",
 		Handler:     handler(collibraClient),
 		Permissions:  []string{"dgc.classify", "dgc.catalog"},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(false)},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
 	}
 }
 
