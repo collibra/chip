@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -18,6 +19,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageEn
 		Description: "Get detailed metadata about a specific data entity in the technical lineage graph. Technical lineage covers all data objects across external systems -- including source code, transformations, and temporary tables -- regardless of whether they are registered in Collibra (unlike business lineage, which only covers assets ingested into the Data Catalog). An entity represents any tracked data asset such as a table, column, file, report, API endpoint, or topic. Returns the entity's name, type, source systems, parent entity, and linked Data Governance Catalog (DGC) identifier. Use this when you have an entity ID from a lineage traversal, search result, or user input and need its full details.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 

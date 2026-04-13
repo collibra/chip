@@ -11,6 +11,7 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -42,6 +43,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 

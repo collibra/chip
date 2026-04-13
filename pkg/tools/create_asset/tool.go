@@ -7,6 +7,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Input defines the parameters for the create_asset tool.
@@ -29,7 +30,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:        "create_asset",
 		Description: "Create a new data asset with optional attributes in Collibra.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions:  []string{},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(false)},
 	}
 }
 
@@ -65,3 +67,5 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		return Output{AssetID: assetResp.ID}, nil
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }

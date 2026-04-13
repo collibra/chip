@@ -8,6 +8,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -24,7 +25,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:        "remove_data_classification_match",
 		Description: "Remove a classification match (association between a data class and an asset) from Collibra. Requires the UUID of the classification match to remove.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{"dgc.classify", "dgc.catalog", "dgc.data-classes-edit"},
+		Permissions:  []string{"dgc.classify", "dgc.catalog", "dgc.data-classes-edit"},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(true), IdempotentHint: true},
 	}
 }
 
@@ -59,3 +61,5 @@ func validateInput(input Input) (Output, bool) {
 
 	return Output{}, false
 }
+
+func boolPtr(b bool) *bool { return &b }

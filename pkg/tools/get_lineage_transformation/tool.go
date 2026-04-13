@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -18,6 +19,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageTr
 		Description: "Get detailed information about a specific data transformation, including its SQL or script logic. A transformation represents a data processing activity (ETL job, SQL query, script, etc.) that connects source entities to target entities in the lineage graph. Use this when you found a transformation ID in an upstream/downstream lineage result and want to see what the transformation actually does -- the SQL query, script content, or processing logic.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 

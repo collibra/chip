@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const maxOptions = 20
@@ -76,6 +77,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Resolve asset type, domain, hydrate full attribute schema, check duplicates — return structured status for asset creation readiness.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 

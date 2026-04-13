@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -21,6 +22,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageDi
 		Description: "Get the upstream technical lineage graph for a data entity -- all direct and indirect source entities that feed data into it, along with the transformations connecting them. This traces through all data objects across external systems (including unregistered assets, temporary tables, and source code), not just assets in the Collibra Data Catalog. Use this to answer \"Where does this data come from?\" or \"What are the sources feeding this table?\" Each relation in the result connects a source entity to a target entity through one or more transformations. Results are paginated.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 
