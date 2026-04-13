@@ -31,7 +31,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Create a new data asset with optional attributes in Collibra.",
 		Handler:     handler(collibraClient),
 		Permissions:  []string{},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(false)},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(false)},
 	}
 }
 
@@ -67,5 +67,3 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		return Output{AssetID: assetResp.ID}, nil
 	}
 }
-
-func boolPtr(b bool) *bool { return &b }

@@ -26,7 +26,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Remove a classification match (association between a data class and an asset) from Collibra. Requires the UUID of the classification match to remove.",
 		Handler:     handler(collibraClient),
 		Permissions:  []string{"dgc.classify", "dgc.catalog", "dgc.data-classes-edit"},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: boolPtr(true), IdempotentHint: true},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true), IdempotentHint: true},
 	}
 }
 
@@ -61,5 +61,3 @@ func validateInput(input Input) (Output, bool) {
 
 	return Output{}, false
 }
-
-func boolPtr(b bool) *bool { return &b }
