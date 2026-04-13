@@ -1,0 +1,65 @@
+package search_data_classification_matches_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/collibra/chip/pkg/clients"
+	tools "github.com/collibra/chip/pkg/tools/search_data_classification_matches"
+	"github.com/collibra/chip/pkg/tools/testutil"
+)
+
+func TestFindClassificationMatches(t *testing.T) {
+	handler := http.NewServeMux()
+	handler.Handle("/rest/catalog/1.0/dataClassification/classificationMatches/bulk", testutil.JsonHandlerOut(func(httpRequest *http.Request) (int, clients.PagedResponseDataClassificationMatch) {
+		return http.StatusOK, clients.PagedResponseDataClassificationMatch{
+			Total:  1,
+			Offset: 0,
+			Limit:  50,
+			Results: []clients.DataClassificationMatch{
+				{
+					ID:     "test-match-id",
+					Status: "ACCEPTED",
+					Asset: clients.NamedResourceReference{
+						ID:   "asset-id",
+						Name: "Test Asset",
+					},
+					Classification: clients.DataClassification{
+						ID:   "classification-id",
+						Name: "Test Classification",
+					},
+				},
+			},
+		}
+	}))
+
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := testutil.NewClient(server)
+	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
+		Statuses: []string{"ACCEPTED"},
+		Limit:    50,
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(output.ClassificationMatches) != 1 {
+		t.Fatalf("Expected 1 classification match, got: %d", len(output.ClassificationMatches))
+	}
+
+	match := output.ClassificationMatches[0]
+	if match.Status != "ACCEPTED" {
+		t.Fatalf("Expected status 'ACCEPTED', got: '%s'", match.Status)
+	}
+
+	if match.Asset.Name != "Test Asset" {
+		t.Fatalf("Expected asset name 'Test Asset', got: '%s'", match.Asset.Name)
+	}
+
+	if match.Classification.Name != "Test Classification" {
+		t.Fatalf("Expected classification name 'Test Classification', got: '%s'", match.Classification.Name)
+	}
+}
