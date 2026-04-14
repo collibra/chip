@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -20,6 +21,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.SearchLineag
 		Description: "Search for transformations in the technical lineage graph by name. Returns a paginated list of matching transformation summaries. Use this to discover ETL jobs, SQL queries, or other processing activities without knowing their IDs. For example, find all transformations with \"etl\" or \"sales\" in the name. To see the full transformation logic (SQL/script), use get_lineage_transformation with the returned ID.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 

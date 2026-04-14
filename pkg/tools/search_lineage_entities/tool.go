@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -22,6 +23,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.SearchLineag
 		Description: "Search for data entities in the technical lineage graph by name, type, or DGC identifier. Technical lineage covers all data objects across external systems -- including source code, transformations, and temporary tables -- regardless of whether they are registered in Collibra (unlike business lineage, which only covers assets ingested into the Data Catalog). Returns a paginated list of matching entities. This is typically the starting tool when you don't have a specific entity ID -- for example, to find all tables with \"sales\" in the name, or to find the lineage entity linked to a specific Collibra catalog asset via its DGC UUID. Supports partial name matching (case insensitive).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 

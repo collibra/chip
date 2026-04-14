@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -21,6 +22,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageDi
 		Description: "Get the downstream technical lineage graph for a data entity -- all direct and indirect consumer entities that are impacted by it, along with the transformations connecting them. This traces through all data objects across external systems (including unregistered assets, temporary tables, and source code), not just assets in the Collibra Data Catalog. Use this to answer \"What depends on this data?\" or \"If this table changes, what else is affected?\" Essential for impact analysis before modifying or deprecating a data asset. Results are paginated.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 

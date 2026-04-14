@@ -7,6 +7,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const businessTermPublicID = "BusinessTerm"
@@ -81,6 +82,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Validate business term data, resolve domains, check for duplicates, and hydrate attribute schemas. Returns structured status with pre-fetched options for missing fields.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 

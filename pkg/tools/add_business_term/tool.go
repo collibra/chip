@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const (
@@ -40,7 +41,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:        "add_business_term",
 		Description: "Create a business term asset with definition and optional attributes in Collibra.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions:  []string{},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
 	}
 }
 
