@@ -15,6 +15,16 @@ Reach for Collibra tools when the user's question is about **understanding, disc
 
 ## Tool Inventory
 
+### Asset Creation
+
+**`prepare_create_asset`** — Resolve asset type and domain by name or ID, hydrate the full attribute schema, and check for duplicates. Returns a structured status (`ready`, `incomplete`, `needs_clarification`, `duplicate_found`) with pre-fetched options for missing fields. **Always call this before `create_asset`** to obtain the resolved UUIDs and validate inputs. Read-only.
+
+**`create_asset`** — Create a new data asset in Collibra with optional attributes. Requires the resolved asset type UUID, domain UUID, and asset name — use the values returned by `prepare_create_asset`. Destructive (creates a new asset).
+
+**`prepare_add_business_term`** — Validate business term data, resolve domains by name, check for duplicates, and hydrate the attribute schema for the Business Term type. Returns structured status with pre-fetched options for missing fields. **Always call this before `add_business_term`**. Read-only.
+
+**`add_business_term`** — Create a business term asset with an optional definition and additional attributes. Requires the domain UUID — use the resolved domain from `prepare_add_business_term`. Destructive (creates a new asset).
+
 ### Discovery & Search
 
 **`discover_data_assets`** — Natural language semantic search over data assets (tables, columns, datasets). Use when the user asks open-ended questions like "what data do we have about customers?". Requires `dgc.ai-copilot` permission.
@@ -79,6 +89,14 @@ These tools query the technical lineage graph — a map of all data objects and 
 
 ## Common Workflows
 
+### Create any asset
+1. `prepare_create_asset` with the asset name, asset type (publicId), and domain ID → check status is `ready`
+2. `create_asset` with the resolved `assetTypeId` and `domainId` from step 1
+
+### Add a business term
+1. `prepare_add_business_term` with the term name and domain name or ID → check status is `ready`
+2. `add_business_term` with the resolved `domainId` from step 1, plus optional definition and attributes
+
 ### Find an asset and get its details
 1. `search_asset_keyword` with the asset name → get UUID from results
 2. `get_asset_details` with the UUID → get full attributes and relations
@@ -119,6 +137,7 @@ These tools query the technical lineage graph — a map of all data objects and 
 
 ## Tips
 
+- **Always prepare before creating.** Call `prepare_create_asset` before `create_asset` and `prepare_add_business_term` before `add_business_term`, even if you already have the UUIDs. The prepare tools validate inputs, check for duplicates, and return the attribute schema.
 - **UUIDs are required for most tools.** When you only have a name, start with `search_asset_keyword` or the natural language discovery tools to get the UUID first.
 - **`discover_data_assets` vs `search_asset_keyword`**: Prefer `discover_data_assets` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.
 - **Permissions**: `discover_data_assets` and `discover_business_glossary` require the `dgc.ai-copilot` permission. Classification tools require `dgc.classify` + `dgc.catalog`. If a tool fails with a permission error, let the user know which permission is needed.
