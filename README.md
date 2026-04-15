@@ -6,9 +6,8 @@ A Model Context Protocol (MCP) server that provides AI agents with access to Col
 
 This Go-based MCP server acts as a bridge between AI applications and Collibra, enabling intelligent data discovery and governance operations through the following tools:
 
-- [`add_business_term`](pkg/tools/add_business_term/) - Create a business term asset with definition and optional attributes
-- [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset
-- [`create_asset`](pkg/tools/create_asset/) - Create a new data asset with optional attributes
+### Read Tools
+
 - [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions
 - [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language
 - [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID
@@ -25,13 +24,19 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`prepare_add_business_term`](pkg/tools/prepare_add_business_term/) - Validate business term data, resolve domains, and check for duplicates
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Resolve asset type, domain, hydrate attribute schema, and check duplicates
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
-- [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract
-- [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match
 - [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets
 - [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters
 - [`search_data_classification_match`](pkg/tools/search_data_classification_matches/) - Search for associations between data classes and assets
 - [`search_lineage_entities`](pkg/tools/search_lineage_entities/) - Search for entities in the technical lineage graph
 - [`search_lineage_transformations`](pkg/tools/search_lineage_transformations/) - Search for transformations in the technical lineage graph
+
+### Write Tools
+
+- [`add_business_term`](pkg/tools/add_business_term/) - Create a business term asset with definition and optional attributes
+- [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset
+- [`create_asset`](pkg/tools/create_asset/) - Create a new data asset with optional attributes
+- [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract
+- [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match
 
 ## Quick Start
 
