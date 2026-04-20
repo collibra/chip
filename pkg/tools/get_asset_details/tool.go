@@ -10,6 +10,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -49,10 +50,10 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
-		assetUUID, err := uuid.Parse(input.AssetID)
-		if err != nil {
-			return Output{Error: fmt.Sprintf("Invalid asset ID format: %s", err.Error()), Found: false}, nil
+		if err := validation.UUID("assetId", input.AssetID); err != nil {
+			return Output{}, err
 		}
+		assetUUID, _ := uuid.Parse(input.AssetID)
 
 		assets, err := clients.GetAssetSummary(ctx, collibraClient, assetUUID, input.OutgoingRelationsCursor, input.IncomingRelationsCursor)
 		if err != nil {

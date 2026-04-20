@@ -3,6 +3,7 @@ package chip
 import (
 	"context"
 	"log"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -27,6 +28,52 @@ func newTool() *Tool[toolInput, toolOutput] {
 func handleTool() ToolHandlerFunc[toolInput, toolOutput] {
 	return func(ctx context.Context, input toolInput) (toolOutput, error) {
 		return toolOutput{Output: input.Input}, nil
+	}
+}
+
+func TestTool_SchemaValidationReturnsToolExecutionError(t *testing.T) {
+	chipServer := NewServer()
+	RegisterTool[toolInput, toolOutput](chipServer, newTool())
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	res, err := chipSession.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      "the_tool",
+		Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("expected tool execution error, got protocol error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected isError: true for missing required field")
+	}
+	if len(res.Content) == 0 {
+		t.Fatal("expected content describing the validation failure")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", res.Content[0])
+	}
+	if !strings.Contains(text.Text, "input") {
+		t.Fatalf("expected error mentioning missing field 'input', got %q", text.Text)
+	}
+}
+
+func TestTool_WrongTypeReturnsToolExecutionError(t *testing.T) {
+	chipServer := NewServer()
+	RegisterTool[toolInput, toolOutput](chipServer, newTool())
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	res, err := chipSession.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      "the_tool",
+		Arguments: map[string]any{"input": 123},
+	})
+	if err != nil {
+		t.Fatalf("expected tool execution error, got protocol error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected isError: true for wrong-typed field")
 	}
 }
 

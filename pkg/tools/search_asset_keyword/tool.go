@@ -7,6 +7,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -49,6 +50,19 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
+		for field, vals := range map[string][]string{
+			"communityFilter":  input.CommunityFilter,
+			"domainFilter":     input.DomainFilter,
+			"domainTypeFilter": input.DomainTypeFilter,
+			"assetTypeFilter":  input.AssetTypeFilter,
+			"statusFilter":     input.StatusFilter,
+			"createdByFilter":  input.CreatedByFilter,
+		} {
+			if err := validation.UUIDs(field, vals); err != nil {
+				return Output{}, err
+			}
+		}
+
 		if input.Limit == 0 {
 			input.Limit = 50
 		}

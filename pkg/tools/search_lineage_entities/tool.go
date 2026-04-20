@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -29,6 +30,10 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.SearchLineag
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, clients.SearchLineageEntitiesOutput] {
 	return func(ctx context.Context, input Input) (clients.SearchLineageEntitiesOutput, error) {
+		if err := validation.UUIDOptional("dgcId", input.DgcId); err != nil {
+			return clients.SearchLineageEntitiesOutput{}, err
+		}
+
 		result, err := clients.SearchLineageEntities(ctx, collibraClient, input.NameContains, input.Type, input.DgcId, input.Limit, input.Cursor)
 		if err != nil {
 			return clients.SearchLineageEntitiesOutput{}, err

@@ -6,6 +6,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -54,8 +55,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
-		if input.BusinessTermID == "" {
-			return Output{Error: "businessTermId is required"}, nil
+		if err := validation.UUID("businessTermId", input.BusinessTermID); err != nil {
+			return Output{}, err
 		}
 
 		dataAttributes, err := clients.FindConnectedAssets(ctx, collibraClient, input.BusinessTermID, clients.BusinessAssetRepresentsDataAssetRelID)
