@@ -20,8 +20,8 @@ func TestAddBusinessTermSuccess(t *testing.T) {
 		if req.TypePublicId != "BusinessTerm" {
 			t.Errorf("expected typePublicId 'BusinessTerm', got '%s'", req.TypePublicId)
 		}
-		if req.DomainId != "domain-uuid-123" {
-			t.Errorf("expected domainId 'domain-uuid-123', got '%s'", req.DomainId)
+		if req.DomainId != "00000000-0000-0000-0000-000000000123" {
+			t.Errorf("expected domainId '00000000-0000-0000-0000-000000000123', got '%s'", req.DomainId)
 		}
 		return http.StatusCreated, clients.AddBusinessTermAssetResponse{Id: "new-asset-uuid-456"}
 	}))
@@ -45,7 +45,7 @@ func TestAddBusinessTermSuccess(t *testing.T) {
 	client := testutil.NewClient(server)
 	output, err := add_business_term.NewTool(client).Handler(t.Context(), add_business_term.Input{
 		Name:       "Revenue",
-		DomainId:   "domain-uuid-123",
+		DomainId:   "00000000-0000-0000-0000-000000000123",
 		Definition: "Total income generated from sales",
 	})
 	if err != nil {
@@ -97,7 +97,7 @@ func TestAddBusinessTermNoDefinitionNoAttributes(t *testing.T) {
 	client := testutil.NewClient(server)
 	output, err := add_business_term.NewTool(client).Handler(t.Context(), add_business_term.Input{
 		Name:     "Simple Term",
-		DomainId: "domain-uuid-456",
+		DomainId: "00000000-0000-0000-0000-000000000456",
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -132,11 +132,11 @@ func TestAddBusinessTermWithAdditionalAttributes(t *testing.T) {
 	client := testutil.NewClient(server)
 	output, err := add_business_term.NewTool(client).Handler(t.Context(), add_business_term.Input{
 		Name:       "Complex Term",
-		DomainId:   "domain-uuid-789",
+		DomainId:   "00000000-0000-0000-0000-000000000789",
 		Definition: "A complex business term",
 		Attributes: []add_business_term.InputAttribute{
-			{TypeId: "custom-type-1", Value: "custom value 1"},
-			{TypeId: "custom-type-2", Value: "custom value 2"},
+			{TypeId: "00000000-0000-0000-0000-0000000000c1", Value: "custom value 1"},
+			{TypeId: "00000000-0000-0000-0000-0000000000c2", Value: "custom value 2"},
 		},
 	})
 	if err != nil {
@@ -169,7 +169,7 @@ func TestAddBusinessTermAttributeCreationError(t *testing.T) {
 	client := testutil.NewClient(server)
 	_, err := add_business_term.NewTool(client).Handler(t.Context(), add_business_term.Input{
 		Name:       "Failing Term",
-		DomainId:   "domain-uuid-123",
+		DomainId:   "00000000-0000-0000-0000-000000000123",
 		Definition: "This should fail on attribute creation",
 	})
 	if err == nil {

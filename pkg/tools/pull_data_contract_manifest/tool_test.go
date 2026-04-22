@@ -54,19 +54,11 @@ func TestPullDataContractManifestInvalidUUID(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
+	_, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
 		DataContractID: "invalid-uuid",
 	})
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	if output.Found {
-		t.Fatal("Expected manifest not to be found")
-	}
-
-	if output.Error == "" {
-		t.Fatal("Expected error message for invalid UUID")
+	if err == nil {
+		t.Fatal("Expected UUID validation error, got nil")
 	}
 }
 

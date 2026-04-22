@@ -7,6 +7,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -33,13 +34,10 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
-		dataContractUUID, err := uuid.Parse(input.DataContractID)
-		if err != nil {
-			return Output{
-				Error: fmt.Sprintf("Invalid data contract ID format: %s", err.Error()),
-				Found: false,
-			}, nil
+		if err := validation.UUID("dataContractId", input.DataContractID); err != nil {
+			return Output{}, err
 		}
+		dataContractUUID, _ := uuid.Parse(input.DataContractID)
 
 		manifest, err := clients.PullActiveDataContractManifest(ctx, collibraClient, dataContractUUID.String())
 		if err != nil {

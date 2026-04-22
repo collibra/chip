@@ -2,10 +2,12 @@ package add_business_term
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -48,6 +50,15 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
+		if err := validation.UUID("domainId", input.DomainId); err != nil {
+			return Output{}, err
+		}
+		for i, attr := range input.Attributes {
+			if err := validation.UUID(fmt.Sprintf("attributes[%d].typeId", i), attr.TypeId); err != nil {
+				return Output{}, err
+			}
+		}
+
 		// Step 1: Create the business term asset
 		assetResp, err := clients.CreateBusinessTermAsset(ctx, collibraClient, clients.AddBusinessTermAssetRequest{
 			Name:         input.Name,

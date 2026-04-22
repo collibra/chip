@@ -35,8 +35,8 @@ func TestCreateAssetSuccess(t *testing.T) {
 	client := testutil.NewClient(server)
 	output, err := create_asset.NewTool(client).Handler(t.Context(), create_asset.Input{
 		Name:        "My New Asset",
-		AssetTypeID: "type-uuid-456",
-		DomainID:    "domain-uuid-789",
+		AssetTypeID: "00000000-0000-0000-0000-000000000456",
+		DomainID:    "00000000-0000-0000-0000-000000000789",
 	})
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -87,11 +87,11 @@ func TestCreateAssetWithAttributes(t *testing.T) {
 	client := testutil.NewClient(server)
 	output, err := create_asset.NewTool(client).Handler(t.Context(), create_asset.Input{
 		Name:        "Asset With Attrs",
-		AssetTypeID: "type-uuid-456",
-		DomainID:    "domain-uuid-789",
+		AssetTypeID: "00000000-0000-0000-0000-000000000456",
+		DomainID:    "00000000-0000-0000-0000-000000000789",
 		Attributes: map[string]string{
-			"attr-type-1": "Description value",
-			"attr-type-2": "Definition value",
+			"00000000-0000-0000-0000-0000000000a1": "Description value",
+			"00000000-0000-0000-0000-0000000000a2": "Definition value",
 		},
 	})
 	if err != nil {
@@ -134,8 +134,8 @@ func TestCreateAssetWithDisplayName(t *testing.T) {
 	client := testutil.NewClient(server)
 	_, err := create_asset.NewTool(client).Handler(t.Context(), create_asset.Input{
 		Name:        "My Asset",
-		AssetTypeID: "type-uuid-456",
-		DomainID:    "domain-uuid-789",
+		AssetTypeID: "00000000-0000-0000-0000-000000000456",
+		DomainID:    "00000000-0000-0000-0000-000000000789",
 		DisplayName: "My Display Name",
 	})
 	if err != nil {
@@ -161,8 +161,8 @@ func TestCreateAssetBadRequest(t *testing.T) {
 	client := testutil.NewClient(server)
 	_, err := create_asset.NewTool(client).Handler(t.Context(), create_asset.Input{
 		Name:        "Duplicate Asset",
-		AssetTypeID: "type-uuid-456",
-		DomainID:    "domain-uuid-789",
+		AssetTypeID: "00000000-0000-0000-0000-000000000456",
+		DomainID:    "00000000-0000-0000-0000-000000000789",
 	})
 	if err == nil {
 		t.Fatal("Expected error for bad request, got nil")
@@ -188,8 +188,8 @@ func TestCreateAssetNotFound(t *testing.T) {
 	client := testutil.NewClient(server)
 	_, err := create_asset.NewTool(client).Handler(t.Context(), create_asset.Input{
 		Name:        "Test Asset",
-		AssetTypeID: "invalid-type-id",
-		DomainID:    "domain-uuid-789",
+		AssetTypeID: "00000000-0000-0000-0000-000000000999",
+		DomainID:    "00000000-0000-0000-0000-000000000789",
 	})
 	if err == nil {
 		t.Fatal("Expected error for not found, got nil")
@@ -215,8 +215,8 @@ func TestCreateAssetForbidden(t *testing.T) {
 	client := testutil.NewClient(server)
 	_, err := create_asset.NewTool(client).Handler(t.Context(), create_asset.Input{
 		Name:        "Test Asset",
-		AssetTypeID: "type-uuid-456",
-		DomainID:    "domain-uuid-789",
+		AssetTypeID: "00000000-0000-0000-0000-000000000456",
+		DomainID:    "00000000-0000-0000-0000-000000000789",
 	})
 	if err == nil {
 		t.Fatal("Expected error for forbidden, got nil")
@@ -251,8 +251,8 @@ func TestCreateAssetEmptyAttributes(t *testing.T) {
 	client := testutil.NewClient(server)
 	output, err := create_asset.NewTool(client).Handler(t.Context(), create_asset.Input{
 		Name:        "Asset No Attrs",
-		AssetTypeID: "type-uuid-456",
-		DomainID:    "domain-uuid-789",
+		AssetTypeID: "00000000-0000-0000-0000-000000000456",
+		DomainID:    "00000000-0000-0000-0000-000000000789",
 		Attributes:  map[string]string{},
 	})
 	if err != nil {
@@ -292,10 +292,10 @@ func TestCreateAssetAttributeFailure(t *testing.T) {
 	client := testutil.NewClient(server)
 	_, err := create_asset.NewTool(client).Handler(t.Context(), create_asset.Input{
 		Name:        "Asset With Bad Attr",
-		AssetTypeID: "type-uuid-456",
-		DomainID:    "domain-uuid-789",
+		AssetTypeID: "00000000-0000-0000-0000-000000000456",
+		DomainID:    "00000000-0000-0000-0000-000000000789",
 		Attributes: map[string]string{
-			"bad-attr-type": "some value",
+			"00000000-0000-0000-0000-0000000000bb": "some value",
 		},
 	})
 	if err == nil {

@@ -81,18 +81,9 @@ func TestAddClassificationMatch_MissingAssetID(t *testing.T) {
 		ClassificationID: "be45c001-b173-48ff-ac91-3f6e45868c8b",
 	}
 
-	output, err := tools.NewTool(client).Handler(t.Context(), input)
-
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if output.Success {
-		t.Error("Expected success=false for missing asset ID")
-	}
-
-	if output.Error == "" {
-		t.Error("Expected error message for missing asset ID")
+	_, err := tools.NewTool(client).Handler(t.Context(), input)
+	if err == nil {
+		t.Fatal("Expected UUID validation error, got nil")
 	}
 }
 
@@ -103,18 +94,9 @@ func TestAddClassificationMatch_MissingClassificationID(t *testing.T) {
 		AssetID: "9179b887-04ef-4ce5-ab3a-b5bbd39ea3c8",
 	}
 
-	output, err := tools.NewTool(client).Handler(t.Context(), input)
-
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if output.Success {
-		t.Error("Expected success=false for missing classification ID")
-	}
-
-	if output.Error == "" {
-		t.Error("Expected error message for missing classification ID")
+	_, err := tools.NewTool(client).Handler(t.Context(), input)
+	if err == nil {
+		t.Fatal("Expected UUID validation error, got nil")
 	}
 }
 

@@ -43,18 +43,10 @@ func TestRemoveClassificationMatch_MissingClassificationMatchID(t *testing.T) {
 
 	input := tools.Input{}
 
-	output, err := tools.NewTool(client).Handler(t.Context(), input)
+	_, err := tools.NewTool(client).Handler(t.Context(), input)
 
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if output.Success {
-		t.Error("Expected success=false for missing classification match ID")
-	}
-
-	if output.Error == "" {
-		t.Error("Expected error message for missing classification match ID")
+	if err == nil {
+		t.Fatal("Expected UUID validation error, got nil")
 	}
 }
 
