@@ -178,6 +178,17 @@ Here's how to integrate with some popular clients assuming you have a configurat
 }
 ```
 
+## Structured Tool Output
+
+Every tool declares an `outputSchema` and returns results in two forms on the same response:
+
+- `content` — a human-readable `TextContent` block containing the output serialized as JSON. Kept for backward compatibility with clients that only render text.
+- `structuredContent` — the typed, parseable object. New clients should prefer this for programmatic consumption.
+
+Schemas are auto-generated from each tool's Go `Output` struct via [`github.com/google/jsonschema-go`](https://pkg.go.dev/github.com/google/jsonschema-go), which emits **JSON Schema draft 2020-12**. The MCP SDK validates every response against the declared schema before sending, so clients can rely on the shape. Field-level descriptions live as `jsonschema:"..."` tags on the `Output` struct in each tool's `pkg/tools/<name>/tool.go`.
+
+To discover the live schema for any tool, inspect the `outputSchema` field returned by a `tools/list` MCP request against a running server.
+
 ## Enabling or disabling specific tools
 
 You can enable or disable specific tools by passing command line parameters, setting environment variables, or customizing the `mcp.yaml` configuration file.
