@@ -45,7 +45,6 @@ const (
 type stub struct {
 	attributes               []clients.EditAssetAttributeInstance
 	asset                    *clients.EditAssetCore
-	statusAsset              *clients.EditAssetCore
 	attrTypesByID            map[string]clients.EditAssetAssignmentAttributeType
 	relationTypes            []clients.EditAssetAssignmentRelationType
 	roles                    []clients.EditAssetRole
