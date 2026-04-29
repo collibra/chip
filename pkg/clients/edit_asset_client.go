@@ -62,6 +62,38 @@ type EditAssetAttributeInstance struct {
 	Value string                     `json:"value"`
 }
 
+// UnmarshalJSON tolerates `value` fields returned as JSON numbers, booleans,
+// or null. Collibra emits the field with whatever underlying type the
+// attribute kind dictates (NumericAttributeType -> number,
+// BooleanAttributeType -> bool, etc.), so a strict string decode fails when
+// an asset has any non-string attribute. We stringify any scalar and treat
+// null as the empty string; consumers only need a printable representation
+// for diffs and error messages.
+func (a *EditAssetAttributeInstance) UnmarshalJSON(data []byte) error {
+	type alias EditAssetAttributeInstance
+	aux := struct {
+		*alias
+		Value json.RawMessage `json:"value"`
+	}{alias: (*alias)(a)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	switch {
+	case len(aux.Value) == 0, string(aux.Value) == "null":
+		a.Value = ""
+	case aux.Value[0] == '"':
+		var s string
+		if err := json.Unmarshal(aux.Value, &s); err != nil {
+			return err
+		}
+		a.Value = s
+	default:
+		// Number, bool, or other primitive — keep the raw JSON literal.
+		a.Value = string(aux.Value)
+	}
+	return nil
+}
+
 // EditAssetAttributeTypeRef is a reference to an attribute type on an instance.
 type EditAssetAttributeTypeRef struct {
 	ID   string `json:"id"`
