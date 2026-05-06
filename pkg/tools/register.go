@@ -20,6 +20,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
+	"github.com/collibra/chip/pkg/tools/get_control_execution_report"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
@@ -89,6 +90,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, create_control.NewTool(client))
 	toolRegister(server, toolConfig, enable_control.NewTool(client))
 	toolRegister(server, toolConfig, execute_control.NewTool(client))
+	toolRegister(server, toolConfig, get_control_execution_report.NewTool(client))
 
 	// Catalog browsing + lookup (one-hour in-process cache shared between
 	// list_* and find_* — see clients/catalog_cache.go).

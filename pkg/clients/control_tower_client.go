@@ -295,3 +295,23 @@ func ExecuteControl(ctx context.Context, client *http.Client, controlID string) 
 	req.Header.Set("Content-Type", "application/json")
 	return executeRequest(client, req)
 }
+
+// ===== Control Tower: analytics report =====
+
+// ControlExecutionReport POSTs an analytics request to /rest/controlExecution/v1/report
+// and returns the raw response body. The body is a free-form map so callers
+// can pass any combination of dateFrom/dateTo/granularity and optional filters
+// (severity, controlType, tag, organizationId, failureLength) without locking
+// the schema if the platform adds new filters.
+func ControlExecutionReport(ctx context.Context, client *http.Client, body map[string]any) ([]byte, error) {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal report body: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", "/rest/controlExecution/v1/report", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to build report request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return executeRequest(client, req)
+}
