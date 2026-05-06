@@ -13,6 +13,10 @@ import (
 	"github.com/collibra/chip/pkg/tools/dry_run_control_query"
 	"github.com/collibra/chip/pkg/tools/enable_control"
 	"github.com/collibra/chip/pkg/tools/execute_control"
+	"github.com/collibra/chip/pkg/tools/find_asset_type"
+	"github.com/collibra/chip/pkg/tools/find_attribute_type"
+	"github.com/collibra/chip/pkg/tools/find_relation_type"
+	"github.com/collibra/chip/pkg/tools/find_status"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
@@ -23,8 +27,11 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_measure_data"
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
+	"github.com/collibra/chip/pkg/tools/list_attribute_types"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
 	"github.com/collibra/chip/pkg/tools/list_managed_control_attributes"
+	"github.com/collibra/chip/pkg/tools/list_relation_types"
+	"github.com/collibra/chip/pkg/tools/list_statuses"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/prepare_add_business_term"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
@@ -82,6 +89,16 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, create_control.NewTool(client))
 	toolRegister(server, toolConfig, enable_control.NewTool(client))
 	toolRegister(server, toolConfig, execute_control.NewTool(client))
+
+	// Catalog browsing + lookup (one-hour in-process cache shared between
+	// list_* and find_* — see clients/catalog_cache.go).
+	toolRegister(server, toolConfig, list_relation_types.NewTool(client))
+	toolRegister(server, toolConfig, list_attribute_types.NewTool(client))
+	toolRegister(server, toolConfig, list_statuses.NewTool(client))
+	toolRegister(server, toolConfig, find_asset_type.NewTool(client))
+	toolRegister(server, toolConfig, find_relation_type.NewTool(client))
+	toolRegister(server, toolConfig, find_attribute_type.NewTool(client))
+	toolRegister(server, toolConfig, find_status.NewTool(client))
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {

@@ -130,11 +130,19 @@ type rawAssetType struct {
 
 const managedControlPublicID = "ManagedControl"
 
+var managedControlAttributesCache catalogCache[map[string]ManagedControlAttribute]
+
 // GetManagedControlAttributes returns the AttributeTypes assigned to the
 // ManagedControl asset type, keyed by publicId. The control-tower save
 // flow uses this as the source of truth for category / controlType /
 // severity allowed values (the OAS-documented enums are not stable).
+//
+// Cached for catalogCacheTTL — see catalog_cache.go.
 func GetManagedControlAttributes(ctx context.Context, client *http.Client) (map[string]ManagedControlAttribute, error) {
+	return managedControlAttributesCache.get(ctx, client, fetchManagedControlAttributes)
+}
+
+func fetchManagedControlAttributes(ctx context.Context, client *http.Client) (map[string]ManagedControlAttribute, error) {
 	atReq, err := http.NewRequestWithContext(ctx, "GET", "/rest/2.0/assetTypes/publicId/"+managedControlPublicID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build asset-type GET: %w", err)
