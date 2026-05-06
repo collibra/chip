@@ -39,6 +39,11 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
+		// Server-side enrichedQuery 500s when a Relation predicate omits
+		// "value": dry-run accepts the shape, persistence accepts it, but
+		// the UI's enrichment call breaks. Force-fill an empty array on
+		// every Relation predicate.
+		defendRelationPredicates(input.Query)
 		queryBytes, err := json.Marshal(input.Query)
 		if err != nil {
 			return Output{}, err
@@ -79,4 +84,26 @@ func marshalOrDefault(m map[string]any, fallback json.RawMessage) (json.RawMessa
 		return fallback, nil
 	}
 	return json.Marshal(m)
+}
+
+// defendRelationPredicates walks the query tree and ensures every object with
+// operandType == "Relation" carries a "value" field. The CT enrichedQuery
+// endpoint 500s otherwise, even though the same payload passes dry-run and
+// persistence.
+func defendRelationPredicates(node any) {
+	switch v := node.(type) {
+	case map[string]any:
+		if op, ok := v["operandType"].(string); ok && op == "Relation" {
+			if _, has := v["value"]; !has {
+				v["value"] = []any{}
+			}
+		}
+		for _, child := range v {
+			defendRelationPredicates(child)
+		}
+	case []any:
+		for _, child := range v {
+			defendRelationPredicates(child)
+		}
+	}
 }
