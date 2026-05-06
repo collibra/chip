@@ -20,6 +20,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
+	"github.com/collibra/chip/pkg/tools/get_control"
 	"github.com/collibra/chip/pkg/tools/get_control_execution_report"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
@@ -29,6 +30,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_attribute_types"
+	"github.com/collibra/chip/pkg/tools/list_controls"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
 	"github.com/collibra/chip/pkg/tools/list_managed_control_attributes"
 	"github.com/collibra/chip/pkg/tools/list_relation_types"
@@ -90,6 +92,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, create_control.NewTool(client))
 	toolRegister(server, toolConfig, enable_control.NewTool(client))
 	toolRegister(server, toolConfig, execute_control.NewTool(client))
+	toolRegister(server, toolConfig, get_control.NewTool(client))
+	toolRegister(server, toolConfig, list_controls.NewTool(client))
 	toolRegister(server, toolConfig, get_control_execution_report.NewTool(client))
 
 	// Catalog browsing + lookup (one-hour in-process cache shared between

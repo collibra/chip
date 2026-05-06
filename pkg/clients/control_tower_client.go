@@ -296,6 +296,41 @@ func ExecuteControl(ctx context.Context, client *http.Client, controlID string) 
 	return executeRequest(client, req)
 }
 
+// ===== Control Tower: read =====
+
+// GetControl returns the full ManagedControl payload for the given controlId,
+// including the ControlQuery JSON. Hits GET /rest/controlManagement/v1/controls/{id}.
+func GetControl(ctx context.Context, client *http.Client, controlID string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "/rest/controlManagement/v1/controls/"+url.PathEscape(controlID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build get-control request: %w", err)
+	}
+	return executeRequest(client, req)
+}
+
+// ListControls returns a paged list of controls, optionally filtered by
+// domainId. Hits GET /rest/controlManagement/v1/controls. Caller passes
+// raw query parameters in `query` (e.g. {"domainId": "...", "limit": "50"}).
+func ListControls(ctx context.Context, client *http.Client, query map[string]string) ([]byte, error) {
+	path := "/rest/controlManagement/v1/controls"
+	if len(query) > 0 {
+		values := url.Values{}
+		for k, v := range query {
+			if v != "" {
+				values.Set(k, v)
+			}
+		}
+		if encoded := values.Encode(); encoded != "" {
+			path = path + "?" + encoded
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build list-controls request: %w", err)
+	}
+	return executeRequest(client, req)
+}
+
 // ===== Control Tower: analytics report =====
 
 // ControlExecutionReport POSTs an analytics request to /rest/controlExecution/v1/report
