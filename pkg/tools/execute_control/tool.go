@@ -14,7 +14,7 @@ type Input struct {
 }
 
 type Output struct {
-	Result json.RawMessage `json:"result" jsonschema:"Raw response from POST /rest/controlExecution/v1/controls/{controlId}/execute. Used as a post-create smoke check — compare the result count against the last dry-run."`
+	Result map[string]any `json:"result" jsonschema:"Raw response from POST /rest/controlExecution/v1/controls/{controlId}/execute. Used as a post-create smoke check — compare the result count against the last dry-run."`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
@@ -32,6 +32,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if err != nil {
 			return Output{}, err
 		}
-		return Output{Result: json.RawMessage(body)}, nil
+		var result map[string]any
+		if err := json.Unmarshal(body, &result); err != nil {
+			return Output{}, err
+		}
+		return Output{Result: result}, nil
 	}
 }

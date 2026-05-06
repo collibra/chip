@@ -22,7 +22,7 @@ type Input struct {
 }
 
 type Output struct {
-	Control json.RawMessage `json:"control" jsonschema:"Raw response from POST /rest/controlManagement/v1/controls. Includes the assigned controlId. The control is created in disabled state — call enable_control to activate it."`
+	Control map[string]any `json:"control" jsonschema:"Raw response from POST /rest/controlManagement/v1/controls. Includes the assigned controlId. The control is created in disabled state — call enable_control to activate it."`
 }
 
 var defaultExecutionSchedule = json.RawMessage(`{"frequency":"Daily","timeOfDay":"00:00:00Z","daysOfWeek":[]}`)
@@ -66,7 +66,11 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if err != nil {
 			return Output{}, err
 		}
-		return Output{Control: json.RawMessage(raw)}, nil
+		var control map[string]any
+		if err := json.Unmarshal(raw, &control); err != nil {
+			return Output{}, err
+		}
+		return Output{Control: control}, nil
 	}
 }
 
