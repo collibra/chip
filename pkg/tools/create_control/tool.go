@@ -75,6 +75,16 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if err := json.Unmarshal(raw, &control); err != nil {
 			return Output{}, err
 		}
+		// CT's POST response only echoes {"id": "..."}. Re-fetch so the
+		// caller gets the full saved payload (name, enabled, query, …).
+		if id, ok := control["id"].(string); ok && id != "" {
+			if full, err := clients.GetControl(ctx, collibraClient, id); err == nil {
+				var enriched map[string]any
+				if err := json.Unmarshal(full, &enriched); err == nil && len(enriched) > 0 {
+					control = enriched
+				}
+			}
+		}
 		return Output{Control: control}, nil
 	}
 }
