@@ -21,8 +21,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`get_table_semantics`](pkg/tools/get_table_semantics/) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
 - [`list_asset_types`](pkg/tools/list_asset_types/) - List available asset types
 - [`list_data_contract`](pkg/tools/list_data_contracts/) - List data contracts with pagination
-- [`prepare_add_business_term`](pkg/tools/prepare_add_business_term/) - Validate business term data, resolve domains, and check for duplicates
-- [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Resolve asset type, domain, hydrate attribute schema, and check duplicates
+- [`discover_create_asset_options`](pkg/tools/discover_create_asset_options/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
 - [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets
 - [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters
@@ -32,9 +31,8 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 ### Write Tools
 
-- [`add_business_term`](pkg/tools/add_business_term/) - Create a business term asset with definition and optional attributes
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset
-- [`create_asset`](pkg/tools/create_asset/) - Create a new data asset with optional attributes
+- [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `update_attribute`, `add_attribute`, `remove_attribute` - change, append, or clear an attribute value (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
