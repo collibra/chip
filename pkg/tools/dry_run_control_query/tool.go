@@ -11,8 +11,8 @@ import (
 )
 
 type Input struct {
-	Query       json.RawMessage `json:"query" jsonschema:"Required. A ControlQuery object as defined in the Collibra Control Tower management API (version: '1.0', assetSelector, optional pathTraversalRequirement). The full schema lives in the create-control plugin's references/oas/control-tower-management-api.yaml."`
-	SampleLimit int             `json:"sampleLimit,omitempty" jsonschema:"Optional. Number of failing-asset samples to return alongside the count. Default: 5."`
+	Query       map[string]any `json:"query" jsonschema:"Required. A ControlQuery object as defined in the Collibra Control Tower management API (version: '1.0', assetSelector, optional pathTraversalRequirement). The full schema lives in the create-control plugin's references/oas/control-tower-management-api.yaml."`
+	SampleLimit int            `json:"sampleLimit,omitempty" jsonschema:"Optional. Number of failing-asset samples to return alongside the count. Default: 5."`
 }
 
 type Output struct {
@@ -35,7 +35,11 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if limit <= 0 {
 			limit = 5
 		}
-		raw, err := clients.DryRunControlQuery(ctx, collibraClient, input.Query, limit)
+		queryBytes, err := json.Marshal(input.Query)
+		if err != nil {
+			return Output{}, err
+		}
+		raw, err := clients.DryRunControlQuery(ctx, collibraClient, queryBytes, limit)
 		if err != nil {
 			return Output{}, err
 		}

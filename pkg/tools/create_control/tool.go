@@ -10,15 +10,15 @@ import (
 )
 
 type Input struct {
-	Name                 string          `json:"name" jsonschema:"Required. Display name of the new control."`
-	Description          string          `json:"description" jsonschema:"Required. One-sentence description of what the control checks."`
-	Category             string          `json:"category" jsonschema:"Required. ControlCategory value. Source candidate values from list_managed_control_attributes (.attributes.ControlCategory.allowedValues)."`
-	ControlType          string          `json:"controlType" jsonschema:"Required. ControlType value. Source candidate values from list_managed_control_attributes (.attributes.ControlType.allowedValues)."`
-	Severity             string          `json:"severity" jsonschema:"Required. Severity value. Source candidate values from list_managed_control_attributes (.attributes.Severity.allowedValues)."`
-	DomainID             string          `json:"domainId" jsonschema:"Required. UUID of the domain that owns the control. Use resolve_domain to validate before calling."`
-	Query                json.RawMessage `json:"query" jsonschema:"Required. The ControlQuery object — same shape accepted by dry_run_control_query."`
-	ExecutionSchedule    json.RawMessage `json:"executionSchedule,omitempty" jsonschema:"Optional. Defaults to {\"frequency\":\"Daily\",\"timeOfDay\":\"00:00:00Z\",\"daysOfWeek\":[]} when omitted."`
-	NotificationSettings json.RawMessage `json:"notificationSettings,omitempty" jsonschema:"Optional. Defaults to {} when omitted."`
+	Name                 string         `json:"name" jsonschema:"Required. Display name of the new control."`
+	Description          string         `json:"description" jsonschema:"Required. One-sentence description of what the control checks."`
+	Category             string         `json:"category" jsonschema:"Required. ControlCategory value. Source candidate values from list_managed_control_attributes (.attributes.ControlCategory.allowedValues)."`
+	ControlType          string         `json:"controlType" jsonschema:"Required. ControlType value. Source candidate values from list_managed_control_attributes (.attributes.ControlType.allowedValues)."`
+	Severity             string         `json:"severity" jsonschema:"Required. Severity value. Source candidate values from list_managed_control_attributes (.attributes.Severity.allowedValues)."`
+	DomainID             string         `json:"domainId" jsonschema:"Required. UUID of the domain that owns the control. Use resolve_domain to validate before calling."`
+	Query                map[string]any `json:"query" jsonschema:"Required. The ControlQuery object — same shape accepted by dry_run_control_query."`
+	ExecutionSchedule    map[string]any `json:"executionSchedule,omitempty" jsonschema:"Optional. Defaults to {\"frequency\":\"Daily\",\"timeOfDay\":\"00:00:00Z\",\"daysOfWeek\":[]} when omitted."`
+	NotificationSettings map[string]any `json:"notificationSettings,omitempty" jsonschema:"Optional. Defaults to {} when omitted."`
 }
 
 type Output struct {
@@ -39,13 +39,17 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
-		schedule := input.ExecutionSchedule
-		if len(schedule) == 0 {
-			schedule = defaultExecutionSchedule
+		queryBytes, err := json.Marshal(input.Query)
+		if err != nil {
+			return Output{}, err
 		}
-		notifications := input.NotificationSettings
-		if len(notifications) == 0 {
-			notifications = defaultNotificationSettings
+		schedule, err := marshalOrDefault(input.ExecutionSchedule, defaultExecutionSchedule)
+		if err != nil {
+			return Output{}, err
+		}
+		notifications, err := marshalOrDefault(input.NotificationSettings, defaultNotificationSettings)
+		if err != nil {
+			return Output{}, err
 		}
 		req := clients.CreateControlRequest{
 			Name:                 input.Name,
@@ -54,7 +58,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			ControlType:          input.ControlType,
 			Severity:             input.Severity,
 			DomainID:             input.DomainID,
-			Query:                input.Query,
+			Query:                queryBytes,
 			ExecutionSchedule:    schedule,
 			NotificationSettings: notifications,
 		}
@@ -64,4 +68,11 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 		return Output{Control: json.RawMessage(raw)}, nil
 	}
+}
+
+func marshalOrDefault(m map[string]any, fallback json.RawMessage) (json.RawMessage, error) {
+	if len(m) == 0 {
+		return fallback, nil
+	}
+	return json.Marshal(m)
 }
