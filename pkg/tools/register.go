@@ -7,8 +7,12 @@ import (
 	"github.com/collibra/chip/pkg/tools/add_business_term"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/create_asset"
+	"github.com/collibra/chip/pkg/tools/create_control"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
+	"github.com/collibra/chip/pkg/tools/dry_run_control_query"
+	"github.com/collibra/chip/pkg/tools/enable_control"
+	"github.com/collibra/chip/pkg/tools/execute_control"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
@@ -20,11 +24,13 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
+	"github.com/collibra/chip/pkg/tools/list_managed_control_attributes"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/prepare_add_business_term"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/resolve_domain"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
@@ -67,6 +73,15 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, add_business_term.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
+
+	// Control Tower (create-control flow): DGC discovery + management +
+	// execution endpoints.
+	toolRegister(server, toolConfig, resolve_domain.NewTool(client))
+	toolRegister(server, toolConfig, list_managed_control_attributes.NewTool(client))
+	toolRegister(server, toolConfig, dry_run_control_query.NewTool(client))
+	toolRegister(server, toolConfig, create_control.NewTool(client))
+	toolRegister(server, toolConfig, enable_control.NewTool(client))
+	toolRegister(server, toolConfig, execute_control.NewTool(client))
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {
