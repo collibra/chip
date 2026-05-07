@@ -516,6 +516,98 @@ func TestEditAsset_UpdateProperty_Name(t *testing.T) {
 	}
 }
 
+// When displayName tracks name (Collibra's create-time default), an
+// update_property field=name should auto-cascade to displayName so the
+// user-facing label stays in sync.
+func TestEditAsset_UpdateProperty_Name_CascadesDisplayNameWhenItTracksName(t *testing.T) {
+	s := newStub()
+	s.asset.DisplayName = "Churn Rate" // matches Name → Collibra's auto-default
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateProperty, Field: "name", Value: "Renamed",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q", out.Status)
+	}
+	if got := s.patchedAssets[0]["name"]; got != "Renamed" {
+		t.Fatalf("expected PATCH name=Renamed, got %v", got)
+	}
+	if got := s.patchedAssets[0]["displayName"]; got != "Renamed" {
+		t.Fatalf("expected cascade to PATCH displayName=Renamed, got %v", got)
+	}
+	if !out.Results[0].CascadedDisplayName {
+		t.Fatalf("expected CascadedDisplayName=true on the result")
+	}
+}
+
+// When displayName has been customized to differ from name, name updates
+// must NOT silently overwrite it.
+func TestEditAsset_UpdateProperty_Name_DoesNotCascadeWhenDisplayNameDiverged(t *testing.T) {
+	s := newStub()
+	s.asset.DisplayName = "Customer Churn" // explicitly customized away from Name
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateProperty, Field: "name", Value: "Renamed",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q", out.Status)
+	}
+	if got := s.patchedAssets[0]["name"]; got != "Renamed" {
+		t.Fatalf("expected PATCH name=Renamed, got %v", got)
+	}
+	if _, present := s.patchedAssets[0]["displayName"]; present {
+		t.Fatalf("expected NO displayName in PATCH when displayName had diverged, got %+v", s.patchedAssets[0])
+	}
+	if out.Results[0].CascadedDisplayName {
+		t.Fatalf("expected CascadedDisplayName=false when displayName had diverged")
+	}
+}
+
+// In a batch where an earlier op explicitly sets displayName, the later
+// name update should NOT clobber that intentional customization. The
+// cascade decision must use the post-batch state (after the displayName
+// patch), not the validate-time snapshot.
+func TestEditAsset_UpdateProperty_Name_DoesNotCascadeAfterDisplayNamePatchedEarlierInBatch(t *testing.T) {
+	s := newStub()
+	s.asset.DisplayName = "Churn Rate" // initially tracks Name
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpUpdateProperty, Field: "displayName", Value: "Customer Churn"},
+			{Type: edit_asset.OpUpdateProperty, Field: "name", Value: "Renamed"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q (results=%+v)", out.Status, out.Results)
+	}
+	if len(s.patchedAssets) != 2 {
+		t.Fatalf("expected 2 PATCH calls, got %d", len(s.patchedAssets))
+	}
+	// Second patch is the name update — must not also re-patch displayName.
+	if got := s.patchedAssets[1]["name"]; got != "Renamed" {
+		t.Fatalf("expected second PATCH name=Renamed, got %v", got)
+	}
+	if _, present := s.patchedAssets[1]["displayName"]; present {
+		t.Fatalf("name op must not cascade after a prior displayName customization in same batch, got %+v", s.patchedAssets[1])
+	}
+	if out.Results[1].CascadedDisplayName {
+		t.Fatalf("expected CascadedDisplayName=false on the post-customization name op")
+	}
+}
+
 func TestEditAsset_UpdateProperty_StatusID_ByUUID(t *testing.T) {
 	s := newStub()
 	out, err := runTool(t, s, edit_asset.Input{
