@@ -81,7 +81,7 @@ type Operation struct {
 	Value         string `json:"value,omitempty" jsonschema:"New value. Used by update_attribute, add_attribute, and update_property."`
 
 	// update_property — whitelisted fields only.
-	Field string `json:"field,omitempty" jsonschema:"For update_property: one of 'name', 'displayName', 'statusId'. When field is 'statusId', value may be either the status UUID or the status name (e.g. 'Candidate', 'Accepted'); the server resolves names automatically."`
+	Field string `json:"field,omitempty" jsonschema:"For update_property: one of 'name', 'displayName', 'statusId'. When field is 'statusId', value may be either the status UUID or the status name (e.g. 'Candidate', 'Accepted'); the server resolves names automatically. When field is 'name' and the asset's current displayName equals its current name (Collibra's create-time default), displayName is also updated to the new value so the user-facing label stays in sync — set field=displayName separately if the user has already customized it differently."`
 
 	// Relation ops.
 	RelationType  string `json:"relationType,omitempty" jsonschema:"For add_relation: the forward role name of the relation type (e.g. 'is synonym of'). The edited asset is assumed to be the source (head) of the relation; if the named relation type expects the opposite direction, Collibra will return an error."`
@@ -135,9 +135,10 @@ type OperationResult struct {
 	Tag           string        `json:"tag,omitempty"`
 	Role          string        `json:"role,omitempty"`
 	UserID        string        `json:"userId,omitempty"`
-	PreviousValue string        `json:"previousValue,omitempty"`
-	NewValue      string        `json:"newValue,omitempty"`
-	Error         string        `json:"error,omitempty"`
+	PreviousValue       string `json:"previousValue,omitempty"`
+	NewValue            string `json:"newValue,omitempty"`
+	CascadedDisplayName bool   `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
+	Error               string `json:"error,omitempty"`
 }
 
 // NewTool returns the registered tool.
@@ -147,7 +148,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Edit an existing Collibra asset by submitting a list of typed operations against a single assetId. " +
 			"Supported operations: " +
 			"update_attribute / add_attribute / remove_attribute (change, append, or clear an attribute value such as 'Definition' or 'Note', identified by attribute type name); " +
-			"update_property (whitelisted fields only: 'name' to rename, 'displayName' to change the display name, or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
+			"update_property (whitelisted fields only: 'name' to rename — also updates displayName when it tracks the current name, so the user-facing label stays in sync; 'displayName' to change the display name; or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
 			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes a forward role name like 'is synonym of' plus the target assetId, remove_relation takes the relation instance UUID); " +
 			"add_tag (append a free-text tag without replacing existing tags); " +
 			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be given as a UUID, username, or email). " +

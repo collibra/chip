@@ -152,8 +152,10 @@ func validateUpdateProperty(ec *editContext, plan opPlan) opPlan {
 			plan.result = newErrorResult(op, "value is required for update_property name")
 			return plan
 		}
-		v := op.Value
-		plan.propertyPatch = clients.EditAssetPatchRequest{Name: &v}
+		// Patch is built at execute time, not here, because the cascade
+		// decision (whether to also PATCH displayName) reads ec.asset's
+		// current state — which may have changed if an earlier op in the
+		// same batch updated displayName.
 	case PropertyDisplayName:
 		v := op.Value
 		plan.propertyPatch = clients.EditAssetPatchRequest{DisplayName: &v}
@@ -188,7 +190,22 @@ func validateUpdateProperty(ec *editContext, plan opPlan) opPlan {
 }
 
 func executeUpdateProperty(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
-	updated, err := clients.PatchAsset(ctx, client, ec.asset.ID, plan.propertyPatch)
+	patch := plan.propertyPatch
+	cascadedDisplayName := false
+	if plan.op.Field == PropertyName {
+		// Auto-cascade displayName when it tracks name (Collibra's
+		// create-time default). Skip when displayName has diverged from
+		// name — that means the user explicitly customised the visible
+		// label and we should not silently overwrite it.
+		v := plan.op.Value
+		patch = clients.EditAssetPatchRequest{Name: &v}
+		if ec.asset.DisplayName != "" && ec.asset.DisplayName == ec.asset.Name {
+			patch.DisplayName = &v
+			cascadedDisplayName = true
+		}
+	}
+
+	updated, err := clients.PatchAsset(ctx, client, ec.asset.ID, patch)
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
@@ -196,11 +213,12 @@ func executeUpdateProperty(ctx context.Context, client *http.Client, ec *editCon
 
 	prev, next := previousAndNewProperty(ec.asset, updated, plan.op.Field)
 	plan.result = OperationResult{
-		Operation:     plan.op.Type,
-		Status:        "success",
-		Field:         plan.op.Field,
-		PreviousValue: prev,
-		NewValue:      next,
+		Operation:           plan.op.Type,
+		Status:              "success",
+		Field:               plan.op.Field,
+		PreviousValue:       prev,
+		NewValue:            next,
+		CascadedDisplayName: cascadedDisplayName,
 	}
 	// Keep our in-memory snapshot current for subsequent ops in the same request.
 	ec.asset = updated
