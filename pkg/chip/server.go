@@ -89,6 +89,7 @@ type Tool[In, Out any] struct {
 	Description string
 	Handler     ToolHandlerFunc[In, Out]
 	Permissions []string
+	Annotations *mcp.ToolAnnotations
 }
 
 func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
@@ -131,6 +132,7 @@ func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 		Description:  tool.Description,
 		InputSchema:  buildSchema[In](),
 		OutputSchema: buildSchema[Out](),
+		Annotations:  tool.Annotations,
 	}, handler)
 }
 
