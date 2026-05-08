@@ -83,6 +83,18 @@ These tools query the technical lineage graph — a map of all data objects and 
 
 **`search_lineage_transformations`** *(specialized)* — Search for transformations by name. Only use when the user explicitly asks about a transformation by name. This is **not** a general entry point for lineage questions — start with `search_lineage_entities` instead.
 
+### Data Access
+
+These tools query Collibra Data Access — the system that manages who can access what data, through grants, masks, filters, and groups.
+
+**`search_data_access_controls`** — Search for data access controls. All filters are optional and combinable: `name` (case-insensitive contains), `actions` (one or more of `Grant`, `Mask`, `Filter`, `Share`, `Group`, `FilterRule`), `states` (one or more of `Active`, `Inactive`, `Deleted`). Returns a paginated list (25 per page); pass the returned `nextCursor` to fetch subsequent pages.
+
+**`search_data_access_roles`** — Alias of `search_data_access_controls` restricted to `Grant`-type controls. Use this when the user asks specifically about roles or who has been granted access. Supports the same `name` and `states` filters; the `actions` filter is fixed to `Grant` and cannot be overridden. Returns a paginated list (25 per page); pass the returned `nextCursor` to fetch subsequent pages.
+
+**`get_data_access_control_details`** — Retrieve full details for a single data access control by its id. Use this when you already have an access control ID and need to inspect it.
+
+**`search_data_access_identities`** — Search for Data Access users (identities) by name and/or email. Providing `email` performs an exact lookup via `GetUserByEmail`. Providing `name` performs a server-side case-insensitive contains search via `SearchUsers`. Both can be combined: email resolves the user, name filters the result client-side. Name-only searches are paginated (25 per page) — use the returned `nextCursor` to fetch subsequent pages.
+
 ### Data Contracts
 
 **`list_data_contract`** — List data contracts with cursor-based pagination. Filter by `manifestId`. Use this to find a contract's UUID.
@@ -135,6 +147,22 @@ These tools query the technical lineage graph — a map of all data objects and 
 2. `get_lineage_downstream` → relations with consumer entity IDs
 3. Summarize based on the graph structure — only call `get_lineage_entity` for the most relevant consumers, not all of them
 
+### Find and inspect data access controls
+1. `search_data_access_controls` with optional name/action/state filters → get matching controls and their IDs
+2. `get_data_access_control_details` with a specific ID → full details including grant category, policy rule, timestamps
+
+### Find and inspect data access roles
+1. `search_data_access_roles` with optional name/state filters → get matching controls and their IDs
+2. `get_data_access_control_details` with a specific ID → full details including grant category, policy rule, timestamps
+
+### Find who has been granted access (roles)
+1. `search_data_access_roles` with optional name/state filters → returns only Grant-type controls
+2. `get_data_access_control_details` for any result ID → full grant details
+
+### Look up a Data Access user by email or name
+1. `search_data_access_identities` with `email` → exact lookup, returns the user's id, display name, and type
+   — or with `name` → paginated server-side contains search across all users
+
 ### Manage a data contract
 1. `list_data_contract` to find the contract UUID
 2. `pull_data_contract_manifest` to download, edit, then `push_data_contract_manifest` to update
@@ -147,5 +175,5 @@ These tools query the technical lineage graph — a map of all data objects and 
 - **UUIDs are required for most tools.** When you only have a name, start with `search_asset_keyword` or the natural language discovery tools to get the UUID first.
 - **`discover_data_assets` vs `search_asset_keyword`**: Prefer `discover_data_assets` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.
 - **Permissions**: `discover_data_assets` and `discover_business_glossary` require the `dgc.ai-copilot` permission. Classification tools require `dgc.classify` + `dgc.catalog`. If a tool fails with a permission error, let the user know which permission is needed.
-- **Pagination**: `search_asset_keyword`, `list_asset_types`, `search_data_class`, and `search_data_classification_match` use `limit`/`offset`. `list_data_contract` and `get_asset_details` (for relations) use cursor-based pagination — carry the cursor from the previous response. Lineage tools (`search_lineage_entities`, `get_lineage_upstream`, `get_lineage_downstream`, `search_lineage_transformations`) also use cursor-based pagination.
+- **Pagination**: `search_asset_keyword`, `list_asset_types`, `search_data_class`, and `search_data_classification_match` use `limit`/`offset`. `list_data_contract` and `get_asset_details` (for relations) use cursor-based pagination — carry the cursor from the previous response. Lineage tools (`search_lineage_entities`, `get_lineage_upstream`, `get_lineage_downstream`, `search_lineage_transformations`) and data access tools (`search_data_access_controls`, `search_data_access_roles`) also use cursor-based pagination.
 - **Error handling**: Validation errors are returned in the output `error` field (not as Go errors), so always check `error` and `success`/`found` fields in the response before using the data.
