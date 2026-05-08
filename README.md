@@ -35,6 +35,12 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`add_business_term`](pkg/tools/add_business_term/) - Create a business term asset with definition and optional attributes
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset
 - [`create_asset`](pkg/tools/create_asset/) - Create a new data asset with optional attributes
+- [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
+    - `update_attribute`, `add_attribute`, `remove_attribute` - change, append, or clear an attribute value (e.g. `Definition`, `Note`)
+    - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
+    - `add_relation`, `remove_relation` - link or unlink the asset to another asset by relation role (e.g. `is synonym of`)
+    - `add_tag` - append a free-text tag without replacing existing tags
+    - `set_responsibility` - assign a user or group to a resource role (e.g. `Steward`, `Owner`) by username, email, or UUID
 - [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract
 - [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match
 
