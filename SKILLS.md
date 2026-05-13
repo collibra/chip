@@ -19,7 +19,7 @@ Reach for Collibra tools when the user's question is about **understanding, disc
 
 **`create_asset`** — Create a new asset of any type in Collibra in a single call. Accepts human-friendly identifiers and resolves them server-side: `assetType` matches against UUID, publicId (e.g. `"BusinessTerm"`), or display name (e.g. `"Business Term"`); `domain` against UUID or display name; `status` against UUID or status name (e.g. `"Candidate"`); `attributes` reference attribute types by `name` (e.g. `"Definition"`) or by `typeId`. Markdown in `RICH_TEXT` attribute values is converted to HTML server-side so it renders correctly in the Collibra UI. By default, `allowDuplicate=false` returns `status=duplicate_found` without writing if an asset with the same name already exists in the resolved (assetType, domain); pass `allowDuplicate=true` to bypass. Validation errors (e.g. unknown asset type, type not allowed in domain, unknown attribute) return suggestion-rich messages so the agent can self-correct in one round. Returns one of: `success`, `duplicate_found`, `validation_error`, or `error`. Destructive (creates a new asset).
 
-**`discover_create_asset_options`** — Read-only companion to `create_asset`. Use **only** when the agent needs to *browse* what's creatable on this instance or *inspect* an asset type's full schema before composing a create. Without inputs, returns available asset types. With just `assetType`, returns the domains compatible with that type. With just `domain`, returns the asset types creatable in that domain. With both, returns the scoped attribute and relation schema (pass `includeStringType=true` to also populate each attribute's `stringType` like `RICH_TEXT` plus its description). Calling this before `create_asset` is **optional** — `create_asset` does its own resolution, validation, and duplicate-check. Read-only.
+**`prepare_create_asset`** — Read-only companion to `create_asset`. Use **only** when the agent needs to *browse* what's creatable on this instance or *inspect* an asset type's full schema before composing a create. Without inputs, returns available asset types. With just `assetType`, returns the domains compatible with that type. With just `domain`, returns the asset types creatable in that domain. With both, returns the scoped attribute and relation schema (pass `includeStringType=true` to also populate each attribute's `stringType` like `RICH_TEXT` plus its description). Calling this before `create_asset` is **optional** — `create_asset` does its own resolution, validation, and duplicate-check. Read-only.
 
 ### Discovery & Search
 
@@ -101,12 +101,12 @@ Single call — `create_asset` does its own resolution, validation, and duplicat
    - `validation_error` → the message includes suggestions (available asset types, compatible domains, valid attribute names, etc.). Self-correct and retry
    - `error` → unexpected downstream Collibra failure; surface the message to the user
 
-**When to call `discover_create_asset_options` first** (optional):
+**When to call `prepare_create_asset` first** (optional):
 - The user is browsing ("what asset types can I create?", "what domains accept a Business Term?")
 - The agent wants to know which attributes are required or `RICH_TEXT` before composing values
 - A previous `create_asset` returned `validation_error` and the agent wants to enumerate the full set of options rather than rely on the message's truncated suggestions
 
-For straightforward creates where the user provides asset type + domain, skip `discover_create_asset_options` and call `create_asset` directly.
+For straightforward creates where the user provides asset type + domain, skip `prepare_create_asset` and call `create_asset` directly.
 
 ### Find an asset and get its details
 1. `search_asset_keyword` with the asset name → get UUID from results
@@ -148,7 +148,7 @@ For straightforward creates where the user provides asset type + domain, skip `d
 
 ## Tips
 
-- **`create_asset` is self-sufficient — don't pre-flight it.** It resolves names to UUIDs, validates, and gates on duplicates internally. Calling `discover_create_asset_options` first is purely optional and only useful for browsing or schema inspection (see the workflow above).
+- **`create_asset` is self-sufficient — don't pre-flight it.** It resolves names to UUIDs, validates, and gates on duplicates internally. Calling `prepare_create_asset` first is purely optional and only useful for browsing or schema inspection (see the workflow above).
 - **For RICH_TEXT attributes, write Markdown.** `create_asset` detects `RICH_TEXT` attributes (e.g. `Definition`) and converts Markdown to HTML server-side before writing. Use bold (`**...**`), links (`[text](url)`), bullet lists, and headings naturally; they render correctly in the Collibra UI. Plain-text attributes pass through unchanged.
 - **UUIDs are required for most read tools.** When you only have a name, start with `search_asset_keyword` or the natural language discovery tools to get the UUID first.
 - **`discover_data_assets` vs `search_asset_keyword`**: Prefer `discover_data_assets` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.

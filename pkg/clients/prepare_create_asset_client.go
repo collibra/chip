@@ -295,7 +295,7 @@ func SearchAssetsForDuplicate(ctx context.Context, client *http.Client, name str
 	return result.Results, nil
 }
 
-// --- Consolidated lookups (used by both discover_create_asset_options and create_asset) ---
+// --- Consolidated lookups (used by both prepare_create_asset and create_asset) ---
 
 // PrepareCreateStatus is one Collibra status value (e.g. "Candidate").
 type PrepareCreateStatus struct {

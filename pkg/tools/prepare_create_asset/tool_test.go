@@ -1,4 +1,4 @@
-package discover_create_asset_options_test
+package prepare_create_asset_test
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/discover_create_asset_options"
+	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
@@ -213,8 +213,8 @@ func client(t *testing.T, m *mockDGC) *http.Client {
 
 func TestPrepare_NoInputs_EnumeratesAssetTypes(t *testing.T) {
 	c := client(t, &mockDGC{t: t})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{})
-	if out.Status != discover_create_asset_options.StatusIncomplete {
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{})
+	if out.Status != prepare_create_asset.StatusIncomplete {
 		t.Fatalf("want incomplete, got %q", out.Status)
 	}
 	if len(out.AssetTypeOptions) == 0 {
@@ -224,10 +224,10 @@ func TestPrepare_NoInputs_EnumeratesAssetTypes(t *testing.T) {
 
 func TestPrepare_DomainOnly_EnumeratesAssetTypesAllowedInDomain(t *testing.T) {
 	c := client(t, &mockDGC{t: t})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
 		Domain: glossaryDomain,
 	})
-	if out.Status != discover_create_asset_options.StatusIncomplete {
+	if out.Status != prepare_create_asset.StatusIncomplete {
 		t.Fatalf("want incomplete, got %q (%s)", out.Status, out.Message)
 	}
 	if len(out.AssetTypeOptions) == 0 {
@@ -253,10 +253,10 @@ func TestPrepare_DomainOnly_EnumeratesAssetTypesAllowedInDomain(t *testing.T) {
 
 func TestPrepare_AssetTypeOnly_EnumeratesDomains(t *testing.T) {
 	c := client(t, &mockDGC{t: t})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
 		AssetType: btTypeName,
 	})
-	if out.Status != discover_create_asset_options.StatusIncomplete {
+	if out.Status != prepare_create_asset.StatusIncomplete {
 		t.Fatalf("want incomplete, got %q", out.Status)
 	}
 	if len(out.DomainOptions) == 0 {
@@ -266,11 +266,11 @@ func TestPrepare_AssetTypeOnly_EnumeratesDomains(t *testing.T) {
 
 func TestPrepare_BothResolved_ReturnsReadyWithSchema(t *testing.T) {
 	c := client(t, &mockDGC{t: t})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
 		AssetType: btTypeName,
 		Domain:    glossaryDomain,
 	})
-	if out.Status != discover_create_asset_options.StatusReady {
+	if out.Status != prepare_create_asset.StatusReady {
 		t.Fatalf("want ready, got %q (%s)", out.Status, out.Message)
 	}
 	if out.Resolved == nil {
@@ -282,7 +282,7 @@ func TestPrepare_BothResolved_ReturnsReadyWithSchema(t *testing.T) {
 	if len(out.AttributeSchema) != 2 {
 		t.Errorf("expected 2 attribute slots in schema, got %d", len(out.AttributeSchema))
 	}
-	var def, note discover_create_asset_options.AttributeSchemaEntry
+	var def, note prepare_create_asset.AttributeSchemaEntry
 	for _, e := range out.AttributeSchema {
 		if e.AttributeTypeID == defAttrID {
 			def = e
@@ -307,15 +307,15 @@ func TestPrepare_BothResolved_ReturnsReadyWithSchema(t *testing.T) {
 
 func TestPrepare_IncludeStringType_HydratesDetails(t *testing.T) {
 	c := client(t, &mockDGC{t: t})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
 		AssetType:         btTypeName,
 		Domain:            glossaryDomain,
 		IncludeStringType: true,
 	})
-	if out.Status != discover_create_asset_options.StatusReady {
+	if out.Status != prepare_create_asset.StatusReady {
 		t.Fatalf("want ready, got %q (%s)", out.Status, out.Message)
 	}
-	var def discover_create_asset_options.AttributeSchemaEntry
+	var def prepare_create_asset.AttributeSchemaEntry
 	for _, e := range out.AttributeSchema {
 		if e.AttributeTypeID == defAttrID {
 			def = e
@@ -331,11 +331,11 @@ func TestPrepare_IncludeStringType_HydratesDetails(t *testing.T) {
 
 func TestPrepare_AssetTypeNotResolved_IncludesLicenseHint(t *testing.T) {
 	c := client(t, &mockDGC{t: t, excludeBT: true})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
 		AssetType: btTypeName,
 		Domain:    glossaryDomain,
 	})
-	if out.Status != discover_create_asset_options.StatusNeedsClarification {
+	if out.Status != prepare_create_asset.StatusNeedsClarification {
 		t.Fatalf("want needs_clarification, got %q (%s)", out.Status, out.Message)
 	}
 	if !strings.Contains(out.Message, "module may not be enabled") {
@@ -348,11 +348,11 @@ func TestPrepare_AssetTypeNotResolved_IncludesLicenseHint(t *testing.T) {
 
 func TestPrepare_TypeNotAllowedInDomain(t *testing.T) {
 	c := client(t, &mockDGC{t: t, domainTypeOther: true})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
 		AssetType: btTypeName,
 		Domain:    glossaryDomain,
 	})
-	if out.Status != discover_create_asset_options.StatusNeedsClarification {
+	if out.Status != prepare_create_asset.StatusNeedsClarification {
 		t.Fatalf("want needs_clarification, got %q", out.Status)
 	}
 	if !strings.Contains(out.Message, "not allowed in domain") {
@@ -362,10 +362,10 @@ func TestPrepare_TypeNotAllowedInDomain(t *testing.T) {
 
 func TestPrepare_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *testing.T) {
 	c := client(t, &mockDGC{t: t, noAssignments: true})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
 		AssetType: btTypeName,
 	})
-	if out.Status != discover_create_asset_options.StatusNeedsClarification {
+	if out.Status != prepare_create_asset.StatusNeedsClarification {
 		t.Fatalf("want needs_clarification, got %q (%s)", out.Status, out.Message)
 	}
 	if len(out.DomainOptions) != 0 {
@@ -378,11 +378,11 @@ func TestPrepare_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *testin
 
 func TestPrepare_AvailableStatusesAlwaysIncluded(t *testing.T) {
 	c := client(t, &mockDGC{t: t})
-	out, _ := discover_create_asset_options.NewTool(c).Handler(t.Context(), discover_create_asset_options.Input{
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
 		AssetType: btTypeName,
 		Domain:    glossaryDomain,
 	})
-	if out.Status != discover_create_asset_options.StatusReady {
+	if out.Status != prepare_create_asset.StatusReady {
 		t.Fatalf("want ready, got %q", out.Status)
 	}
 	if len(out.AvailableStatuses) == 0 {

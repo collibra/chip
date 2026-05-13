@@ -8,7 +8,7 @@
 //
 // create_asset replaces the four-tool flow (prepare_add_business_term,
 // add_business_term, prepare_create_asset, create_asset) with one
-// edit_asset-style entry point. Calling discover_create_asset_options
+// edit_asset-style entry point. Calling prepare_create_asset
 // first is optional — useful only for discovery — because every
 // resolution and validation step lives here too.
 package create_asset
@@ -116,7 +116,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Markdown in RICH_TEXT attribute values (e.g. 'Definition') is converted to HTML server-side so it renders correctly in Collibra. " +
 			"When allowDuplicate is false (the default), an existing asset with the same name in the same (assetType, domain) returns status=duplicate_found without writing. " +
 			"Validation errors return suggestion-rich messages so the agent can self-correct. " +
-			"Calling discover_create_asset_options first is optional — only needed when the agent wants to enumerate options or inspect a type's full attribute schema.",
+			"Calling prepare_create_asset first is optional — only needed when the agent wants to enumerate options or inspect a type's full attribute schema.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
@@ -499,7 +499,7 @@ func domainNotResolved(ctx context.Context, client *http.Client, raw string, err
 }
 
 // filterDomainsByAllowedTypes is the same predicate as in
-// discover_create_asset_options; duplicated here because the package boundary
+// prepare_create_asset; duplicated here because the package boundary
 // keeps each tool's helpers co-located. Cheap and stable.
 func filterDomainsByAllowedTypes(domains []clients.PrepareCreateDomain, allowed []clients.PrepareCreateAllowedDomainType) []clients.PrepareCreateDomain {
 	allowedIDs := make(map[string]struct{}, len(allowed))

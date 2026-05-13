@@ -1,5 +1,5 @@
-// Package discover_create_asset_options implements the
-// discover_create_asset_options MCP tool — a read-only companion to
+// Package prepare_create_asset implements the
+// prepare_create_asset MCP tool — a read-only companion to
 // create_asset. It lists available asset types and domains, resolves a
 // name/publicId/UUID for either, and hydrates the scoped attribute and
 // relation schema for a chosen (assetType, domain) pair so the agent
@@ -8,7 +8,7 @@
 // validation — those live in create_asset itself, which is fully
 // self-sufficient. Use this tool only when the agent needs to enumerate
 // options or inspect a type's full schema.
-package discover_create_asset_options
+package prepare_create_asset
 
 import (
 	"context"
@@ -127,7 +127,7 @@ type StatusOption struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name: "discover_create_asset_options",
+		Name: "prepare_create_asset",
 		Description: "Read-only companion to create_asset. Enumerates available asset types and domains, resolves a UUID/publicId/displayName for either, " +
 			"and hydrates the scoped attribute and relation schema for a given (assetType, domain) pair so the agent knows what attributes and relations are available. " +
 			"Optional: pass includeStringType=true to also populate each attribute's stringType (e.g. 'RICH_TEXT') and description. " +
