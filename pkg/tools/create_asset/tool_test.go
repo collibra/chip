@@ -63,8 +63,8 @@ type assetTypeRow struct {
 	Name     string `json:"name"`
 }
 type domainRow struct {
-	ID   string                          `json:"id"`
-	Name string                          `json:"name"`
+	ID   string                           `json:"id"`
+	Name string                           `json:"name"`
 	Type *clients.PrepareCreateDomainType `json:"type,omitempty"`
 }
 type asssetSearchRow struct {
@@ -375,7 +375,7 @@ func TestCreateAsset_AssetTypeNotResolved_IncludesSuggestionsAndLicenseHint(t *t
 		t.Errorf("expected suggestion list in message, got %q", out.Message)
 	}
 	if !strings.Contains(out.Message, "module may not be enabled") {
-		t.Errorf("expected DEV-177761 license hint in message, got %q", out.Message)
+		t.Errorf("expected license hint in message, got %q", out.Message)
 	}
 }
 

@@ -3,8 +3,8 @@
 // human-friendly identifiers (UUIDs, publicIds, or display names) for
 // asset type, domain, status, and attributes; the server resolves them
 // against Collibra's scoped assignment, gates a duplicate-name check
-// (default-on), converts Markdown to HTML for RICH_TEXT attribute values
-// (DEV-179098), and writes the asset and its attributes.
+// (default-on), converts Markdown to HTML for RICH_TEXT attribute values,
+// and writes the asset and its attributes.
 //
 // create_asset replaces the four-tool flow (prepare_add_business_term,
 // add_business_term, prepare_create_asset, create_asset) with one
@@ -447,9 +447,9 @@ func writeAttributes(ctx context.Context, client *http.Client, assetID string, r
 // --- not-resolved branches ---
 
 // assetTypeNotResolved enriches the validation_error message with the
-// available asset types and a license hint that addresses the
-// DEV-177761 failure mode (an asset type whose backing module is not
-// licensed simply isn't present in /assetTypes).
+// available asset types and a license hint: when an asset type's
+// backing module is not licensed, the type simply isn't present in
+// /assetTypes, so the failure looks like a typo to the agent.
 func assetTypeNotResolved(ctx context.Context, client *http.Client, raw string, err error) Output {
 	types, _, listErr := clients.ListAssetTypesForPrepare(ctx, client, 200)
 	msg := fmt.Sprintf("Asset type %q could not be resolved: %v.", raw, err)

@@ -339,7 +339,7 @@ func TestPrepare_AssetTypeNotResolved_IncludesLicenseHint(t *testing.T) {
 		t.Fatalf("want needs_clarification, got %q (%s)", out.Status, out.Message)
 	}
 	if !strings.Contains(out.Message, "module may not be enabled") {
-		t.Errorf("expected DEV-177761 license hint, got %q", out.Message)
+		t.Errorf("expected license hint, got %q", out.Message)
 	}
 	if len(out.AssetTypeOptions) == 0 {
 		t.Errorf("expected asset type options to recover from")

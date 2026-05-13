@@ -1,7 +1,7 @@
 // Package markdown converts agent-emitted Markdown to HTML for Collibra
 // rich-text attribute fields. Collibra renders RICH_TEXT attributes (e.g.
 // "Definition") as HTML, so Markdown syntax in an LLM's output otherwise
-// displays as raw characters in the UI (DEV-179098). The intended caller
+// displays as raw characters in the UI. The intended caller
 // is a write tool that has already resolved an attribute's stringType to
 // "RICH_TEXT" — plain-string attributes should bypass this package.
 package markdown
@@ -33,8 +33,8 @@ var converter = goldmark.New(
 //
 // Plain text without any Markdown syntax round-trips as a paragraph-wrapped
 // string (e.g. "Hello" → "<p>Hello</p>"); Collibra's UI renders this
-// identically to the bare text, which satisfies the "plain text passes
-// through unaffected" criterion in DEV-179098.
+// identically to the bare text, which satisfies the requirement that
+// plain text without Markdown syntax passes through unaffected.
 func ToHTML(s string) string {
 	if s == "" {
 		return ""

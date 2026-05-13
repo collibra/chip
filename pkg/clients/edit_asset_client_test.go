@@ -41,8 +41,8 @@ func TestEditAssetAttributeInstance_ValueAcceptsAnyScalar(t *testing.T) {
 // TestEditAssetAttributeInstance_ListPageDecodesMixedKinds covers the path
 // the edit_asset tool actually hits: a paginated /rest/2.0/attributes?assetId=
 // response with attribute values of mixed kinds in the same payload.
-// Reproduces the bug reported in DEV-177761 where a numeric attribute on a
-// freshly-created asset broke the entire attribute fetch.
+// Regression guard: a numeric attribute on a freshly-created asset
+// previously broke the entire attribute fetch.
 func TestEditAssetAttributeInstance_ListPageDecodesMixedKinds(t *testing.T) {
 	raw := `{
 		"total": 3,
