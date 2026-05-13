@@ -11,24 +11,32 @@ import (
 
 // CreateAssetRequest is the request body for POST /rest/2.0/assets.
 type CreateAssetRequest struct {
-	Name                         string `json:"name"`
-	TypeID                       string `json:"typeId"`
-	DomainID                     string `json:"domainId"`
-	DisplayName                  string `json:"displayName,omitempty"`
-	ExcludeFromAutoHyperlinking  bool   `json:"excludeFromAutoHyperlinking,omitempty"`
+	Name                        string `json:"name"`
+	TypeID                      string `json:"typeId"`
+	DomainID                    string `json:"domainId"`
+	DisplayName                 string `json:"displayName,omitempty"`
+	StatusID                    string `json:"statusId,omitempty"`
+	ExcludeFromAutoHyperlinking bool   `json:"excludeFromAutoHyperlinking,omitempty"`
 }
 
 // CreateAssetResponse is the response from POST /rest/2.0/assets.
 type CreateAssetResponse struct {
-	ID             string              `json:"id"`
-	Name           string              `json:"name"`
-	DisplayName    string              `json:"displayName"`
-	Type           CreateAssetTypeRef  `json:"type"`
-	Domain         CreateAssetDomainRef `json:"domain"`
-	CreatedBy      string              `json:"createdBy"`
-	CreatedOn      int64               `json:"createdOn"`
-	LastModifiedBy string              `json:"lastModifiedBy"`
-	LastModifiedOn int64               `json:"lastModifiedOn"`
+	ID             string                `json:"id"`
+	Name           string                `json:"name"`
+	DisplayName    string                `json:"displayName"`
+	Type           CreateAssetTypeRef    `json:"type"`
+	Domain         CreateAssetDomainRef  `json:"domain"`
+	Status         *CreateAssetStatusRef `json:"status,omitempty"`
+	CreatedBy      string                `json:"createdBy"`
+	CreatedOn      int64                 `json:"createdOn"`
+	LastModifiedBy string                `json:"lastModifiedBy"`
+	LastModifiedOn int64                 `json:"lastModifiedOn"`
+}
+
+// CreateAssetStatusRef is a reference to a status in a create asset response.
+type CreateAssetStatusRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // CreateAssetTypeRef is a reference to an asset type in a create asset response.
