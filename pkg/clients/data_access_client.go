@@ -123,56 +123,6 @@ type SearchDataAccessControlsResult struct {
 	NextCursor *string                     `json:"nextCursor,omitempty"`
 }
 
-// SearchDataAccessControls returns a page of data access controls filtered by name, actions, and/or states.
-// Name search is case-insensitive contains. Pass cursor from a previous response to fetch the next page.
-func SearchDataAccessControls(ctx context.Context, httpClient *http.Client, name string, actions []string, states []string, cursor string, pageSize int) (*SearchDataAccessControlsResult, error) {
-	collibraHost, ok := chip.GetCollibraHost(ctx)
-	if !ok {
-		return nil, fmt.Errorf("collibra host not configured in context")
-	}
-	dataAccessURL := strings.TrimSuffix(collibraHost, "/") + "/dataAccess"
-
-	collibraClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create data access client: %w", err)
-	}
-
-	filter := &types.AccessControlFilterInput{}
-	if name != "" {
-		filter.Search = &name
-	}
-	for _, a := range actions {
-		filter.Actions = append(filter.Actions, types.AccessControlAction(a))
-	}
-	for _, s := range states {
-		filter.States = append(filter.States, types.AccessControlState(s))
-	}
-
-	opts := []func(*services.AccessControlListOptions){
-		services.WithAccessControlListFilter(filter),
-	}
-	if cursor != "" {
-		opts = append(opts, services.WithAccessControlListCursor(cursor))
-	}
-	if pageSize > 0 {
-		opts = append(opts, services.WithAccessControlListPageSize(pageSize))
-	}
-
-	items, nextCursor, err := collibraClient.AccessControl().ListAccessControlsPage(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	result := &SearchDataAccessControlsResult{
-		Items:      make([]*DataAccessControlDetails, 0, len(items)),
-		NextCursor: nextCursor,
-	}
-	for _, ac := range items {
-		result.Items = append(result.Items, mapToDataAccessControlDetails(ac))
-	}
-	return result, nil
-}
-
 func mapToDataAccessWhatItem(w *types.AccessWhatAccessControlItem) DataAccessWhatItem {
 	item := DataAccessWhatItem{
 		ExpiresAt: w.ExpiresAt,
@@ -227,18 +177,17 @@ type DataAccessIdentity struct {
 	Type  string  `json:"type" jsonschema:"User type: Human or Machine"`
 }
 
-// SearchDataAccessIdentitiesResult holds a page of identities and an optional next-page cursor.
+// SearchDataAccessIdentitiesResult holds a page of identities.
 type SearchDataAccessIdentitiesResult struct {
-	Items      []*DataAccessIdentity
-	NextCursor *string
+	Items []*DataAccessIdentity
 }
 
 // SearchDataAccessIdentities searches for Data Access users by name and/or email.
 // When email is provided, an exact lookup via GetUserByEmail is performed. Name is then applied
 // as an optional client-side case-insensitive contains filter on the result.
-// When only name is provided, SearchUsers is called with the Search filter (case-insensitive
-// contains). Cursor and pageSize control pagination for name-based searches.
-func SearchDataAccessIdentities(ctx context.Context, httpClient *http.Client, name, email, cursor string, pageSize int) (*SearchDataAccessIdentitiesResult, error) {
+// When only name is provided, ListUsers is called with the Search filter (case-insensitive
+// contains). The returned list is capped at pageSize items (default 25).
+func SearchDataAccessIdentities(ctx context.Context, httpClient *http.Client, name, email string, pageSize int) (*SearchDataAccessIdentitiesResult, error) {
 	collibraHost, ok := chip.GetCollibraHost(ctx)
 	if !ok {
 		return nil, fmt.Errorf("collibra host not configured in context")
@@ -267,34 +216,209 @@ func SearchDataAccessIdentities(ctx context.Context, httpClient *http.Client, na
 		return &SearchDataAccessIdentitiesResult{Items: []*DataAccessIdentity{identity}}, nil
 	}
 
-	// Name-only path: use SearchUsers with the Search filter.
 	filter := &types.UserFilterInput{}
 	if name != "" {
 		filter.Search = &name
 	}
 
-	var after *string
-	if cursor != "" {
-		after = &cursor
-	}
-	var limit *int
-	if pageSize > 0 {
-		limit = &pageSize
+	limit := pageSize
+	if limit <= 0 {
+		limit = 25
 	}
 
-	users, nextCursor, err := collibraClient.User().SearchUsers(ctx, after, limit, filter)
+	result := &SearchDataAccessIdentitiesResult{
+		Items: make([]*DataAccessIdentity, 0, limit),
+	}
+	for user, iterErr := range collibraClient.User().ListUsers(ctx, services.WithUserListFilter(filter)) {
+		if iterErr != nil {
+			return nil, iterErr
+		}
+		result.Items = append(result.Items, mapToDataAccessIdentity(user))
+		if len(result.Items) >= limit {
+			break
+		}
+	}
+	return result, nil
+}
+
+// DataAccessObject represents a single data object in Collibra Data Access.
+type DataAccessObject struct {
+	ID                    string                 `json:"id" jsonschema:"Unique identifier of the data object"`
+	Name                  string                 `json:"name" jsonschema:"Name of the data object"`
+	FullName              string                 `json:"fullName" jsonschema:"Fully qualified name of the data object within its data source"`
+	Type                  string                 `json:"type" jsonschema:"Type of the data object (e.g. table, column, schema, view)"`
+	DataType              *string                `json:"dataType,omitempty" jsonschema:"Data type of the object (typically used for columns)"`
+	Deleted               bool                   `json:"deleted" jsonschema:"Whether the data object is deleted (no longer present in the source)"`
+	Description           string                 `json:"description" jsonschema:"Description of the data object"`
+	DataSourceID          string                 `json:"dataSourceId,omitempty" jsonschema:"Identifier of the data source the object belongs to"`
+	ApplicablePermissions []DataAccessPermission `json:"applicablePermissions,omitempty" jsonschema:"Source-system permissions that can be requested or granted on this data object (and its descendants). Each permission carries its name and description."`
+}
+
+// DataAccessPermission is a permission that can be set on a data object.
+type DataAccessPermission struct {
+	Name        string `json:"name" jsonschema:"Permission name as defined by the data source (e.g. SELECT, INSERT)"`
+	Description string `json:"description" jsonschema:"Human-readable description of the permission"`
+}
+
+// SearchDataAccessObjectsResult holds a page of data objects.
+type SearchDataAccessObjectsResult struct {
+	Items []*DataAccessObject `json:"items"`
+}
+
+// SearchDataAccessObjects returns a list of data objects matching the supplied filters.
+// Name search is case-insensitive contains. The returned list is capped at pageSize items
+// (default 25), drawn from the SDK's ListDataObjects iterator.
+func SearchDataAccessObjects(ctx context.Context, httpClient *http.Client, name string, dataSources []string, dataObjectTypes []string, parents []string, ancestors []string, includeDeleted bool, pageSize int) (*SearchDataAccessObjectsResult, error) {
+	collibraHost, ok := chip.GetCollibraHost(ctx)
+	if !ok {
+		return nil, fmt.Errorf("collibra host not configured in context")
+	}
+	dataAccessURL := strings.TrimSuffix(collibraHost, "/") + "/dataAccess"
+
+	collibraClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data access client: %w", err)
+	}
+
+	filter := &types.DataObjectFilterInput{}
+	if name != "" {
+		filter.Search = &name
+	}
+	if len(dataSources) > 0 {
+		filter.DataSources = dataSources
+	}
+	if len(dataObjectTypes) > 0 {
+		filter.Types = dataObjectTypes
+	}
+	if len(parents) > 0 {
+		filter.Parents = parents
+	}
+	if len(ancestors) > 0 {
+		filter.Ancestors = ancestors
+	}
+	if includeDeleted {
+		filter.IncludeDeleted = &includeDeleted
+	}
+
+	limit := pageSize
+	if limit <= 0 {
+		limit = 25
+	}
+
+	result := &SearchDataAccessObjectsResult{
+		Items: make([]*DataAccessObject, 0, limit),
+	}
+	for obj, iterErr := range collibraClient.DataObject().ListDataObjects(ctx, services.WithDataObjectListFilter(filter)) {
+		if iterErr != nil {
+			return nil, iterErr
+		}
+		result.Items = append(result.Items, mapToDataAccessObject(obj))
+		if len(result.Items) >= limit {
+			break
+		}
+	}
+	return result, nil
+}
+
+// CreateDataAccessRequestWhatInput describes a single WHAT item (a data object) for a new
+// data access request, with optional requested permissions.
+type CreateDataAccessRequestWhatInput struct {
+	DataObjectID      string   `json:"dataObjectId" jsonschema:"The ID of the data object the requesters want access to. Obtain via search_data_access_objects."`
+	Permissions       []string `json:"permissions,omitempty" jsonschema:"Source-system permissions requested on this data object (e.g. SELECT). Should always be empty."`
+	GlobalPermissions []string `json:"globalPermissions,omitempty" jsonschema:"Global permissions requested on this data object. Must always be READ."`
+}
+
+// CreateDataAccessRequestInput holds the parameters required to create a new data access request.
+type CreateDataAccessRequestInput struct {
+	Name        *string
+	Description string
+	UserIDs     []string
+	What        []CreateDataAccessRequestWhatInput
+}
+
+// DataAccessRequestSummary is the simplified result of creating an access request.
+type DataAccessRequestSummary struct {
+	ID          string  `json:"id" jsonschema:"Unique identifier of the created access request"`
+	Name        *string `json:"name,omitempty" jsonschema:"Display name of the access request"`
+	Description string  `json:"description" jsonschema:"Description of the access request"`
+	Status      string  `json:"status" jsonschema:"Current status of the access request (e.g. Created, Approval, Implementation, Closed)"`
+	Outcome     string  `json:"outcome" jsonschema:"Current outcome of the access request"`
+	Url         string  `json:"url" jsonschema:"Url in the Collibra UI to view access request"`
+}
+
+// CreateDataAccessRequest creates a new Data Access request via the SDK's AccessRequestClient.
+func CreateDataAccessRequest(ctx context.Context, httpClient *http.Client, input CreateDataAccessRequestInput) (*DataAccessRequestSummary, error) {
+	collibraHost, ok := chip.GetCollibraHost(ctx)
+	if !ok {
+		return nil, fmt.Errorf("collibra host not configured in context")
+	}
+	dataAccessURL := strings.TrimSuffix(collibraHost, "/") + "/dataAccess"
+
+	collibraClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data access client: %w", err)
+	}
+
+	what := make([]types.AccessRequestWhatInput, 0, len(input.What))
+	for _, w := range input.What {
+		what = append(what, types.AccessRequestWhatInput{
+			DataObject: &types.AccessRequestDataObjectWhatInput{
+				Id:                w.DataObjectID,
+				Permissions:       w.Permissions,
+				GlobalPermissions: w.GlobalPermissions,
+			},
+		})
+	}
+
+	req := types.AccessRequestInput{
+		Name:        input.Name,
+		Description: &input.Description,
+		Who: &types.AccessRequestWhoInput{
+			Users: input.UserIDs,
+		},
+		What: what,
+	}
+
+	ar, err := collibraClient.AccessRequest().CreateAccessRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &SearchDataAccessIdentitiesResult{
-		Items:      make([]*DataAccessIdentity, 0, len(users)),
-		NextCursor: nextCursor,
+	requestURL := strings.TrimSuffix(collibraHost, "/") + "/data-access/access-requests/" + ar.Id
+
+	return &DataAccessRequestSummary{
+		ID:          ar.Id,
+		Name:        ar.Name,
+		Description: ar.Description,
+		Status:      string(ar.Status),
+		Outcome:     string(ar.Outcome),
+		Url:         requestURL,
+	}, nil
+}
+
+func mapToDataAccessObject(o *types.DataObject) *DataAccessObject {
+	out := &DataAccessObject{
+		ID:          o.Id,
+		Name:        o.Name,
+		FullName:    o.FullName,
+		Type:        o.Type,
+		DataType:    o.DataType,
+		Deleted:     o.Deleted,
+		Description: o.Description,
 	}
-	for i := range users {
-		result.Items = append(result.Items, mapToDataAccessIdentity(&users[i]))
+	if o.DataSource != nil {
+		out.DataSourceID = o.DataSource.Id
 	}
-	return result, nil
+	if len(o.ApplicablePermissions) > 0 {
+		out.ApplicablePermissions = make([]DataAccessPermission, 0, len(o.ApplicablePermissions))
+		for _, p := range o.ApplicablePermissions {
+			out.ApplicablePermissions = append(out.ApplicablePermissions, DataAccessPermission{
+				Name:        p.Name,
+				Description: p.Description,
+			})
+		}
+	}
+	return out
 }
 
 func mapToDataAccessIdentity(u *types.User) *DataAccessIdentity {
