@@ -87,13 +87,17 @@ These tools query the technical lineage graph — a map of all data objects and 
 
 These tools query Collibra Data Access — the system that manages who can access what data, through grants, masks, filters, and groups.
 
-**`search_data_access_controls`** — Search for data access controls. All filters are optional and combinable: `name` (case-insensitive contains), `actions` (one or more of `Grant`, `Mask`, `Filter`, `Share`, `Group`, `FilterRule`), `states` (one or more of `Active`, `Inactive`, `Deleted`). Returns a paginated list (25 per page); pass the returned `nextCursor` to fetch subsequent pages.
-
-**`search_data_access_roles`** — Alias of `search_data_access_controls` restricted to `Grant`-type controls. Use this when the user asks specifically about roles or who has been granted access. Supports the same `name` and `states` filters; the `actions` filter is fixed to `Grant` and cannot be overridden. Returns a paginated list (25 per page); pass the returned `nextCursor` to fetch subsequent pages.
-
-**`get_data_access_control_details`** — Retrieve full details for a single data access control by its id. Use this when you already have an access control ID and need to inspect it.
-
 **`search_data_access_identities`** — Search for Data Access users (identities) by name and/or email. Providing `email` performs an exact lookup via `GetUserByEmail`. Providing `name` performs a server-side case-insensitive contains search via `SearchUsers`. Both can be combined: email resolves the user, name filters the result client-side. Name-only searches are paginated (25 per page) — use the returned `nextCursor` to fetch subsequent pages.
+
+**`search_data_access_objects`** — Search for data objects in Collibra Data Access (tables, columns, schemas, views, and other entities tracked in registered data sources). Filters can be combined: `name` (case-insensitive contains), `dataSources` (data source IDs), `types` (e.g. `table`, `column`, `schema`, `view`), `parents` / `ancestors` (other data object IDs to scope the search to a sub-tree), and `includeDeleted`. Returns up to `pageSize` matches (default 25, max 25). Each result includes the data object ID, name, fully qualified name, type, data type, deleted flag, description, data source ID, and `applicablePermissions` — the list of source-system permissions (each with a `name` and `description`) that can be requested on the object. Use those names when populating `what[].permissions` for `create_data_access_request`.
+
+**`create_data_access_request`** — Create a new Collibra Data Access request on behalf of one or more users for one or more data objects. Destructive. Required behavior:
+
+- **Minimum input is WHO, WHAT, and a purpose.** Do not call this tool until all three are supplied.
+- **WHO** must be resolved via `search_data_access_identities` (by email or name) — pass the returned user IDs in `userIds`. Never pass raw emails or names.
+- **WHAT** must be resolved via `search_data_access_objects` — pass the returned data object IDs in `what[].dataObjectId`. Per item, `permissions` should be empty and `globalPermissions` must always be READ.
+- **Purpose** is mandatory and must come from the user — it is the business justification for the request. If the user has not stated a purpose, ask them for one before calling the tool. Do not invent a purpose. The tool always appends a note stating that the request was created by AI.
+- **Name** is optional. If the user does not provide one, omit `name` on the first call. The tool will return status `needs_name_confirmation` with a `suggestedName` derived from the purpose — present that suggestion to the user, get their confirmation (or an alternative), and call again with the confirmed value in `name`.
 
 ### Data Contracts
 
@@ -147,13 +151,8 @@ These tools query Collibra Data Access — the system that manages who can acces
 2. `get_lineage_downstream` → relations with consumer entity IDs
 3. Summarize based on the graph structure — only call `get_lineage_entity` for the most relevant consumers, not all of them
 
-### Find and inspect data access controls
-1. `search_data_access_controls` with optional name/action/state filters → get matching controls and their IDs
-2. `get_data_access_control_details` with a specific ID → full details including grant category, policy rule, timestamps
-
 ### Find and inspect data access roles
-1. `search_data_access_roles` with optional name/state filters → get matching controls and their IDs
-2. `get_data_access_control_details` with a specific ID → full details including grant category, policy rule, timestamps
+1. `get_data_access_control_details` with a specific ID → full details including grant category, policy rule, timestamps
 
 ### Find who has been granted access (roles)
 1. `search_data_access_roles` with optional name/state filters → returns only Grant-type controls
@@ -162,6 +161,12 @@ These tools query Collibra Data Access — the system that manages who can acces
 ### Look up a Data Access user by email or name
 1. `search_data_access_identities` with `email` → exact lookup, returns the user's id, display name, and type
    — or with `name` → paginated server-side contains search across all users
+
+### Create a Data Access request
+1. Make sure the user has stated a `purpose` — the business justification for the request. If missing, ask for it before continuing.
+2. `search_data_access_identities` for every beneficiary → collect the user IDs (the WHO)
+3. `search_data_access_objects` for every data object the users need → collect the data object IDs (the WHAT)
+4. `create_data_access_request` with `purpose`, `userIds`, and `what` — if the user has not provided a name, omit `name`. The tool returns `needs_name_confirmation` with a `suggestedName` derived from the purpose; confirm it with the user, then call again with `name` set. The purpose is used as the description, with an AI-created note appended automatically.
 
 ### Manage a data contract
 1. `list_data_contract` to find the contract UUID

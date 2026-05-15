@@ -1,4 +1,4 @@
-package tools
+package get_data_access_control_details
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type DataAccessControlInput struct {
@@ -19,12 +20,13 @@ type DataAccessControlOutput struct {
 	Found         bool                              `json:"found" jsonschema:"Whether the data access control was found"`
 }
 
-func NewGetDataAccessControlDetailsTool(collibraClient *http.Client) *chip.Tool[DataAccessControlInput, DataAccessControlOutput] {
+func NewTool(collibraClient *http.Client) *chip.Tool[DataAccessControlInput, DataAccessControlOutput] {
 	return &chip.Tool[DataAccessControlInput, DataAccessControlOutput]{
 		Name:        "get_data_access_control_details",
 		Description: "Retrieve detailed information about a specific Collibra Data Access control by its id. Returns the access control's name, description, state (ACTIVE, INACTIVE, DELETED), action type (GRANT, MASK, FILTER, SHARE, GROUP, FILTERRULE), grant category, policy rule, external management status, ABAC scope parse status, and timestamps. Use this to inspect an individual access control when you know its ID.",
 		Handler:     handleGetDataAccessControlDetails(collibraClient),
 		Permissions: []string{},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false)},
 	}
 }
 
