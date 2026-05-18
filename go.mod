@@ -3,7 +3,7 @@ module github.com/collibra/chip
 go 1.26.2
 
 require (
-	github.com/collibra/data-access-go-sdk v1.0.0
+	github.com/collibra/data-access-go-sdk v0.0.61
 	github.com/google/go-querystring v1.1.0
 	github.com/google/jsonschema-go v0.4.2
 	github.com/google/uuid v1.6.0
@@ -11,8 +11,6 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 )
-
-replace github.com/collibra/data-access-go-sdk => /Users/wouterc/w/data-access-go-sdk-mcp
 
 require (
 	github.com/Khan/genqlient v0.8.2-0.20251028054717-8ddeeee0a15a // indirect
