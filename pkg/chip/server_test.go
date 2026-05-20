@@ -77,6 +77,23 @@ func TestTool_WrongTypeReturnsToolExecutionError(t *testing.T) {
 	}
 }
 
+func TestServer_InitializeResponseIncludesInstructions(t *testing.T) {
+	chipServer := NewServer()
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	init := chipSession.InitializeResult()
+	if init == nil {
+		t.Fatal("expected non-nil InitializeResult")
+	}
+	if init.Instructions == "" {
+		t.Fatal("expected non-empty instructions in initialize response")
+	}
+	if !strings.Contains(init.Instructions, "Collibra") {
+		t.Fatalf("expected instructions to mention Collibra, got %q", init.Instructions)
+	}
+}
+
 func TestTool_IgnoreUnknownFields(t *testing.T) {
 	chipServer := NewServer()
 	RegisterTool[toolInput, toolOutput](chipServer, newTool())

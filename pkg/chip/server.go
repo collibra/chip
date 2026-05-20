@@ -2,6 +2,7 @@ package chip
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log"
 	"log/slog"
@@ -10,6 +11,9 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+//go:embed instructions.md
+var instructions string
 
 type ToolHandlerFunc[In, Out any] func(ctx context.Context, input In) (Out, error)
 
@@ -39,7 +43,9 @@ func NewServer(opts ...ServerOption) *Server {
 			Name:    "Collibra MCP server",
 			Title:   "Collibra Data Intelligence Platform MCP Server",
 			Version: Version,
-		}, nil),
+		}, &mcp.ServerOptions{
+			Instructions: instructions,
+		}),
 	}
 
 	for _, opt := range opts {
