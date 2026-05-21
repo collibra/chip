@@ -6,10 +6,12 @@ A Model Context Protocol (MCP) server that provides AI agents with access to Col
 
 This Go-based MCP server acts as a bridge between AI applications and Collibra, enabling intelligent data discovery and governance operations through the following tools:
 
+> **Permissions:** tools that require extra DGC scopes beyond standard catalog read access are flagged with **Requires:**. Tools without that marker work with the default scopes granted to any authenticated Collibra user. If a tool returns a permission error, the connecting user is missing the listed scope(s) — most commonly `dgc.ai-copilot` (for the natural-language discovery tools) and `dgc.classify` + `dgc.catalog` (for the classification tools).
+
 ### Read Tools
 
-- [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions
-- [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language
+- [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. **Requires:** `dgc.ai-copilot`
+- [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. **Requires:** `dgc.ai-copilot`
 - [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID
 - [`get_business_term_data`](pkg/tools/get_business_term_data/) - Trace a business term back to its connected physical data assets
 - [`get_column_semantics`](pkg/tools/get_column_semantics/) - Retrieve data attributes, measures, and business assets connected to a column
@@ -24,14 +26,14 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
 - [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets
-- [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters
-- [`search_data_classification_match`](pkg/tools/search_data_classification_matches/) - Search for associations between data classes and assets
+- [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters. **Requires:** `dgc.data-classes-read`
+- [`search_data_classification_match`](pkg/tools/search_data_classification_matches/) - Search for associations between data classes and assets. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`search_lineage_entities`](pkg/tools/search_lineage_entities/) - Search for entities in the technical lineage graph
 - [`search_lineage_transformations`](pkg/tools/search_lineage_transformations/) - Search for transformations in the technical lineage graph
 
 ### Write Tools
 
-- [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset
+- [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `update_attribute`, `add_attribute`, `remove_attribute` - change, append, or clear an attribute value (e.g. `Definition`, `Note`)
@@ -39,8 +41,8 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
     - `add_relation`, `remove_relation` - link or unlink the asset to another asset by relation role (e.g. `is synonym of`)
     - `add_tag` - append a free-text tag without replacing existing tags
     - `set_responsibility` - assign a user or group to a resource role (e.g. `Steward`, `Owner`) by username, email, or UUID
-- [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract
-- [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match
+- [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract. **Requires:** `dgc.data-contract`
+- [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match. **Requires:** `dgc.classify`, `dgc.catalog`, `dgc.data-classes-edit`
 
 ## Quick Start
 
