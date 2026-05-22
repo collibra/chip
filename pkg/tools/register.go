@@ -12,6 +12,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
+	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
@@ -65,6 +66,10 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
+
+	if toolConfig.EnableDebugTools {
+		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))
+	}
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {
