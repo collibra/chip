@@ -22,7 +22,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/markdown"
+	"github.com/collibra/chip/pkg/tools/attrwrite"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -153,7 +153,8 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 		}
 
-		resolvedAttrs, attrOut := resolveAttributes(ctx, collibraClient, input.Attributes, ec.assignment)
+		writer := attrwrite.New(collibraClient)
+		resolvedAttrs, attrOut := resolveAttributes(ctx, writer, input.Attributes, ec.assignment)
 		if attrOut != nil {
 			return *attrOut, nil
 		}
@@ -329,10 +330,10 @@ func resolveStatus(ctx context.Context, client *http.Client, value string) (stri
 
 // resolveAttributes maps each input attribute to the matching slot in
 // the scoped assignment, surfaces unknown attribute names as a single
-// validation error, and pre-fetches the stringType for any string-kind
-// attribute so we can decide whether to run its value through Markdown
-// conversion. Returns the resolved list ready for writing.
-func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttribute, assignment *clients.PrepareCreateScopedAssignment) ([]resolvedAttribute, *Output) {
+// validation error, and runs each value through writer.PrepareValue so
+// RICH_TEXT attributes get Markdown→HTML conversion. Returns the
+// resolved list ready for writing.
+func resolveAttributes(ctx context.Context, writer *attrwrite.Writer, in []InputAttribute, assignment *clients.PrepareCreateScopedAssignment) ([]resolvedAttribute, *Output) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -349,18 +350,12 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 				Message: fmt.Sprintf("attributes[%d]: %v. %s", i, err, suggestionSuffix("Attributes", names)),
 			}
 		}
-		entry := resolvedAttribute{
-			Slot:  slot,
-			Value: ra.Value,
-		}
-		if isStringKind(slot.Kind) {
-			details, err := clients.GetAttributeTypeFull(ctx, client, slot.AttributeTypeID)
-			if err == nil && markdown.IsRichTextStringType(details.StringType) {
-				entry.Value = markdown.ToHTML(ra.Value)
-				entry.ConvertedFromMarkdown = true
-			}
-		}
-		resolved = append(resolved, entry)
+		written, converted := writer.PrepareValue(ctx, slot.AttributeTypeID, slot.Kind, ra.Value)
+		resolved = append(resolved, resolvedAttribute{
+			Slot:                  slot,
+			Value:                 written,
+			ConvertedFromMarkdown: converted,
+		})
 	}
 	return resolved, nil
 }
@@ -552,18 +547,6 @@ func summariseAsset(a *clients.CreateAssetResponse) *AssetSummary {
 		s.Status = a.Status.Name
 	}
 	return s
-}
-
-// isStringKind covers the assignment-side discriminators that map to a
-// string value at the API level — the kinds where stringType (and thus
-// RICH_TEXT-ness) is meaningful.
-func isStringKind(discriminator string) bool {
-	switch discriminator {
-	case "StringAttributeType", "ScriptAttributeType", "SingleValueListAttributeType", "MultiValueListAttributeType":
-		return true
-	default:
-		return false
-	}
 }
 
 func indexAssignmentByID(slots []clients.PrepareCreateScopedAttribute) map[string]clients.PrepareCreateScopedAttribute {

@@ -52,3 +52,17 @@ func ToHTML(s string) string {
 func IsRichTextStringType(stringType string) bool {
 	return stringType == "RICH_TEXT"
 }
+
+// IsStringKind reports whether an attribute type's assignment-side
+// discriminator (e.g. "StringAttributeType") maps to a string value at the
+// API level — the kinds where stringType (and thus RICH_TEXT-ness) is
+// meaningful. Used by write tools to decide whether it is worth fetching
+// the full attribute type to check stringType before submitting.
+func IsStringKind(discriminator string) bool {
+	switch discriminator {
+	case "StringAttributeType", "ScriptAttributeType", "SingleValueListAttributeType", "MultiValueListAttributeType":
+		return true
+	default:
+		return false
+	}
+}

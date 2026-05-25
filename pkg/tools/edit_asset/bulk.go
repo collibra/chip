@@ -44,7 +44,7 @@ func executeValidPlans(ctx context.Context, client *http.Client, ec *editContext
 		}
 	}
 	if len(updAttrIdx) >= bulkThreshold {
-		executeBulkUpdateAttributes(ctx, client, plans, updAttrIdx)
+		executeBulkUpdateAttributes(ctx, client, ec, plans, updAttrIdx)
 		for _, i := range updAttrIdx {
 			bulked[i] = true
 		}
@@ -71,10 +71,11 @@ func executeValidPlans(ctx context.Context, client *http.Client, ec *editContext
 func executeBulkAddAttributes(ctx context.Context, client *http.Client, ec *editContext, plans []opPlan, indices []int) {
 	reqs := make([]clients.CreateAttributeRequest, len(indices))
 	for j, idx := range indices {
+		plans[idx] = resolveAttributeWrite(ctx, ec, plans[idx])
 		reqs[j] = clients.CreateAttributeRequest{
 			AssetID: ec.asset.ID,
 			TypeID:  plans[idx].attributeTypeID,
-			Value:   plans[idx].op.Value,
+			Value:   plans[idx].writtenValue,
 		}
 	}
 
@@ -91,20 +92,23 @@ func executeBulkAddAttributes(ctx context.Context, client *http.Client, ec *edit
 		if j < len(created) {
 			res.NewValue = created[j].Value
 		} else {
-			res.NewValue = plans[idx].op.Value
+			res.NewValue = plans[idx].writtenValue
 		}
+		res.WrittenValue = plans[idx].writtenValue
+		res.ConvertedFromMd = plans[idx].convertedFromMarkdown
 		plans[idx].result = res
 	}
 }
 
 // executeBulkUpdateAttributes issues PATCH /rest/2.0/attributes/bulk for every
 // update_attribute plan in indices.
-func executeBulkUpdateAttributes(ctx context.Context, client *http.Client, plans []opPlan, indices []int) {
+func executeBulkUpdateAttributes(ctx context.Context, client *http.Client, ec *editContext, plans []opPlan, indices []int) {
 	reqs := make([]clients.EditAssetBulkPatchAttributeItem, len(indices))
 	for j, idx := range indices {
+		plans[idx] = resolveAttributeWrite(ctx, ec, plans[idx])
 		reqs[j] = clients.EditAssetBulkPatchAttributeItem{
 			ID:    plans[idx].targetAttributeID,
-			Value: plans[idx].op.Value,
+			Value: plans[idx].writtenValue,
 		}
 	}
 
@@ -117,15 +121,17 @@ func executeBulkUpdateAttributes(ctx context.Context, client *http.Client, plans
 	}
 	for j, idx := range indices {
 		res := OperationResult{
-			Operation:     plans[idx].op.Type,
-			Status:        "success",
-			AttributeName: plans[idx].op.AttributeName,
-			PreviousValue: plans[idx].previousValue,
+			Operation:       plans[idx].op.Type,
+			Status:          "success",
+			AttributeName:   plans[idx].op.AttributeName,
+			PreviousValue:   plans[idx].previousValue,
+			WrittenValue:    plans[idx].writtenValue,
+			ConvertedFromMd: plans[idx].convertedFromMarkdown,
 		}
 		if j < len(updated) {
 			res.NewValue = updated[j].Value
 		} else {
-			res.NewValue = plans[idx].op.Value
+			res.NewValue = plans[idx].writtenValue
 		}
 		plans[idx].result = res
 	}

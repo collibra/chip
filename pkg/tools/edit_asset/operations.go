@@ -11,6 +11,18 @@ import (
 	"github.com/google/uuid"
 )
 
+// resolveAttributeWrite populates plan.writtenValue and
+// plan.convertedFromMarkdown via the editContext's attribute writer:
+// RICH_TEXT attribute values are converted from Markdown to HTML, other
+// kinds pass through unchanged. The writer caches per-type lookups so
+// repeated ops on the same attribute share one /attributeTypes/{id} fetch.
+func resolveAttributeWrite(ctx context.Context, ec *editContext, plan opPlan) opPlan {
+	plan.writtenValue, plan.convertedFromMarkdown = ec.attrWriter.PrepareValue(
+		ctx, plan.attributeTypeID, plan.attributeKind, plan.op.Value,
+	)
+	return plan
+}
+
 // --- update_attribute ---------------------------------------------------------
 
 func validateUpdateAttribute(ec *editContext, plan opPlan) opPlan {
@@ -44,22 +56,27 @@ func validateUpdateAttribute(ec *editContext, plan opPlan) opPlan {
 		plan.result = newErrorResult(op, err.Error())
 		return plan
 	}
+	plan.attributeTypeID = attrType.ID
+	plan.attributeKind = attrType.Kind
 	plan.result = newSuccessResult(op)
 	return plan
 }
 
-func executeUpdateAttribute(ctx context.Context, client *http.Client, plan opPlan) opPlan {
-	updated, err := clients.PatchAttributeValue(ctx, client, plan.targetAttributeID, plan.op.Value)
+func executeUpdateAttribute(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
+	plan = resolveAttributeWrite(ctx, ec, plan)
+	updated, err := clients.PatchAttributeValue(ctx, client, plan.targetAttributeID, plan.writtenValue)
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
 	}
 	plan.result = OperationResult{
-		Operation:     plan.op.Type,
-		Status:        "success",
-		AttributeName: plan.op.AttributeName,
-		PreviousValue: plan.previousValue,
-		NewValue:      updated.Value,
+		Operation:       plan.op.Type,
+		Status:          "success",
+		AttributeName:   plan.op.AttributeName,
+		PreviousValue:   plan.previousValue,
+		NewValue:        updated.Value,
+		WrittenValue:    plan.writtenValue,
+		ConvertedFromMd: plan.convertedFromMarkdown,
 	}
 	return plan
 }
@@ -85,21 +102,25 @@ func validateAddAttribute(ec *editContext, plan opPlan) opPlan {
 		return plan
 	}
 	plan.attributeTypeID = attrType.ID
+	plan.attributeKind = attrType.Kind
 	plan.result = newSuccessResult(op)
 	return plan
 }
 
 func executeAddAttribute(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
-	created, err := clients.CreateAttributeOnAsset(ctx, client, ec.asset.ID, plan.attributeTypeID, plan.op.Value)
+	plan = resolveAttributeWrite(ctx, ec, plan)
+	created, err := clients.CreateAttributeOnAsset(ctx, client, ec.asset.ID, plan.attributeTypeID, plan.writtenValue)
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
 	}
 	plan.result = OperationResult{
-		Operation:     plan.op.Type,
-		Status:        "success",
-		AttributeName: plan.op.AttributeName,
-		NewValue:      created.Value,
+		Operation:       plan.op.Type,
+		Status:          "success",
+		AttributeName:   plan.op.AttributeName,
+		NewValue:        created.Value,
+		WrittenValue:    plan.writtenValue,
+		ConvertedFromMd: plan.convertedFromMarkdown,
 	}
 	return plan
 }

@@ -67,6 +67,16 @@ type stub struct {
 	responsibilityFailStatus int
 	relationFailStatus       int
 	assetNotFound            bool
+	// stringTypes lets tests configure per-attribute-type stringType (e.g.
+	// "RICH_TEXT", "PLAIN_TEXT") returned from /attributeTypes/{id}.
+	// Missing entries default to PLAIN_TEXT.
+	stringTypes map[string]string
+	// attrTypeFetches counts hits on /attributeTypes/{id} per attribute
+	// type, so tests can assert the in-request fetch cache.
+	attrTypeFetches map[string]int
+	// attrTypeFailIDs maps an attribute-type UUID to a status code to
+	// return on /attributeTypes/{id}; lets tests simulate a fetch failure.
+	attrTypeFailIDs map[string]int
 }
 
 func newStub() *stub {
@@ -115,7 +125,10 @@ func newStub() *stub {
 		users: []clients.EditAssetUser{
 			{ID: testUserID, UserName: "jane.smith", EmailAddress: "jane.smith@example.com"},
 		},
-		patchedAttrs: map[string]string{},
+		patchedAttrs:    map[string]string{},
+		stringTypes:     map[string]string{},
+		attrTypeFetches: map[string]int{},
+		attrTypeFailIDs: map[string]int{},
 	}
 }
 
@@ -335,6 +348,32 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 			"offset":  0,
 			"limit":   1000,
 			"results": s.statuses,
+		})
+	})
+
+	mux.HandleFunc("GET /rest/2.0/attributeTypes/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/attributeTypes/")
+		s.attrTypeFetches[id]++
+		if code, ok := s.attrTypeFailIDs[id]; ok {
+			w.WriteHeader(code)
+			_, _ = w.Write([]byte(`{"message":"simulated attribute type fetch failure"}`))
+			return
+		}
+		at, ok := s.attrTypesByID[id]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		st := s.stringTypes[id]
+		if st == "" {
+			st = "PLAIN_TEXT"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":                         at.ID,
+			"name":                       at.Name,
+			"publicId":                   at.Name,
+			"attributeTypeDiscriminator": "StringAttributeType",
+			"stringType":                 st,
 		})
 	})
 
@@ -1471,5 +1510,206 @@ func TestEditAsset_MultipleValidOperations(t *testing.T) {
 	if len(s.patchedAttrs) != 1 || len(s.createdAttrs) != 1 || len(s.deletedAttrIDs) != 1 || len(s.patchedAssets) != 1 {
 		t.Fatalf("unexpected call distribution: patched=%d created=%d deleted=%d patchedAsset=%d",
 			len(s.patchedAttrs), len(s.createdAttrs), len(s.deletedAttrIDs), len(s.patchedAssets))
+	}
+}
+
+// --- Markdown→HTML conversion -----------------------------------------------
+
+func TestEditAsset_UpdateAttribute_RichText_ConvertsMarkdown(t *testing.T) {
+	s := newStub()
+	s.stringTypes[defAttrTypeID] = "RICH_TEXT"
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "**bold** text",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	got := s.patchedAttrs[defAttrInstanceID]
+	if !strings.Contains(got, "<strong>bold</strong>") {
+		t.Fatalf("expected PATCH to receive HTML-converted body, got %q", got)
+	}
+	r := out.Results[0]
+	if !r.ConvertedFromMd {
+		t.Errorf("expected ConvertedFromMd=true for RICH_TEXT attribute")
+	}
+	if !strings.Contains(r.WrittenValue, "<strong>bold</strong>") {
+		t.Errorf("expected WrittenValue to be HTML, got %q", r.WrittenValue)
+	}
+}
+
+func TestEditAsset_UpdateAttribute_PlainText_PreservesValue(t *testing.T) {
+	s := newStub()
+	s.stringTypes[defAttrTypeID] = "PLAIN_TEXT"
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "**bold** text",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if got := s.patchedAttrs[defAttrInstanceID]; got != "**bold** text" {
+		t.Fatalf("expected PATCH to receive raw Markdown, got %q", got)
+	}
+	r := out.Results[0]
+	if r.ConvertedFromMd {
+		t.Errorf("plain-text attribute should not be converted")
+	}
+	if r.WrittenValue != "**bold** text" {
+		t.Errorf("expected WrittenValue=raw, got %q", r.WrittenValue)
+	}
+}
+
+func TestEditAsset_AddAttribute_RichText_ConvertsMarkdown(t *testing.T) {
+	s := newStub()
+	s.stringTypes[noteAttrTypeID] = "RICH_TEXT"
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddAttribute, AttributeName: "Note", Value: "*italic*",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.createdAttrs) != 1 {
+		t.Fatalf("expected one POST, got %+v", s.createdAttrs)
+	}
+	if !strings.Contains(s.createdAttrs[0].Value, "<em>italic</em>") {
+		t.Fatalf("expected POST to receive HTML body, got %q", s.createdAttrs[0].Value)
+	}
+	if !out.Results[0].ConvertedFromMd {
+		t.Errorf("expected ConvertedFromMd=true for RICH_TEXT add_attribute")
+	}
+}
+
+// Bulk path (2+ ops of same type) must also convert each plan independently.
+func TestEditAsset_BulkUpdateAttributes_RichText_ConvertsEach(t *testing.T) {
+	s := newStub()
+	// Two updates on the same RICH_TEXT attribute path would dedup on
+	// targetAttributeID, so use two distinct attribute instances.
+	// Stub returns RICH_TEXT for both attribute types.
+	s.stringTypes[defAttrTypeID] = "RICH_TEXT"
+	s.stringTypes[acrAttrTypeID] = "RICH_TEXT"
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "**A**"},
+			{Type: edit_asset.OpUpdateAttribute, AttributeName: "Acronym", Value: "**B**"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.bulkPatchedAttrs) != 1 {
+		t.Fatalf("expected exactly one bulk PATCH call, got %d", len(s.bulkPatchedAttrs))
+	}
+	for i, item := range s.bulkPatchedAttrs[0] {
+		if !strings.Contains(item.Value, "<strong>") {
+			t.Errorf("bulk PATCH item[%d] not HTML-converted: %q", i, item.Value)
+		}
+	}
+	for i, r := range out.Results {
+		if !r.ConvertedFromMd {
+			t.Errorf("expected ConvertedFromMd=true on result[%d]", i)
+		}
+		if !strings.Contains(r.WrittenValue, "<strong>") {
+			t.Errorf("result[%d].WrittenValue not HTML: %q", i, r.WrittenValue)
+		}
+	}
+}
+
+func TestEditAsset_BulkAddAttributes_RichText_ConvertsEach(t *testing.T) {
+	s := newStub()
+	s.stringTypes[noteAttrTypeID] = "RICH_TEXT"
+	s.stringTypes[acrAttrTypeID] = "RICH_TEXT"
+	// Remove the existing Acronym attribute so add_attribute is valid.
+	s.attributes = s.attributes[:1]
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpAddAttribute, AttributeName: "Note", Value: "**A**"},
+			{Type: edit_asset.OpAddAttribute, AttributeName: "Acronym", Value: "**B**"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.bulkCreatedAttrs) != 1 {
+		t.Fatalf("expected exactly one bulk POST call, got %d", len(s.bulkCreatedAttrs))
+	}
+	for i, item := range s.bulkCreatedAttrs[0] {
+		if !strings.Contains(item.Value, "<strong>") {
+			t.Errorf("bulk POST item[%d] not HTML-converted: %q", i, item.Value)
+		}
+	}
+}
+
+// Multiple ops on the same attribute type should hit /attributeTypes/{id}
+// once, thanks to the per-request cache.
+func TestEditAsset_AttributeTypeFetch_CachedPerRequest(t *testing.T) {
+	s := newStub()
+	s.stringTypes[noteAttrTypeID] = "RICH_TEXT"
+	// Two add_attribute ops on the same type triggers the bulk path; the
+	// second op must reuse the cached type details.
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpAddAttribute, AttributeName: "Note", Value: "**x**"},
+			{Type: edit_asset.OpAddAttribute, AttributeName: "Note", Value: "**y**"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if got := s.attrTypeFetches[noteAttrTypeID]; got != 1 {
+		t.Fatalf("expected exactly 1 fetch of attributeTypes/%s, got %d", noteAttrTypeID, got)
+	}
+}
+
+// When the attributeTypes fetch fails (transient HTTP error or permission
+// gap), the agent's value passes through unchanged — never silently dropped.
+func TestEditAsset_AttributeTypeFetch_FailureFallsThrough(t *testing.T) {
+	s := newStub()
+	s.attrTypeFailIDs[defAttrTypeID] = http.StatusInternalServerError
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "**raw**",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if got := s.patchedAttrs[defAttrInstanceID]; got != "**raw**" {
+		t.Fatalf("expected raw value to pass through on fetch failure, got %q", got)
+	}
+	if out.Results[0].ConvertedFromMd {
+		t.Errorf("expected ConvertedFromMd=false when type fetch failed")
 	}
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/attrwrite"
 	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -125,20 +126,22 @@ type AssetSummary struct {
 
 // OperationResult is the outcome of a single operation in the input array.
 type OperationResult struct {
-	Operation     OperationType `json:"operation"`
-	Status        string        `json:"status" jsonschema:"'success' or 'error'."`
-	AttributeName string        `json:"attributeName,omitempty"`
-	Field         string        `json:"field,omitempty"`
-	RelationType  string        `json:"relationType,omitempty"`
-	RelationID    string        `json:"relationId,omitempty"`
-	TargetAssetID string        `json:"targetAssetId,omitempty"`
-	Tag           string        `json:"tag,omitempty"`
-	Role          string        `json:"role,omitempty"`
-	UserID        string        `json:"userId,omitempty"`
-	PreviousValue       string `json:"previousValue,omitempty"`
-	NewValue            string `json:"newValue,omitempty"`
-	CascadedDisplayName bool   `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
-	Error               string `json:"error,omitempty"`
+	Operation           OperationType `json:"operation"`
+	Status              string        `json:"status" jsonschema:"'success' or 'error'."`
+	AttributeName       string        `json:"attributeName,omitempty"`
+	Field               string        `json:"field,omitempty"`
+	RelationType        string        `json:"relationType,omitempty"`
+	RelationID          string        `json:"relationId,omitempty"`
+	TargetAssetID       string        `json:"targetAssetId,omitempty"`
+	Tag                 string        `json:"tag,omitempty"`
+	Role                string        `json:"role,omitempty"`
+	UserID              string        `json:"userId,omitempty"`
+	PreviousValue       string        `json:"previousValue,omitempty"`
+	NewValue            string        `json:"newValue,omitempty"`
+	WrittenValue        string        `json:"writtenValue,omitempty" jsonschema:"The value actually submitted to Collibra. For RICH_TEXT attributes this is the HTML form (post Markdown→HTML conversion); for plain attributes it equals the input value. Only set on attribute write results."`
+	ConvertedFromMd     bool          `json:"convertedFromMd,omitempty" jsonschema:"True when the input value was converted from Markdown to HTML before submission. Only set on attribute write results."`
+	CascadedDisplayName bool          `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
+	Error               string        `json:"error,omitempty"`
 }
 
 // NewTool returns the registered tool.
@@ -235,6 +238,11 @@ type editContext struct {
 	// update_property op with field=statusId, so plain attribute/relation
 	// edits don't pay for a /statuses fetch.
 	statusByName map[string]clients.EditAssetStatus
+	// attrWriter prepares attribute values for submission (Markdown→HTML
+	// for RICH_TEXT, pass-through otherwise) and caches the per-type
+	// stringType lookups so repeated ops on the same attribute share one
+	// /attributeTypes/{id} fetch.
+	attrWriter *attrwrite.Writer
 }
 
 // newEditContext fetches the asset, its current attributes, and the scoped
@@ -316,6 +324,7 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		relationTypeByRole:   relationByRole,
 		roleByName:           rolesByName,
 		statusByName:         statusesByName,
+		attrWriter:           attrwrite.New(client),
 	}, nil
 }
 
@@ -389,8 +398,16 @@ type opPlan struct {
 
 	// Attribute ops (resolved during validation)
 	attributeTypeID   string
+	attributeKind     string // assignment-side discriminator, e.g. "StringAttributeType"
 	targetAttributeID string
 	previousValue     string
+
+	// writtenValue is the value actually submitted to Collibra after any
+	// Markdown→HTML conversion. Populated by resolveAttributeWrite just
+	// before executing an attribute write. convertedFromMarkdown records
+	// whether conversion happened so it can be surfaced on the result.
+	writtenValue          string
+	convertedFromMarkdown bool
 
 	// Property op (resolved during validation)
 	propertyPatch clients.EditAssetPatchRequest
@@ -465,7 +482,7 @@ func validateOperation(ec *editContext, op Operation) opPlan {
 func executePlan(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
 	switch plan.op.Type {
 	case OpUpdateAttribute:
-		return executeUpdateAttribute(ctx, client, plan)
+		return executeUpdateAttribute(ctx, client, ec, plan)
 	case OpAddAttribute:
 		return executeAddAttribute(ctx, client, ec, plan)
 	case OpRemoveAttribute:
