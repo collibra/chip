@@ -202,3 +202,12 @@ You can specify tools to enable or disable by using the tool names listed above 
 
 By default, all tools are enabled. Specifying tools to be enabled will enable *only* those tools.  Disabling tools will disable *only* those tools and leave all others enabled.
 At present, enabling and disabling at the same time is not supported. 
+
+## Experimental features
+
+Some functionality ships behind an opt-in `experimental` flag. These features are off by default and may change or be removed without a deprecation cycle. Enable them via `--experimental=<name>`, the `COLLIBRA_MCP_EXPERIMENTAL` environment variable, or the `mcp.experimental` field in `mcp.yaml`. Unknown names log a warning but do not fail startup, so stale configs survive a feature being retired or renamed.
+
+### Known experimental features
+
+- `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
+

@@ -24,6 +24,7 @@ The server can be configured using the following environment variables:
 - `COLLIBRA_MCP_API_PROXY` | `HTTP_PROXY` | `HTTPS_PROXY`  - HTTP proxy URL for API requests (e.g., `http://proxy.example.com:8080`)
 - `COLLIBRA_MCP_ENABLED_TOOLS` - Comma-separated list of tool names to enable instead of enabling all tools (cannot be used with `COLLIBRA_MCP_DISABLED_TOOLS`)
 - `COLLIBRA_MCP_DISABLED_TOOLS` - Comma-separated list of tool names to disable while enabling the remaining tools (cannot be used with `COLLIBRA_MCP_ENABLED_TOOLS`)
+- `COLLIBRA_MCP_EXPERIMENTAL` - Comma-separated list of opt-in experimental features to enable. Off by default; unknown names log a warning but do not fail startup. Currently known: `skills` (see [SKILLS.md](../SKILLS.md))
 
 ## Configuration File
 
@@ -51,6 +52,10 @@ mcp:
   # optionally enable OR disable specific tools using the tool names listed in the README.md file. 
   # enabled-tools: []  
   # disabled-tools: []
+
+  # optionally opt in to experimental features (off by default)
+  # experimental:
+  #   - "skills"
 ```
 
 ## Configuration Structure
@@ -71,6 +76,7 @@ The configuration is organized into two main sections:
 - `stdio` section: (currently empty, reserved for future stdio-specific settings)
 - `enabled-tools` - optional list of tool names to be enabled instead of enabling all tools.  Cannot be used with `disabled-tools`
 - `disabled-tools` - optional list of tool names to be disabled while enabling remaining tools.  Cannot be used with `enabled-tools`
+- `experimental` - optional list of opt-in experimental features to enable. Off by default; unknown names log a warning but do not fail startup. Currently known: `skills` (see [SKILLS.md](../SKILLS.md))
 
 ## Authentication Approaches
 
@@ -208,3 +214,4 @@ All environment variables use the `COLLIBRA_MCP_` prefix. The configuration syst
 - `COLLIBRA_MCP_HTTP_PORT` → `mcp.http.port`
 - `COLLIBRA_MCP_ENABLED_TOOLS` → `mcp.enabled-tools`
 - `COLLIBRA_MCP_DISABLED_TOOLS` → `mcp.disabled-tools`
+- `COLLIBRA_MCP_EXPERIMENTAL` → `mcp.experimental`

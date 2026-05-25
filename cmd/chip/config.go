@@ -88,6 +88,10 @@ func initConfigOptions() {
 	pflag.StringSlice("disabled-tools", []string{}, "Optional comma-separated list of tool names to disable while enabling the remaining tools (cannot be used with enabled-tools) (env: COLLIBRA_MCP_DISABLED_TOOLS)")
 	_ = viper.BindEnv("mcp.disabled-tools", "COLLIBRA_MCP_DISABLED_TOOLS")
 	_ = viper.BindPFlag("mcp.disabled-tools", pflag.Lookup("disabled-tools"))
+
+	pflag.StringSlice("experimental", []string{}, "Comma-separated list of opt-in experimental features to enable (env: COLLIBRA_MCP_EXPERIMENTAL). See EXPERIMENTAL FEATURES below for valid names.")
+	_ = viper.BindEnv("mcp.experimental", "COLLIBRA_MCP_EXPERIMENTAL")
+	_ = viper.BindPFlag("mcp.experimental", pflag.Lookup("experimental"))
 }
 
 func printUsage(version string) {
@@ -114,7 +118,14 @@ ENVIRONMENT VARIABLES:
   COLLIBRA_MCP_HTTP_PORT        HTTP server port (default: 8080)
   COLLIBRA_MCP_ENABLED_TOOLS    Optional comma-separated list of tool names to enable instead of enabling all tools, cannot be used with disabled-tools
   COLLIBRA_MCP_DISABLED_TOOLS   Optional comma-separated list of tool names to disable while enabling the remaining tools, cannot be used with enabled-tools
+  COLLIBRA_MCP_EXPERIMENTAL     Comma-separated list of opt-in experimental features to enable (see EXPERIMENTAL FEATURES below)
 
+EXPERIMENTAL FEATURES:
+  Opt-in via --experimental, COLLIBRA_MCP_EXPERIMENTAL, or mcp.experimental
+  in the YAML config. Off by default. Unknown names log a warning but do
+  not fail startup.
+
+%s
 CONFIGURATION:
   Configuration can be provided in the following order of precedence: command-line flags (highest), environment variables, or a YAML configuration file (lowest).
   File locations searched in order:
@@ -139,7 +150,9 @@ CONFIGURATION FILE EXAMPLE:
     # disabled-tools:  # Optional: list of tools to disable (cannot be used with enabled-tools)
     #   - "tool3"
     #   - "tool4"
-`)
+    # experimental:  # Optional: opt-in experimental features (off by default)
+    #   - "skills"
+`, formatExperimentalForHelp())
 }
 
 func validateConfigFile(config Config) {
@@ -152,6 +165,8 @@ func validateConfigFile(config Config) {
 		slog.Error("Cannot specify both enabled-tools and disabled-tools, only one can be specified")
 		os.Exit(1)
 	}
+
+	validateExperimental(config.Mcp.Experimental)
 }
 
 func readConfigFile() Config {
@@ -195,6 +210,7 @@ type McpConfig struct {
 	Stdio         StdioConfig `mapstructure:"stdio"`
 	EnabledTools  []string    `mapstructure:"enabled-tools"`
 	DisabledTools []string    `mapstructure:"disabled-tools"`
+	Experimental  []string    `mapstructure:"experimental"`
 }
 
 type HttpConfig struct {
