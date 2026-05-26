@@ -34,6 +34,7 @@ func main() {
 		EnabledTools:  config.Mcp.EnabledTools,
 		DisabledTools: config.Mcp.DisabledTools,
 		Experimental:  config.Mcp.Experimental,
+		SkillsDir:     config.Mcp.SkillsDir,
 	}
 
 	serverOpts := []chip.ServerOption{

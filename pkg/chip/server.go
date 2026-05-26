@@ -79,6 +79,11 @@ type ServerToolConfig struct {
 	EnabledTools  []string
 	DisabledTools []string
 	Experimental  []string
+	// SkillsDir is the optional path to an external skills directory whose
+	// contents are merged on top of the embedded catalog. Empty means the
+	// embedded catalog alone is served. Only consulted when the "skills"
+	// experimental feature is enabled.
+	SkillsDir string
 }
 
 func (tc *ServerToolConfig) IsToolEnabled(toolName string) bool {

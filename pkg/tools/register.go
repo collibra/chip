@@ -69,7 +69,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
 
 	if skills.Enabled(toolConfig) {
-		if err := skills.RegisterAll(server); err != nil {
+		if err := skills.RegisterAll(server, toolConfig.SkillsDir); err != nil {
 			return fmt.Errorf("register skills: %w", err)
 		}
 	}

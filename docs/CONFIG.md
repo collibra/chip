@@ -25,6 +25,7 @@ The server can be configured using the following environment variables:
 - `COLLIBRA_MCP_ENABLED_TOOLS` - Comma-separated list of tool names to enable instead of enabling all tools (cannot be used with `COLLIBRA_MCP_DISABLED_TOOLS`)
 - `COLLIBRA_MCP_DISABLED_TOOLS` - Comma-separated list of tool names to disable while enabling the remaining tools (cannot be used with `COLLIBRA_MCP_ENABLED_TOOLS`)
 - `COLLIBRA_MCP_EXPERIMENTAL` - Comma-separated list of opt-in experimental features to enable. Off by default; unknown names log a warning but do not fail startup. Currently known: `skills` (see [SKILLS.md](../SKILLS.md))
+- `COLLIBRA_MCP_SKILLS_DIR` - Optional path to an external skills directory. When set, its skills are merged on top of the embedded catalog and same-named skills (e.g. `collibra/lineage`) fully replace the embedded entry. Requires the `skills` experimental feature. `~` and `~user` are expanded.
 
 ## Configuration File
 
@@ -56,6 +57,9 @@ mcp:
   # optionally opt in to experimental features (off by default)
   # experimental:
   #   - "skills"
+
+  # optional external skills directory (requires the 'skills' experimental feature)
+  # skills-dir: "~/.collibra/skills"
 ```
 
 ## Configuration Structure
@@ -77,6 +81,7 @@ The configuration is organized into two main sections:
 - `enabled-tools` - optional list of tool names to be enabled instead of enabling all tools.  Cannot be used with `disabled-tools`
 - `disabled-tools` - optional list of tool names to be disabled while enabling remaining tools.  Cannot be used with `enabled-tools`
 - `experimental` - optional list of opt-in experimental features to enable. Off by default; unknown names log a warning but do not fail startup. Currently known: `skills` (see [SKILLS.md](../SKILLS.md))
+- `skills-dir` - optional path to an external skills directory whose contents merge on top of the embedded catalog. Same-named skills fully replace the embedded entry. Requires the `skills` experimental feature. `~` and `~user` are expanded.
 
 ## Authentication Approaches
 
@@ -215,3 +220,4 @@ All environment variables use the `COLLIBRA_MCP_` prefix. The configuration syst
 - `COLLIBRA_MCP_ENABLED_TOOLS` → `mcp.enabled-tools`
 - `COLLIBRA_MCP_DISABLED_TOOLS` → `mcp.disabled-tools`
 - `COLLIBRA_MCP_EXPERIMENTAL` → `mcp.experimental`
+- `COLLIBRA_MCP_SKILLS_DIR` → `mcp.skills-dir`

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -44,6 +45,44 @@ type Catalog struct {
 // Load walks the embedded filesystem and returns a populated catalog.
 func Load() (*Catalog, error) {
 	return loadFromFS(embeddedFS, "files")
+}
+
+// LoadWith returns the embedded catalog, optionally overlaid with skills
+// loaded from externalDir. Skills in externalDir whose name (e.g.
+// "collibra/lineage") matches an embedded skill replace it wholesale —
+// body, description, related, and resources all come from the external
+// entry. New names are added. An empty externalDir is equivalent to Load.
+func LoadWith(externalDir string) (*Catalog, error) {
+	cat, err := Load()
+	if err != nil {
+		return nil, err
+	}
+	if externalDir == "" {
+		return cat, nil
+	}
+	abs, err := resolveSkillsDir(externalDir)
+	if err != nil {
+		return nil, err
+	}
+	ext, err := loadFromFS(os.DirFS(abs), ".")
+	if err != nil {
+		return nil, fmt.Errorf("load external skills from %q: %w", abs, err)
+	}
+	cat.merge(ext)
+	return cat, nil
+}
+
+// merge overlays other onto c. Skills already present in c are replaced
+// wholesale by the matching entry in other; new names are appended.
+// The order slice is re-sorted to stay deterministic across runs.
+func (c *Catalog) merge(other *Catalog) {
+	for _, name := range other.order {
+		if _, existed := c.byName[name]; !existed {
+			c.order = append(c.order, name)
+		}
+		c.byName[name] = other.byName[name]
+	}
+	sort.Strings(c.order)
 }
 
 func loadFromFS(fsys fs.FS, root string) (*Catalog, error) {

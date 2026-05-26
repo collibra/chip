@@ -92,6 +92,10 @@ func initConfigOptions() {
 	pflag.StringSlice("experimental", []string{}, "Comma-separated list of opt-in experimental features to enable (env: COLLIBRA_MCP_EXPERIMENTAL). See EXPERIMENTAL FEATURES below for valid names.")
 	_ = viper.BindEnv("mcp.experimental", "COLLIBRA_MCP_EXPERIMENTAL")
 	_ = viper.BindPFlag("mcp.experimental", pflag.Lookup("experimental"))
+
+	pflag.String("skills-dir", "", "Optional path to an external skills directory; its skills are merged on top of the embedded catalog and same-named skills override the embedded ones. Requires --experimental=skills (env: COLLIBRA_MCP_SKILLS_DIR)")
+	_ = viper.BindEnv("mcp.skills-dir", "COLLIBRA_MCP_SKILLS_DIR")
+	_ = viper.BindPFlag("mcp.skills-dir", pflag.Lookup("skills-dir"))
 }
 
 func printUsage(version string) {
@@ -119,6 +123,7 @@ ENVIRONMENT VARIABLES:
   COLLIBRA_MCP_ENABLED_TOOLS    Optional comma-separated list of tool names to enable instead of enabling all tools, cannot be used with disabled-tools
   COLLIBRA_MCP_DISABLED_TOOLS   Optional comma-separated list of tool names to disable while enabling the remaining tools, cannot be used with enabled-tools
   COLLIBRA_MCP_EXPERIMENTAL     Comma-separated list of opt-in experimental features to enable (see EXPERIMENTAL FEATURES below)
+  COLLIBRA_MCP_SKILLS_DIR       Optional path to an external skills directory merged on top of the embedded catalog (requires the 'skills' experimental feature)
 
 EXPERIMENTAL FEATURES:
   Opt-in via --experimental, COLLIBRA_MCP_EXPERIMENTAL, or mcp.experimental
@@ -152,6 +157,7 @@ CONFIGURATION FILE EXAMPLE:
     #   - "tool4"
     # experimental:  # Optional: opt-in experimental features (off by default)
     #   - "skills"
+    # skills-dir: "/path/to/skills"  # Optional: external skills dir (requires the 'skills' experimental feature)
 `, formatExperimentalForHelp())
 }
 
@@ -211,6 +217,7 @@ type McpConfig struct {
 	EnabledTools  []string    `mapstructure:"enabled-tools"`
 	DisabledTools []string    `mapstructure:"disabled-tools"`
 	Experimental  []string    `mapstructure:"experimental"`
+	SkillsDir     string      `mapstructure:"skills-dir"`
 }
 
 type HttpConfig struct {

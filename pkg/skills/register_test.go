@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -78,5 +79,24 @@ func TestEnabledToolNamesMatchRegisteredTools(t *testing.T) {
 	}
 	if name := NewLoadTool(catalog).Name; name != loadToolName {
 		t.Errorf("load tool name drift: registered %q, gated on %q", name, loadToolName)
+	}
+}
+
+func TestRegisterAll_emptyExternalDirSucceeds(t *testing.T) {
+	server := chip.NewServer()
+	if err := RegisterAll(server, ""); err != nil {
+		t.Fatalf("RegisterAll(server, \"\"): %v", err)
+	}
+}
+
+func TestRegisterAll_badExternalDirReturnsError(t *testing.T) {
+	server := chip.NewServer()
+	badPath := "/this/path/should/not/exist/abc123"
+	err := RegisterAll(server, badPath)
+	if err == nil {
+		t.Fatal("expected error for missing external dir")
+	}
+	if !strings.Contains(err.Error(), badPath) {
+		t.Errorf("error should cite the path, got: %v", err)
 	}
 }
