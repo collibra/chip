@@ -17,13 +17,9 @@ Reach for Collibra tools when the user's question is about **understanding, disc
 
 ### Asset Creation
 
-**`prepare_create_asset`** — Resolve asset type and domain by name or ID, hydrate the full attribute schema, and check for duplicates. Returns a structured status (`ready`, `incomplete`, `needs_clarification`, `duplicate_found`) with pre-fetched options for missing fields. **Always call this before `create_asset`** to obtain the resolved UUIDs and validate inputs. Read-only.
+**`create_asset`** — Create a new asset of any type in Collibra in a single call. Accepts human-friendly identifiers and resolves them server-side: `assetType` matches against UUID, publicId (e.g. `"BusinessTerm"`), or display name (e.g. `"Business Term"`); `domain` against UUID or display name; `status` against UUID or status name (e.g. `"Candidate"`); `attributes` reference attribute types by `name` (e.g. `"Definition"`) or by `typeId`. Markdown in `RICH_TEXT` attribute values is converted to HTML server-side so it renders correctly in the Collibra UI. By default, `allowDuplicate=false` returns `status=duplicate_found` without writing if an asset with the same name already exists in the resolved (assetType, domain); pass `allowDuplicate=true` to bypass. Validation errors (e.g. unknown asset type, type not allowed in domain, unknown attribute) return suggestion-rich messages so the agent can self-correct in one round. Returns one of: `success`, `duplicate_found`, `validation_error`, or `error`. Destructive (creates a new asset).
 
-**`create_asset`** — Create a new data asset in Collibra with optional attributes. Requires the resolved asset type UUID, domain UUID, and asset name — use the values returned by `prepare_create_asset`. Destructive (creates a new asset).
-
-**`prepare_add_business_term`** — Validate business term data, resolve domains by name, check for duplicates, and hydrate the attribute schema for the Business Term type. Returns structured status with pre-fetched options for missing fields. **Always call this before `add_business_term`**. Read-only.
-
-**`add_business_term`** — Create a business term asset with an optional definition and additional attributes. Requires the domain UUID — use the resolved domain from `prepare_add_business_term`. Destructive (creates a new asset).
+**`prepare_create_asset`** — Read-only companion to `create_asset`. Use **only** when the agent needs to *browse* what's creatable on this instance or *inspect* an asset type's full schema before composing a create. Without inputs, returns available asset types. With just `assetType`, returns the domains compatible with that type. With just `domain`, returns the asset types creatable in that domain. With both, returns the scoped attribute and relation schema (pass `includeStringType=true` to also populate each attribute's `stringType` like `RICH_TEXT` plus its description). Calling this before `create_asset` is **optional** — `create_asset` does its own resolution, validation, and duplicate-check. Read-only.
 
 ### Discovery & Search
 
@@ -111,13 +107,22 @@ These tools query Collibra Data Access — the system that manages who can acces
 
 ## Common Workflows
 
-### Create any asset
-1. `prepare_create_asset` with the asset name, asset type (publicId), and domain ID → check status is `ready`
-2. `create_asset` with the resolved `assetTypeId` and `domainId` from step 1
+### Create an asset
+Single call — `create_asset` does its own resolution, validation, and duplicate check.
 
-### Add a business term
-1. `prepare_add_business_term` with the term name and domain name or ID → check status is `ready`
-2. `add_business_term` with the resolved `domainId` from step 1, plus optional definition and attributes
+1. `create_asset` with the asset's `name`, `assetType` (e.g. `"Business Term"` or `"BusinessTerm"`), `domain` (name or UUID), optional `status` (name or UUID), and optional `attributes` by `name` (e.g. `[{"name": "Definition", "value": "Monthly Recurring Revenue"}]`)
+2. Read the response status:
+   - `success` → done; the response includes the new asset's UUID and a per-attribute outcome list
+   - `duplicate_found` → an asset with the same name already exists in this (assetType, domain). The response includes the existing asset's ID. Confirm with the user, then re-call with `allowDuplicate: true` to create anyway
+   - `validation_error` → the message includes suggestions (available asset types, compatible domains, valid attribute names, etc.). Self-correct and retry
+   - `error` → unexpected downstream Collibra failure; surface the message to the user
+
+**When to call `prepare_create_asset` first** (optional):
+- The user is browsing ("what asset types can I create?", "what domains accept a Business Term?")
+- The agent wants to know which attributes are required or `RICH_TEXT` before composing values
+- A previous `create_asset` returned `validation_error` and the agent wants to enumerate the full set of options rather than rely on the message's truncated suggestions
+
+For straightforward creates where the user provides asset type + domain, skip `prepare_create_asset` and call `create_asset` directly.
 
 ### Find an asset and get its details
 1. `search_asset_keyword` with the asset name → get UUID from results
@@ -176,8 +181,9 @@ These tools query Collibra Data Access — the system that manages who can acces
 
 ## Tips
 
-- **Always prepare before creating.** Call `prepare_create_asset` before `create_asset` and `prepare_add_business_term` before `add_business_term`, even if you already have the UUIDs. The prepare tools validate inputs, check for duplicates, and return the attribute schema.
-- **UUIDs are required for most tools.** When you only have a name, start with `search_asset_keyword` or the natural language discovery tools to get the UUID first.
+- **`create_asset` is self-sufficient — don't pre-flight it.** It resolves names to UUIDs, validates, and gates on duplicates internally. Calling `prepare_create_asset` first is purely optional and only useful for browsing or schema inspection (see the workflow above).
+- **For RICH_TEXT attributes, write Markdown.** `create_asset` detects `RICH_TEXT` attributes (e.g. `Definition`) and converts Markdown to HTML server-side before writing. Use bold (`**...**`), links (`[text](url)`), bullet lists, and headings naturally; they render correctly in the Collibra UI. Plain-text attributes pass through unchanged.
+- **UUIDs are required for most read tools.** When you only have a name, start with `search_asset_keyword` or the natural language discovery tools to get the UUID first.
 - **`discover_data_assets` vs `search_asset_keyword`**: Prefer `discover_data_assets` for open-ended semantic questions; prefer `search_asset_keyword` when you know the exact name or need to filter by type/community/domain.
 - **Permissions**: `discover_data_assets` and `discover_business_glossary` require the `dgc.ai-copilot` permission. Classification tools require `dgc.classify` + `dgc.catalog`. If a tool fails with a permission error, let the user know which permission is needed.
 - **Pagination**: `search_asset_keyword`, `list_asset_types`, `search_data_class`, and `search_data_classification_match` use `limit`/`offset`. `list_data_contract` and `get_asset_details` (for relations) use cursor-based pagination — carry the cursor from the previous response. Lineage tools (`search_lineage_entities`, `get_lineage_upstream`, `get_lineage_downstream`, `search_lineage_transformations`) and data access tools (`search_data_access_controls`, `search_data_access_roles`) also use cursor-based pagination.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/spf13/pflag"
@@ -14,7 +15,9 @@ func Init() *Config {
 	viper.SetConfigName("mcp")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
-	viper.AddConfigPath("$HOME/.config/collibra")
+	if home, err := os.UserHomeDir(); err == nil {
+		viper.AddConfigPath(filepath.Join(home, ".config", "collibra"))
+	}
 	viper.AddConfigPath("/etc/collibra")
 	viper.SetEnvPrefix("COLLIBRA_MCP")
 	viper.AutomaticEnv()
