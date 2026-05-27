@@ -60,20 +60,25 @@ type Server struct {
 }
 
 func NewServer(opts ...ServerOption) *Server {
-	store := &initParamsStore{}
 	s := &Server{
 		toolMiddlewares:  []ToolMiddleware{},
 		toolMetadata:     make(map[string]*ToolMetadata),
 		instructionParts: []string{instructions},
-		Server: *mcp.NewServer(&mcp.Implementation{
-			Name:    "Collibra MCP server",
-			Title:   "Collibra Data Intelligence Platform MCP Server",
-			Version: Version,
-		}, &mcp.ServerOptions{
-			Instructions: instructions,
-		}),
 	}
 
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	s.Server = *mcp.NewServer(&mcp.Implementation{
+		Name:    "Collibra MCP server",
+		Title:   "Collibra Data Intelligence Platform MCP Server",
+		Version: Version,
+	}, &mcp.ServerOptions{
+		Instructions: joinInstructions(s.instructionParts),
+	})
+
+	store := &initParamsStore{}
 	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			if method == "initialize" {
@@ -86,18 +91,6 @@ func NewServer(opts ...ServerOption) *Server {
 			}
 			return next(ctx, method, req)
 		}
-	})
-
-	for _, opt := range opts {
-		opt(s)
-	}
-
-	s.Server = *mcp.NewServer(&mcp.Implementation{
-		Name:    "Collibra MCP server",
-		Title:   "Collibra Data Intelligence Platform MCP Server",
-		Version: Version,
-	}, &mcp.ServerOptions{
-		Instructions: joinInstructions(s.instructionParts),
 	})
 
 	return s
@@ -124,7 +117,7 @@ type ServerToolConfig struct {
 	DisabledTools []string
 	// EnableDebugTools, when true, registers debug tools that are otherwise hidden.
 	EnableDebugTools bool
-	Experimental  []string
+	Experimental     []string
 	// SkillsDir is the optional path to an external skills directory whose
 	// contents are merged on top of the embedded catalog. Empty means the
 	// embedded catalog alone is served. Only consulted when the "skills"
