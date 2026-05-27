@@ -94,6 +94,44 @@ func TestServer_InitializeResponseIncludesInstructions(t *testing.T) {
 	}
 }
 
+func TestServer_WithInstructionsAppendsToDefault(t *testing.T) {
+	const snippet = "## Extra section\n\nappended content marker"
+	chipServer := NewServer(WithInstructions(snippet))
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	got := chipSession.InitializeResult().Instructions
+	if !strings.Contains(got, "Collibra") {
+		t.Errorf("expected default instructions preserved, got %q", got)
+	}
+	if !strings.Contains(got, "appended content marker") {
+		t.Errorf("expected appended snippet present, got %q", got)
+	}
+}
+
+func TestServer_WithReplacementInstructionsReplacesDefault(t *testing.T) {
+	const replacement = "# Replacement\n\nreplacement marker only"
+	chipServer := NewServer(WithReplacementInstructions(replacement))
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	got := chipSession.InitializeResult().Instructions
+	if got != replacement {
+		t.Errorf("expected replacement text only, got %q", got)
+	}
+}
+
+func TestServer_WithReplacementInstructionsEmptyKeepsDefault(t *testing.T) {
+	chipServer := NewServer(WithReplacementInstructions(""))
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	got := chipSession.InitializeResult().Instructions
+	if !strings.Contains(got, "Collibra") {
+		t.Errorf("expected default instructions preserved when replacement is empty, got %q", got)
+	}
+}
+
 func TestTool_IgnoreUnknownFields(t *testing.T) {
 	chipServer := NewServer()
 	RegisterTool[toolInput, toolOutput](chipServer, newTool())
@@ -184,4 +222,25 @@ func newChipSession(ctx context.Context, chipServer *Server) *mcp.ClientSession 
 
 func closeSilently(session *mcp.ClientSession) {
 	_ = session.Close()
+}
+
+func TestServerToolConfig_IsExperimentalEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   ServerToolConfig
+		feature  string
+		expected bool
+	}{
+		{name: "nil list", config: ServerToolConfig{}, feature: "skills", expected: false},
+		{name: "feature listed", config: ServerToolConfig{Experimental: []string{"skills"}}, feature: "skills", expected: true},
+		{name: "unrelated feature listed", config: ServerToolConfig{Experimental: []string{"other"}}, feature: "skills", expected: false},
+		{name: "multiple features", config: ServerToolConfig{Experimental: []string{"other", "skills"}}, feature: "skills", expected: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.config.IsExperimentalEnabled(tt.feature); got != tt.expected {
+				t.Errorf("IsExperimentalEnabled(%q) = %v, want %v", tt.feature, got, tt.expected)
+			}
+		})
+	}
 }

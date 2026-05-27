@@ -202,3 +202,14 @@ You can specify tools to enable or disable by using the tool names listed above 
 
 By default, all tools are enabled. Specifying tools to be enabled will enable *only* those tools.  Disabling tools will disable *only* those tools and leave all others enabled.
 At present, enabling and disabling at the same time is not supported. 
+
+## Experimental features
+
+Some functionality ships behind an opt-in `experimental` flag. These features are off by default and may change or be removed without a deprecation cycle. Enable them via `--experimental=<name>`, the `COLLIBRA_MCP_EXPERIMENTAL` environment variable, or the `mcp.experimental` field in `mcp.yaml`. Unknown names log a warning but do not fail startup, so stale configs survive a feature being retired or renamed.
+
+### Known experimental features
+
+- `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
+
+  Point chip at an **external skills directory** with `--skills-dir=<path>` (or `COLLIBRA_MCP_SKILLS_DIR`, or `mcp.skills-dir` in YAML) to add your own skills on top of the embedded ones. The expected layout is `<dir>/<namespace>/<name>/SKILL.md` (with optional `references/*.md` and `_shared/*.md` siblings) — same as the bundled catalog. External skills whose name matches an embedded skill (e.g. `collibra/lineage`) **fully replace** the embedded entry, including its resources, so you can override the shipped guides without rebuilding chip. `~` and `~user` in the path are expanded.
+

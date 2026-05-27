@@ -31,7 +31,9 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 func listToolNames(t *testing.T, cfg *chip.ServerToolConfig) []string {
 	t.Helper()
 	server := chip.NewServer()
-	tools.RegisterAll(server, &http.Client{}, cfg)
+	if err := tools.RegisterAll(server, &http.Client{}, cfg); err != nil {
+		t.Fatalf("RegisterAll failed: %v", err)
+	}
 
 	t1, t2 := mcp.NewInMemoryTransports()
 	if _, err := server.Connect(t.Context(), t1, nil); err != nil {

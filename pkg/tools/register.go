@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -30,6 +31,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/skills"
 )
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
@@ -40,7 +42,7 @@ var CopilotToolNames = []string{
 	"discover_business_glossary",
 }
 
-func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) {
+func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) error {
 	toolRegister(server, toolConfig, discover_data_assets.NewTool(client))
 	toolRegister(server, toolConfig, discover_business_glossary.NewTool(client))
 	toolRegister(server, toolConfig, get_asset_details.NewTool(client))
@@ -70,6 +72,13 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	if toolConfig.EnableDebugTools {
 		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))
 	}
+
+	if skills.Enabled(toolConfig) {
+		if err := skills.RegisterAll(server, toolConfig.SkillsDir); err != nil {
+			return fmt.Errorf("register skills: %w", err)
+		}
+	}
+	return nil
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {

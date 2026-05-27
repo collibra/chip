@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/collibra/chip/pkg/chip"
+	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -28,13 +29,28 @@ func main() {
 	}
 
 	client := newCollibraClient(config)
-	server := chip.NewServer(chip.WithToolMiddleware(chip.ToolMiddlewareFunc(setCollibraHost(config.Api.Url))))
+
 	toolConfig := &chip.ServerToolConfig{
 		EnabledTools:     config.Mcp.EnabledTools,
 		DisabledTools:    config.Mcp.DisabledTools,
 		EnableDebugTools: config.Mcp.EnableDebugTools,
+		Experimental:  config.Mcp.Experimental,
+		SkillsDir:     config.Mcp.SkillsDir,
 	}
-	tools.RegisterAll(server, client, toolConfig)
+
+	serverOpts := []chip.ServerOption{
+		chip.WithToolMiddleware(chip.ToolMiddlewareFunc(setCollibraHost(config.Api.Url))),
+	}
+	if skills.Enabled(toolConfig) {
+		slog.Info("Experimental feature enabled: skills")
+		serverOpts = append(serverOpts, chip.WithReplacementInstructions(skills.Instructions))
+	}
+	server := chip.NewServer(serverOpts...)
+
+	if err := tools.RegisterAll(server, client, toolConfig); err != nil {
+		slog.Error(fmt.Sprintf("Failed to register tools: %v", err))
+		os.Exit(1)
+	}
 
 	if config.Mcp.Mode == "stdio" {
 		runStdioServer(server)
