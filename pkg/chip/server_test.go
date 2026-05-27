@@ -150,6 +150,63 @@ func TestTool_IgnoreUnknownFields(t *testing.T) {
 	}
 }
 
+func TestServerToolConfig_IsToolEnabled(t *testing.T) {
+	cases := []struct {
+		name     string
+		cfg      ServerToolConfig
+		tool     string
+		expected bool
+	}{
+		{"empty config enables everything", ServerToolConfig{}, "foo", true},
+		{"explicitly disabled", ServerToolConfig{DisabledTools: []string{"foo"}}, "foo", false},
+		{"allow-list excludes others", ServerToolConfig{EnabledTools: []string{"bar"}}, "foo", false},
+		{"allow-list includes self", ServerToolConfig{EnabledTools: []string{"foo"}}, "foo", true},
+		{"disabled wins over enabled", ServerToolConfig{EnabledTools: []string{"foo"}, DisabledTools: []string{"foo"}}, "foo", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cfg.IsToolEnabled(tc.tool); got != tc.expected {
+				t.Fatalf("IsToolEnabled(%q) = %v, want %v", tc.tool, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestServer_InitParamsAvailableOnToolContext(t *testing.T) {
+	chipServer := NewServer()
+	var captured *mcp.InitializeParams
+	RegisterTool(chipServer, &Tool[toolInput, toolOutput]{
+		Name:        "capture_init",
+		Description: "Captures init params for testing.",
+		Handler: func(ctx context.Context, _ toolInput) (toolOutput, error) {
+			p, _ := GetInitParams(ctx)
+			captured = p
+			return toolOutput{}, nil
+		},
+	})
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	if _, err := chipSession.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      "capture_init",
+		Arguments: map[string]any{"input": "x"},
+	}); err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatal("expected init params to be captured on tool context")
+	}
+	if captured.ClientInfo == nil {
+		t.Fatal("expected ClientInfo on captured init params")
+	}
+	if captured.ClientInfo.Name != "client" {
+		t.Fatalf("expected ClientInfo.Name=client, got %q", captured.ClientInfo.Name)
+	}
+	if captured.ClientInfo.Version != "v0.0.1" {
+		t.Fatalf("expected ClientInfo.Version=v0.0.1, got %q", captured.ClientInfo.Version)
+	}
+}
+
 func newChipSession(ctx context.Context, chipServer *Server) *mcp.ClientSession {
 	t1, t2 := mcp.NewInMemoryTransports()
 	if _, err := chipServer.Connect(ctx, t1, nil); err != nil {

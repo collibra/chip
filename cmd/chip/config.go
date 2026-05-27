@@ -89,6 +89,11 @@ func initConfigOptions() {
 	_ = viper.BindEnv("mcp.disabled-tools", "COLLIBRA_MCP_DISABLED_TOOLS")
 	_ = viper.BindPFlag("mcp.disabled-tools", pflag.Lookup("disabled-tools"))
 
+	pflag.Bool("enable-debug-tools", false, "Enable debug tools (e.g. get_debug_mcp_init_request); off by default (env: COLLIBRA_MCP_ENABLE_DEBUG_TOOLS)")
+	_ = viper.BindEnv("mcp.enable-debug-tools", "COLLIBRA_MCP_ENABLE_DEBUG_TOOLS")
+	_ = viper.BindPFlag("mcp.enable-debug-tools", pflag.Lookup("enable-debug-tools"))
+	viper.SetDefault("mcp.enable-debug-tools", false)
+
 	pflag.StringSlice("experimental", []string{}, "Comma-separated list of opt-in experimental features to enable (env: COLLIBRA_MCP_EXPERIMENTAL). See EXPERIMENTAL FEATURES below for valid names.")
 	_ = viper.BindEnv("mcp.experimental", "COLLIBRA_MCP_EXPERIMENTAL")
 	_ = viper.BindPFlag("mcp.experimental", pflag.Lookup("experimental"))
@@ -122,6 +127,7 @@ ENVIRONMENT VARIABLES:
   COLLIBRA_MCP_HTTP_PORT        HTTP server port (default: 8080)
   COLLIBRA_MCP_ENABLED_TOOLS    Optional comma-separated list of tool names to enable instead of enabling all tools, cannot be used with disabled-tools
   COLLIBRA_MCP_DISABLED_TOOLS   Optional comma-separated list of tool names to disable while enabling the remaining tools, cannot be used with enabled-tools
+  COLLIBRA_MCP_ENABLE_DEBUG_TOOLS  Enable debug tools (default: false)
   COLLIBRA_MCP_EXPERIMENTAL     Comma-separated list of opt-in experimental features to enable (see EXPERIMENTAL FEATURES below)
   COLLIBRA_MCP_SKILLS_DIR       Optional path to an external skills directory merged on top of the embedded catalog (requires the 'skills' experimental feature)
 
@@ -155,6 +161,7 @@ CONFIGURATION FILE EXAMPLE:
     # disabled-tools:  # Optional: list of tools to disable (cannot be used with enabled-tools)
     #   - "tool3"
     #   - "tool4"
+    enable-debug-tools: false  # Optional: enable debug tools (default: false)
     # experimental:  # Optional: opt-in experimental features (off by default)
     #   - "skills"
     # skills-dir: "/path/to/skills"  # Optional: external skills dir (requires the 'skills' experimental feature)
@@ -216,6 +223,7 @@ type McpConfig struct {
 	Stdio         StdioConfig `mapstructure:"stdio"`
 	EnabledTools  []string    `mapstructure:"enabled-tools"`
 	DisabledTools []string    `mapstructure:"disabled-tools"`
+	EnableDebugTools bool     `mapstructure:"enable-debug-tools"`
 	Experimental  []string    `mapstructure:"experimental"`
 	SkillsDir     string      `mapstructure:"skills-dir"`
 }

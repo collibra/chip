@@ -31,8 +31,9 @@ func main() {
 	client := newCollibraClient(config)
 
 	toolConfig := &chip.ServerToolConfig{
-		EnabledTools:  config.Mcp.EnabledTools,
-		DisabledTools: config.Mcp.DisabledTools,
+		EnabledTools:     config.Mcp.EnabledTools,
+		DisabledTools:    config.Mcp.DisabledTools,
+		EnableDebugTools: config.Mcp.EnableDebugTools,
 		Experimental:  config.Mcp.Experimental,
 		SkillsDir:     config.Mcp.SkillsDir,
 	}
