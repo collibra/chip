@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"slices"
+	"sync"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,6 +30,27 @@ func (f ToolMiddlewareFunc) ToolHandle(ctx context.Context, toolRequest *mcp.Cal
 	return f(ctx, toolRequest, next)
 }
 
+// initParamsStore holds the last InitializeParams received from a client.
+// In stateless HTTP mode each call gets a fresh session, so the params from
+// the initial handshake are captured here and re-injected into the per-request
+// context by the receiving middleware.
+type initParamsStore struct {
+	mu     sync.RWMutex
+	params *mcp.InitializeParams
+}
+
+func (s *initParamsStore) set(p *mcp.InitializeParams) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.params = p
+}
+
+func (s *initParamsStore) get() *mcp.InitializeParams {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.params
+}
+
 type Server struct {
 	toolMiddlewares []ToolMiddleware
 	toolMetadata    map[string]*ToolMetadata
@@ -36,6 +58,7 @@ type Server struct {
 }
 
 func NewServer(opts ...ServerOption) *Server {
+	store := &initParamsStore{}
 	s := &Server{
 		toolMiddlewares: []ToolMiddleware{},
 		toolMetadata:    make(map[string]*ToolMetadata),
@@ -47,6 +70,20 @@ func NewServer(opts ...ServerOption) *Server {
 			Instructions: instructions,
 		}),
 	}
+
+	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if method == "initialize" {
+				if params, ok := req.GetParams().(*mcp.InitializeParams); ok {
+					store.set(params)
+				}
+			}
+			if p := store.get(); p != nil {
+				ctx = SetInitParams(ctx, p)
+			}
+			return next(ctx, method, req)
+		}
+	})
 
 	for _, opt := range opts {
 		opt(s)
@@ -70,6 +107,8 @@ type ToolMetadata struct {
 type ServerToolConfig struct {
 	EnabledTools  []string
 	DisabledTools []string
+	// EnableDebugTools, when true, registers debug tools that are otherwise hidden.
+	EnableDebugTools bool
 }
 
 func (tc *ServerToolConfig) IsToolEnabled(toolName string) bool {
@@ -146,6 +185,9 @@ func buildSchema[Schema any]() *jsonschema.Schema {
 	inputSchema, err := jsonschema.For[Schema](nil)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if inputSchema == nil {
+		log.Fatalf("jsonschema.For returned nil schema for %T", *new(Schema))
 	}
 	inputSchema.AdditionalProperties = nil
 	return inputSchema
