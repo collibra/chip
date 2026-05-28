@@ -10,6 +10,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
+	"github.com/collibra/chip/pkg/tools/find_workflow_definitions"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
@@ -31,6 +32,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/tools/start_workflow"
 	"github.com/collibra/chip/pkg/skills"
 )
 
@@ -68,6 +70,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
+	toolRegister(server, toolConfig, find_workflow_definitions.NewTool(client))
+	toolRegister(server, toolConfig, start_workflow.NewTool(client))
 
 	if toolConfig.EnableDebugTools {
 		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))
