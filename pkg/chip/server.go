@@ -237,5 +237,81 @@ func buildSchema[Schema any]() *jsonschema.Schema {
 		log.Fatalf("jsonschema.For returned nil schema for %T", *new(Schema))
 	}
 	inputSchema.AdditionalProperties = nil
+	// jsonschema.For emits `type: ["null", "array"]` for every Go slice
+	// because a nil slice is a valid value at the Go level. Some MCP
+	// clients (notably the Claude Code harness) only recognize a singular
+	// `type` and otherwise stringify the value, which then fails our
+	// server-side validation. Drop "null" from any type union so the
+	// remaining single type is emitted as a plain string.
+	stripNullFromTypeUnions(inputSchema)
 	return inputSchema
+}
+
+// stripNullFromTypeUnions walks the schema and collapses any
+// `Types: [..., "null", ...]` union by dropping "null", moving a sole
+// remaining type into Type. Slices and pointers are the only Go shapes
+// that produce such unions in practice; dropping "null" loses nothing
+// for LLM-facing input schemas because the harness can simply omit the
+// property when there is no value to send.
+func stripNullFromTypeUnions(s *jsonschema.Schema) {
+	if s == nil {
+		return
+	}
+	if len(s.Types) > 0 {
+		kept := s.Types[:0:0]
+		for _, t := range s.Types {
+			if t != "null" {
+				kept = append(kept, t)
+			}
+		}
+		switch len(kept) {
+		case 0:
+			s.Types = nil
+		case 1:
+			s.Type = kept[0]
+			s.Types = nil
+		default:
+			s.Types = kept
+		}
+	}
+
+	stripNullFromTypeUnions(s.Items)
+	for _, sub := range s.ItemsArray {
+		stripNullFromTypeUnions(sub)
+	}
+	for _, sub := range s.PrefixItems {
+		stripNullFromTypeUnions(sub)
+	}
+	stripNullFromTypeUnions(s.AdditionalItems)
+	stripNullFromTypeUnions(s.Contains)
+	stripNullFromTypeUnions(s.UnevaluatedItems)
+	for _, sub := range s.Properties {
+		stripNullFromTypeUnions(sub)
+	}
+	for _, sub := range s.PatternProperties {
+		stripNullFromTypeUnions(sub)
+	}
+	stripNullFromTypeUnions(s.AdditionalProperties)
+	stripNullFromTypeUnions(s.PropertyNames)
+	stripNullFromTypeUnions(s.UnevaluatedProperties)
+	for _, sub := range s.AllOf {
+		stripNullFromTypeUnions(sub)
+	}
+	for _, sub := range s.AnyOf {
+		stripNullFromTypeUnions(sub)
+	}
+	for _, sub := range s.OneOf {
+		stripNullFromTypeUnions(sub)
+	}
+	stripNullFromTypeUnions(s.Not)
+	stripNullFromTypeUnions(s.If)
+	stripNullFromTypeUnions(s.Then)
+	stripNullFromTypeUnions(s.Else)
+	for _, sub := range s.DependentSchemas {
+		stripNullFromTypeUnions(sub)
+	}
+	for _, sub := range s.Defs {
+		stripNullFromTypeUnions(sub)
+	}
+	stripNullFromTypeUnions(s.ContentSchema)
 }
