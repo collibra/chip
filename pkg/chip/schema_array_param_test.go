@@ -12,7 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Regression test for DEV-182926. Array-typed parameters were advertised as a
+// Array-typed parameters were advertised as a
 // nullable type union (`["null","array"]`), which the Claude desktop app failed
 // to recognise as structured — it serialised the argument to a JSON string that
 // the server then rejected with `has type "string", want one of "null, array"`.
