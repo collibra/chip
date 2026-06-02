@@ -94,6 +94,44 @@ func TestServer_InitializeResponseIncludesInstructions(t *testing.T) {
 	}
 }
 
+func TestServer_WithInstructionsAppendsToDefault(t *testing.T) {
+	const snippet = "## Extra section\n\nappended content marker"
+	chipServer := NewServer(WithInstructions(snippet))
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	got := chipSession.InitializeResult().Instructions
+	if !strings.Contains(got, "Collibra") {
+		t.Errorf("expected default instructions preserved, got %q", got)
+	}
+	if !strings.Contains(got, "appended content marker") {
+		t.Errorf("expected appended snippet present, got %q", got)
+	}
+}
+
+func TestServer_WithReplacementInstructionsReplacesDefault(t *testing.T) {
+	const replacement = "# Replacement\n\nreplacement marker only"
+	chipServer := NewServer(WithReplacementInstructions(replacement))
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	got := chipSession.InitializeResult().Instructions
+	if got != replacement {
+		t.Errorf("expected replacement text only, got %q", got)
+	}
+}
+
+func TestServer_WithReplacementInstructionsEmptyKeepsDefault(t *testing.T) {
+	chipServer := NewServer(WithReplacementInstructions(""))
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	got := chipSession.InitializeResult().Instructions
+	if !strings.Contains(got, "Collibra") {
+		t.Errorf("expected default instructions preserved when replacement is empty, got %q", got)
+	}
+}
+
 func TestTool_IgnoreUnknownFields(t *testing.T) {
 	chipServer := NewServer()
 	RegisterTool[toolInput, toolOutput](chipServer, newTool())
@@ -112,6 +150,63 @@ func TestTool_IgnoreUnknownFields(t *testing.T) {
 	}
 }
 
+func TestServerToolConfig_IsToolEnabled(t *testing.T) {
+	cases := []struct {
+		name     string
+		cfg      ServerToolConfig
+		tool     string
+		expected bool
+	}{
+		{"empty config enables everything", ServerToolConfig{}, "foo", true},
+		{"explicitly disabled", ServerToolConfig{DisabledTools: []string{"foo"}}, "foo", false},
+		{"allow-list excludes others", ServerToolConfig{EnabledTools: []string{"bar"}}, "foo", false},
+		{"allow-list includes self", ServerToolConfig{EnabledTools: []string{"foo"}}, "foo", true},
+		{"disabled wins over enabled", ServerToolConfig{EnabledTools: []string{"foo"}, DisabledTools: []string{"foo"}}, "foo", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cfg.IsToolEnabled(tc.tool); got != tc.expected {
+				t.Fatalf("IsToolEnabled(%q) = %v, want %v", tc.tool, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestServer_InitParamsAvailableOnToolContext(t *testing.T) {
+	chipServer := NewServer()
+	var captured *mcp.InitializeParams
+	RegisterTool(chipServer, &Tool[toolInput, toolOutput]{
+		Name:        "capture_init",
+		Description: "Captures init params for testing.",
+		Handler: func(ctx context.Context, _ toolInput) (toolOutput, error) {
+			p, _ := GetInitParams(ctx)
+			captured = p
+			return toolOutput{}, nil
+		},
+	})
+	chipSession := newChipSession(t.Context(), chipServer)
+	defer closeSilently(chipSession)
+
+	if _, err := chipSession.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      "capture_init",
+		Arguments: map[string]any{"input": "x"},
+	}); err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if captured == nil {
+		t.Fatal("expected init params to be captured on tool context")
+	}
+	if captured.ClientInfo == nil {
+		t.Fatal("expected ClientInfo on captured init params")
+	}
+	if captured.ClientInfo.Name != "client" {
+		t.Fatalf("expected ClientInfo.Name=client, got %q", captured.ClientInfo.Name)
+	}
+	if captured.ClientInfo.Version != "v0.0.1" {
+		t.Fatalf("expected ClientInfo.Version=v0.0.1, got %q", captured.ClientInfo.Version)
+	}
+}
+
 func newChipSession(ctx context.Context, chipServer *Server) *mcp.ClientSession {
 	t1, t2 := mcp.NewInMemoryTransports()
 	if _, err := chipServer.Connect(ctx, t1, nil); err != nil {
@@ -127,4 +222,25 @@ func newChipSession(ctx context.Context, chipServer *Server) *mcp.ClientSession 
 
 func closeSilently(session *mcp.ClientSession) {
 	_ = session.Close()
+}
+
+func TestServerToolConfig_IsExperimentalEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   ServerToolConfig
+		feature  string
+		expected bool
+	}{
+		{name: "nil list", config: ServerToolConfig{}, feature: "skills", expected: false},
+		{name: "feature listed", config: ServerToolConfig{Experimental: []string{"skills"}}, feature: "skills", expected: true},
+		{name: "unrelated feature listed", config: ServerToolConfig{Experimental: []string{"other"}}, feature: "skills", expected: false},
+		{name: "multiple features", config: ServerToolConfig{Experimental: []string{"other", "skills"}}, feature: "skills", expected: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.config.IsExperimentalEnabled(tt.feature); got != tt.expected {
+				t.Errorf("IsExperimentalEnabled(%q) = %v, want %v", tt.feature, got, tt.expected)
+			}
+		})
+	}
 }

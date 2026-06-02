@@ -12,6 +12,7 @@ type contextKey int
 const (
 	callToolRequestKey contextKey = iota
 	collibraHostKey
+	initParamsKey
 )
 
 func SetCallToolRequest(ctx context.Context, toolRequest *mcp.CallToolRequest) context.Context {
@@ -30,6 +31,15 @@ func SetCollibraHost(ctx context.Context, collibraHost string) context.Context {
 func GetCollibraHost(ctx context.Context) (string, bool) {
 	collibraHost, ok := ctx.Value(collibraHostKey).(string)
 	return collibraHost, ok
+}
+
+func SetInitParams(ctx context.Context, params *mcp.InitializeParams) context.Context {
+	return context.WithValue(ctx, initParamsKey, params)
+}
+
+func GetInitParams(ctx context.Context) (*mcp.InitializeParams, bool) {
+	params, ok := ctx.Value(initParamsKey).(*mcp.InitializeParams)
+	return params, ok
 }
 
 func GetSessionId(ctx context.Context) string {

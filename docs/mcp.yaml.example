@@ -43,4 +43,17 @@ mcp:
   http:
     # Port for HTTP server (optional, default: 8080)
     port: 8080
-  
+
+  # Opt-in experimental features. Off by default. Unknown names log a
+  # warning but do not fail startup. Currently known:
+  #   skills - embedded skill catalog served via list_collibra_skills /
+  #            load_collibra_skill (experimental; not shipped to all users).
+  # experimental:
+  #   - "skills"
+
+  # Optional external skills directory. When set, its skills are merged on
+  # top of the embedded catalog and same-named skills (e.g.
+  # collibra/lineage) fully replace the embedded entry, including their
+  # bundled resources. Requires the "skills" experimental feature.
+  # `~` and `~user` are expanded.
+  # skills-dir: "~/.collibra/skills"

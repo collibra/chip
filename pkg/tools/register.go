@@ -1,19 +1,19 @@
 package tools
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/create_asset"
-	"github.com/collibra/chip/pkg/tools/create_data_access_request"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
-	"github.com/collibra/chip/pkg/tools/get_data_access_control_details"
+	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
@@ -27,12 +27,11 @@ import (
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
-	"github.com/collibra/chip/pkg/tools/search_data_access_identities"
-	"github.com/collibra/chip/pkg/tools/search_data_access_objects"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/skills"
 )
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
@@ -43,7 +42,7 @@ var CopilotToolNames = []string{
 	"discover_business_glossary",
 }
 
-func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) {
+func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) error {
 	toolRegister(server, toolConfig, discover_data_assets.NewTool(client))
 	toolRegister(server, toolConfig, discover_business_glossary.NewTool(client))
 	toolRegister(server, toolConfig, get_asset_details.NewTool(client))
@@ -58,21 +57,28 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, pull_data_contract_manifest.NewTool(client))
 	toolRegister(server, toolConfig, get_business_term_data.NewTool(client))
 	toolRegister(server, toolConfig, get_column_semantics.NewTool(client))
-	toolRegister(server, toolConfig, get_data_access_control_details.NewTool(client))
 	toolRegister(server, toolConfig, get_lineage_downstream.NewTool(client))
 	toolRegister(server, toolConfig, get_lineage_entity.NewTool(client))
 	toolRegister(server, toolConfig, get_lineage_transformation.NewTool(client))
 	toolRegister(server, toolConfig, get_lineage_upstream.NewTool(client))
 	toolRegister(server, toolConfig, get_measure_data.NewTool(client))
 	toolRegister(server, toolConfig, get_table_semantics.NewTool(client))
-	toolRegister(server, toolConfig, search_data_access_identities.NewTool(client))
-	toolRegister(server, toolConfig, search_data_access_objects.NewTool(client))
 	toolRegister(server, toolConfig, search_lineage_entities.NewTool(client))
 	toolRegister(server, toolConfig, search_lineage_transformations.NewTool(client))
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
-	toolRegister(server, toolConfig, create_data_access_request.NewTool(client))
+
+	if toolConfig.EnableDebugTools {
+		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))
+	}
+
+	if skills.Enabled(toolConfig) {
+		if err := skills.RegisterAll(server, toolConfig.SkillsDir); err != nil {
+			return fmt.Errorf("register skills: %w", err)
+		}
+	}
+	return nil
 }
 
 func toolRegister[In, Out any](server *chip.Server, toolConfig *chip.ServerToolConfig, tool *chip.Tool[In, Out]) {

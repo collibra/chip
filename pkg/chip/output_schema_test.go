@@ -15,7 +15,9 @@ import (
 // Validates all tool output schemas against 2020-12 schema
 func TestAllToolsDeclareValid2020_12OutputSchemas(t *testing.T) {
 	server := chip.NewServer()
-	tools.RegisterAll(server, &http.Client{}, &chip.ServerToolConfig{})
+	if err := tools.RegisterAll(server, &http.Client{}, &chip.ServerToolConfig{}); err != nil {
+		t.Fatalf("RegisterAll: %v", err)
+	}
 
 	t1, t2 := mcp.NewInMemoryTransports()
 	if _, err := server.Connect(t.Context(), t1, nil); err != nil {

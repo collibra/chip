@@ -7,6 +7,8 @@ import (
 	"log"
 	"log/slog"
 	"slices"
+	"strings"
+	"sync"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,30 +31,73 @@ func (f ToolMiddlewareFunc) ToolHandle(ctx context.Context, toolRequest *mcp.Cal
 	return f(ctx, toolRequest, next)
 }
 
+// initParamsStore holds the last InitializeParams received from a client.
+// In stateless HTTP mode each call gets a fresh session, so the params from
+// the initial handshake are captured here and re-injected into the per-request
+// context by the receiving middleware.
+type initParamsStore struct {
+	mu     sync.RWMutex
+	params *mcp.InitializeParams
+}
+
+func (s *initParamsStore) set(p *mcp.InitializeParams) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.params = p
+}
+
+func (s *initParamsStore) get() *mcp.InitializeParams {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.params
+}
+
 type Server struct {
-	toolMiddlewares []ToolMiddleware
-	toolMetadata    map[string]*ToolMetadata
+	toolMiddlewares  []ToolMiddleware
+	toolMetadata     map[string]*ToolMetadata
+	instructionParts []string
 	mcp.Server
 }
 
 func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
-		toolMiddlewares: []ToolMiddleware{},
-		toolMetadata:    make(map[string]*ToolMetadata),
-		Server: *mcp.NewServer(&mcp.Implementation{
-			Name:    "Collibra MCP server",
-			Title:   "Collibra Data Intelligence Platform MCP Server",
-			Version: Version,
-		}, &mcp.ServerOptions{
-			Instructions: instructions,
-		}),
+		toolMiddlewares:  []ToolMiddleware{},
+		toolMetadata:     make(map[string]*ToolMetadata),
+		instructionParts: []string{instructions},
 	}
 
 	for _, opt := range opts {
 		opt(s)
 	}
 
+	s.Server = *mcp.NewServer(&mcp.Implementation{
+		Name:    "Collibra MCP server",
+		Title:   "Collibra Data Intelligence Platform MCP Server",
+		Version: Version,
+	}, &mcp.ServerOptions{
+		Instructions: joinInstructions(s.instructionParts),
+	})
+
+	store := &initParamsStore{}
+	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if method == "initialize" {
+				if params, ok := req.GetParams().(*mcp.InitializeParams); ok {
+					store.set(params)
+				}
+			}
+			if p := store.get(); p != nil {
+				ctx = SetInitParams(ctx, p)
+			}
+			return next(ctx, method, req)
+		}
+	})
+
 	return s
+}
+
+func joinInstructions(parts []string) string {
+	return strings.Join(parts, "\n\n")
 }
 
 // GetToolMetadata returns the metadata for a given tool
@@ -70,6 +115,14 @@ type ToolMetadata struct {
 type ServerToolConfig struct {
 	EnabledTools  []string
 	DisabledTools []string
+	// EnableDebugTools, when true, registers debug tools that are otherwise hidden.
+	EnableDebugTools bool
+	Experimental     []string
+	// SkillsDir is the optional path to an external skills directory whose
+	// contents are merged on top of the embedded catalog. Empty means the
+	// embedded catalog alone is served. Only consulted when the "skills"
+	// experimental feature is enabled.
+	SkillsDir string
 }
 
 func (tc *ServerToolConfig) IsToolEnabled(toolName string) bool {
@@ -82,11 +135,44 @@ func (tc *ServerToolConfig) IsToolEnabled(toolName string) bool {
 	return true
 }
 
+// IsExperimentalEnabled reports whether the given experimental feature
+// name was opted into via --experimental, COLLIBRA_MCP_EXPERIMENTAL, or
+// mcp.experimental in the YAML config.
+func (tc *ServerToolConfig) IsExperimentalEnabled(featureName string) bool {
+	return slices.Contains(tc.Experimental, featureName)
+}
+
 type ServerOption func(*Server)
 
 func WithToolMiddleware(middleware ToolMiddleware) ServerOption {
 	return func(s *Server) {
 		s.toolMiddlewares = append(s.toolMiddlewares, middleware)
+	}
+}
+
+// WithInstructions appends a snippet to the server's initialize instructions.
+// Use this so optional features (e.g. experimental skills) can contribute
+// their own bootstrap text only when enabled.
+func WithInstructions(snippet string) ServerOption {
+	return func(s *Server) {
+		if snippet != "" {
+			s.instructionParts = append(s.instructionParts, snippet)
+		}
+	}
+}
+
+// WithReplacementInstructions replaces the server's default initialize
+// instructions with the given text, discarding any previously appended parts
+// (including the embedded default). Use this when an optional feature owns
+// the entire bootstrap surface — e.g. the experimental skills feature, which
+// routes the model through skill discovery instead of carrying workflow
+// recipes in instructions.
+func WithReplacementInstructions(text string) ServerOption {
+	return func(s *Server) {
+		if text == "" {
+			return
+		}
+		s.instructionParts = []string{text}
 	}
 }
 
@@ -146,6 +232,9 @@ func buildSchema[Schema any]() *jsonschema.Schema {
 	inputSchema, err := jsonschema.For[Schema](nil)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if inputSchema == nil {
+		log.Fatalf("jsonschema.For returned nil schema for %T", *new(Schema))
 	}
 	inputSchema.AdditionalProperties = nil
 	return inputSchema
