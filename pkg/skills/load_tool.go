@@ -28,7 +28,8 @@ type loadOutput struct {
 // NewLoadTool returns the load_collibra_skill tool wired to the given catalog.
 func NewLoadTool(catalog *Catalog) *chip.Tool[loadInput, loadOutput] {
 	return &chip.Tool[loadInput, loadOutput]{
-		Name: loadToolName,
+		Name:  loadToolName,
+		Title: "Load Collibra Skill",
 		Description: "Load a Collibra skill guide before using related tools (e.g. load " +
 			"'collibra/lineage' before calling get_lineage_*, or 'collibra/asset-create' before " +
 			"create_asset). Skills document the right tool sequences, ID-bridging rules, and " +

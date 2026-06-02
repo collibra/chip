@@ -18,7 +18,8 @@ type Input struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageDirectionalOutput] {
 	return &chip.Tool[Input, clients.GetLineageDirectionalOutput]{
-		Name: "get_lineage_downstream",
+		Name:  "get_lineage_downstream",
+		Title: "Get Downstream Lineage",
 		Description: `WORKFLOW: Call this AFTER search_lineage_entities has given you an entity ID. This is the tool for impact analysis and tracing data consumers.
 					  Use when the user asks: "what depends on this data?", "what uses this table?", "what breaks if this column changes?", "what reports use this data?", "what is the impact of changing this?".
 					  Typical workflow: (1) search_lineage_entities to find the entity ID → (2) get_lineage_downstream with that ID → (3) optionally get_lineage_entity for the most relevant consumer entities only.

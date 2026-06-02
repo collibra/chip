@@ -110,7 +110,8 @@ type AttributeResult struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name: "create_asset",
+		Name:  "create_asset",
+		Title: "Create Asset",
 		Description: "Create a new Collibra asset of any type. " +
 			"Inputs accept human-friendly identifiers: assetType resolves from UUID, publicId, or display name; domain from UUID or display name; status from UUID or status name; attributes by name or typeId. " +
 			"Markdown in RICH_TEXT attribute values (e.g. 'Definition') is converted to HTML server-side so it renders correctly in Collibra. " +

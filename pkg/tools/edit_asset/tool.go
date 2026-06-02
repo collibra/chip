@@ -125,26 +125,27 @@ type AssetSummary struct {
 
 // OperationResult is the outcome of a single operation in the input array.
 type OperationResult struct {
-	Operation     OperationType `json:"operation"`
-	Status        string        `json:"status" jsonschema:"'success' or 'error'."`
-	AttributeName string        `json:"attributeName,omitempty"`
-	Field         string        `json:"field,omitempty"`
-	RelationType  string        `json:"relationType,omitempty"`
-	RelationID    string        `json:"relationId,omitempty"`
-	TargetAssetID string        `json:"targetAssetId,omitempty"`
-	Tag           string        `json:"tag,omitempty"`
-	Role          string        `json:"role,omitempty"`
-	UserID        string        `json:"userId,omitempty"`
-	PreviousValue       string `json:"previousValue,omitempty"`
-	NewValue            string `json:"newValue,omitempty"`
-	CascadedDisplayName bool   `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
-	Error               string `json:"error,omitempty"`
+	Operation           OperationType `json:"operation"`
+	Status              string        `json:"status" jsonschema:"'success' or 'error'."`
+	AttributeName       string        `json:"attributeName,omitempty"`
+	Field               string        `json:"field,omitempty"`
+	RelationType        string        `json:"relationType,omitempty"`
+	RelationID          string        `json:"relationId,omitempty"`
+	TargetAssetID       string        `json:"targetAssetId,omitempty"`
+	Tag                 string        `json:"tag,omitempty"`
+	Role                string        `json:"role,omitempty"`
+	UserID              string        `json:"userId,omitempty"`
+	PreviousValue       string        `json:"previousValue,omitempty"`
+	NewValue            string        `json:"newValue,omitempty"`
+	CascadedDisplayName bool          `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
+	Error               string        `json:"error,omitempty"`
 }
 
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name: "edit_asset",
+		Name:  "edit_asset",
+		Title: "Edit Asset",
 		Description: "Edit an existing Collibra asset by submitting a list of typed operations against a single assetId. " +
 			"Supported operations: " +
 			"update_attribute / add_attribute / remove_attribute (change, append, or clear an attribute value such as 'Definition' or 'Note', identified by attribute type name); " +

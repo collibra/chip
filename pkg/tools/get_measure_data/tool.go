@@ -32,7 +32,7 @@ type Input struct {
 
 type Output struct {
 	DataHierarchy []Attribute `json:"dataHierarchy" jsonschema:"The list of data attributes with their connected columns and tables."`
-	Error         string                 `json:"error,omitempty" jsonschema:"Error message if the operation failed."`
+	Error         string      `json:"error,omitempty" jsonschema:"Error message if the operation failed."`
 }
 
 type Attribute struct {
@@ -45,6 +45,7 @@ type Attribute struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_measure_data",
+		Title:       "Get Measure Data",
 		Description: "Retrieve all underlying Column assets connected to a Measure via the path Measure → Data Attribute → Column, including each Column's description and parent Table.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

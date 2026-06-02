@@ -16,6 +16,7 @@ type Output = mcp.InitializeParams
 func NewTool(_ *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_debug_mcp_init_request",
+		Title:       "Get Debug MCP Init Request",
 		Description: "Returns the MCP initialize request the connected client sent during the handshake, including protocolVersion, clientInfo, and declared capabilities (e.g. whether elicitation, sampling, or roots are supported). Useful for debugging MCP client/server compatibility.",
 		Handler:     handler(),
 		Permissions: []string{},

@@ -178,6 +178,7 @@ func WithReplacementInstructions(text string) ServerOption {
 
 type Tool[In, Out any] struct {
 	Name        string
+	Title       string
 	Description string
 	Handler     ToolHandlerFunc[In, Out]
 	Permissions []string
@@ -221,6 +222,7 @@ func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 
 	mcp.AddTool(&s.Server, &mcp.Tool{
 		Name:         tool.Name,
+		Title:        tool.Title,
 		Description:  tool.Description,
 		InputSchema:  buildSchema[In](),
 		OutputSchema: buildSchema[Out](),

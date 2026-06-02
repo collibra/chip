@@ -41,6 +41,7 @@ type AssetResponsibility struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_asset_details",
+		Title:       "Get Asset Details",
 		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

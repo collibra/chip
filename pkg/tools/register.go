@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
+	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
@@ -31,7 +32,6 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
-	"github.com/collibra/chip/pkg/skills"
 )
 
 // CopilotToolNames lists tool names that are routed to the copilot service.

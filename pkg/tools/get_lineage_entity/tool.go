@@ -15,7 +15,8 @@ type Input struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageEntityOutput] {
 	return &chip.Tool[Input, clients.GetLineageEntityOutput]{
-		Name: "get_lineage_entity",
+		Name:  "get_lineage_entity",
+		Title: "Get Lineage Entity",
 		Description: `WORKFLOW: This is a FOLLOW-UP tool for resolving entity IDs you already have. Do not call this as a first step — start with search_lineage_entities instead.
 					  Use when you have an entity ID from get_lineage_upstream or get_lineage_downstream results and need to know the entity's name, type, or other metadata. Returns: name, type, source systems, parent entity, and linked DGC identifier.
 					  IMPORTANT: Upstream/downstream results return entity IDs only. You do NOT need to resolve every ID — summarize based on entity IDs and only call this tool for the most relevant entities the user asked about. Resolving all IDs wastes tool calls.
