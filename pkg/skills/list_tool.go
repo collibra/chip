@@ -26,7 +26,8 @@ type listedSkill struct {
 // NewListTool returns the list_collibra_skills tool wired to the given catalog.
 func NewListTool(catalog *Catalog) *chip.Tool[listInput, listOutput] {
 	return &chip.Tool[listInput, listOutput]{
-		Name: listToolName,
+		Name:  listToolName,
+		Title: "List Collibra Skills",
 		Description: "List available Collibra skill guides. Skills document multi-step workflows, " +
 			"ID-bridging rules, and required permissions for chip's tools. Call this before " +
 			"load_collibra_skill when you do not already know the exact skill name; skill names " +

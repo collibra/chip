@@ -46,6 +46,7 @@ type DataAttributeWithMeasures struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_table_semantics",
+		Title:       "Get Table Semantics",
 		Description: "Retrieve the semantic layer for a Table asset: Columns, their Data Attributes, and connected Measures. Answers 'What is the semantic context of this table?' or 'Which metrics use data from this table?'.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

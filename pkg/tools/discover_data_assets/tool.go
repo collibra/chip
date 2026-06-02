@@ -20,6 +20,7 @@ type Output struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "discover_data_assets",
+		Title:       "Discover Data Assets",
 		Description: "Perform a semantic search across available data assets in Collibra. Ask natural language questions to discover tables, columns, datasets, and other data assets.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.ai-copilot"},

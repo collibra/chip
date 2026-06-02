@@ -41,6 +41,7 @@ type Resource struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "search_asset_keyword",
+		Title:       "Search Assets by Keyword",
 		Description: "Perform a wildcard keyword search for assets in the Collibra knowledge graph. Supports filtering by resource type, community, domain, asset type, status, and creator.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
