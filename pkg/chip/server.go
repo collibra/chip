@@ -239,5 +239,54 @@ func buildSchema[Schema any]() *jsonschema.Schema {
 		log.Fatalf("jsonschema.For returned nil schema for %T", *new(Schema))
 	}
 	inputSchema.AdditionalProperties = nil
+	stripNullableTypes(inputSchema)
 	return inputSchema
+}
+
+// stripNullableTypes rewrites nullable type unions (e.g. ["null","array"])
+// emitted by the reflector into a single concrete type ("array"). jsonschema.For
+// marks every nilable Go type — slices, maps, pointers — as nullable, producing
+// a `"type": ["null", T]` union. Some MCP clients (notably the Claude desktop
+// app) fail to recognise such a union as a structured type and serialise the
+// argument to a JSON string instead, which the server then rejects with
+// `has type "string", want one of "null, array"`. chip never expects an explicit
+// null — optional fields are simply omitted — so collapsing the union to its
+// concrete type is safe and makes the schema portable across clients.
+func stripNullableTypes(s *jsonschema.Schema) {
+	if s == nil {
+		return
+	}
+	if len(s.Types) > 0 {
+		filtered := slices.DeleteFunc(slices.Clone(s.Types), func(t string) bool { return t == "null" })
+		switch len(filtered) {
+		case 0:
+			// Was ["null"] only — nothing concrete to keep; leave untouched.
+		case 1:
+			s.Type, s.Types = filtered[0], nil
+		default:
+			s.Types = filtered
+		}
+	}
+
+	stripNullableTypes(s.Items)
+	stripNullableTypes(s.AdditionalProperties)
+	stripNullableTypes(s.Not)
+	for _, child := range s.Properties {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.PrefixItems {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.Defs {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.AllOf {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.AnyOf {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.OneOf {
+		stripNullableTypes(child)
+	}
 }
