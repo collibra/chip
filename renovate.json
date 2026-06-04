@@ -7,7 +7,8 @@
   "branchPrefix": "renovate-",
   "dependencyDashboard": false,
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "group:allNonMajor"
   ],
   "hashedBranchLength": 24,
   "labels": [
@@ -20,8 +21,14 @@
       "major-dependency-update"
     ]
   },
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "prHourlyLimit": 10,
   "rebaseWhen": "behind-base-branch",
+  "registryAliases": {
+    "mirror-docker.repository.collibra.io": "index.docker.io"
+  },  
   "reviewersSampleSize": 1,
   "schedule": [
     "at any time"
