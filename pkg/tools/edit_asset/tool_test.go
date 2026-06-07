@@ -58,6 +58,8 @@ type stub struct {
 	deletedRelationIDs       []string
 	addedTags                [][]string
 	createdResponsibilities  []clients.EditAssetCreateResponsibilityRequest
+	existingResponsibilities []clients.Responsibility
+	deletedResponsibilityIDs []string
 	bulkCreatedAttrs         [][]clients.CreateAttributeRequest
 	bulkPatchedAttrs         [][]clients.EditAssetBulkPatchAttributeItem
 	bulkCreatedRelations     [][]clients.EditAssetCreateRelationRequest
@@ -308,25 +310,39 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		})
 	})
 
+	// The real /rest/2.0/users endpoint only supports a loose `name` filter
+	// (partial match over username/first/last) and silently ignores unknown
+	// params such as `emailAddress`. The mock mirrors that so the resolver's
+	// client-side validation is actually exercised.
 	mux.HandleFunc("GET /rest/2.0/users", func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
+		name := strings.ToLower(r.URL.Query().Get("name"))
 		var matches []clients.EditAssetUser
-		username := q.Get("name")
-		email := q.Get("emailAddress")
 		for _, u := range s.users {
-			if username != "" && u.UserName == username {
-				matches = append(matches, u)
-			}
-			if email != "" && u.EmailAddress == email {
+			if name == "" ||
+				strings.Contains(strings.ToLower(u.UserName), name) ||
+				strings.Contains(strings.ToLower(u.FirstName), name) ||
+				strings.Contains(strings.ToLower(u.LastName), name) {
 				matches = append(matches, u)
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"total":   len(matches),
 			"offset":  0,
-			"limit":   1,
+			"limit":   len(matches),
 			"results": matches,
 		})
+	})
+
+	// Dedicated exact-match-by-email endpoint.
+	mux.HandleFunc("GET /rest/2.0/users/email/{emailAddress}", func(w http.ResponseWriter, r *http.Request) {
+		email := r.PathValue("emailAddress")
+		for _, u := range s.users {
+			if strings.EqualFold(u.EmailAddress, email) {
+				_ = json.NewEncoder(w).Encode(u)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
 	})
 
 	mux.HandleFunc("GET /rest/2.0/statuses", func(w http.ResponseWriter, _ *http.Request) {
@@ -415,6 +431,18 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	mux.HandleFunc("GET /rest/2.0/responsibilities", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(clients.ResponsibilityPagedResponse{
+			Total:   int64(len(s.existingResponsibilities)),
+			Results: s.existingResponsibilities,
+		})
+	})
+
+	mux.HandleFunc("DELETE /rest/2.0/responsibilities/{responsibilityId}", func(w http.ResponseWriter, r *http.Request) {
+		s.deletedResponsibilityIDs = append(s.deletedResponsibilityIDs, r.PathValue("responsibilityId"))
+		w.WriteHeader(http.StatusNoContent)
 	})
 }
 
@@ -1033,6 +1061,11 @@ func TestEditAsset_SetResponsibility_HappyPath(t *testing.T) {
 	if got.RoleID != stewardRoleID || got.OwnerID != testUserID || got.ResourceID != testAssetID {
 		t.Fatalf("unexpected responsibility payload: %+v", got)
 	}
+	// resourceType must be sent alongside resourceId, or Collibra rejects the
+	// request with a 400 (addResourceMemberIncompleteParameters).
+	if got.ResourceType != "Asset" {
+		t.Fatalf("expected resourceType %q, got %q", "Asset", got.ResourceType)
+	}
 	if out.Results[0].NewValue != testResponsibilityID {
 		t.Fatalf("expected responsibility ID in NewValue, got %q", out.Results[0].NewValue)
 	}
@@ -1070,6 +1103,110 @@ func TestEditAsset_SetResponsibility_UnknownUserName(t *testing.T) {
 	}
 	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user found") {
 		t.Fatalf("expected no-user-found error, got %+v", out)
+	}
+}
+
+// A no-match identifier must never resolve to some other account. This guards
+// the field regression where an unknown email silently bound a service account
+// because the list endpoint ignored the bogus emailAddress filter and returned
+// the first user in the directory.
+func TestEditAsset_SetResponsibility_NoMatchDoesNotBindWrongUser(t *testing.T) {
+	s := newStub()
+	s.users = append(s.users, clients.EditAssetUser{
+		ID:           "5e000000-0000-0000-0000-000000000002",
+		UserName:     "active_work_ingestion_service_account",
+		EmailAddress: "svc@example.com",
+	})
+	for _, identifier := range []string{"nobody@nowhere.com", "nobody"} {
+		s.createdResponsibilities = nil
+		out, err := runTool(t, s, edit_asset.Input{
+			AssetID: testAssetID,
+			Operations: []edit_asset.Operation{{
+				Type: edit_asset.OpSetResponsibility, Role: "Steward", UserID: identifier,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("[%s] unexpected error: %v", identifier, err)
+		}
+		if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user found") {
+			t.Fatalf("[%s] expected no-user-found error, got %+v", identifier, out)
+		}
+		if len(s.createdResponsibilities) != 0 {
+			t.Fatalf("[%s] expected no responsibility created, got %+v", identifier, s.createdResponsibilities)
+		}
+	}
+}
+
+func TestEditAsset_RemoveResponsibility_HappyPath(t *testing.T) {
+	s := newStub()
+	s.existingResponsibilities = []clients.Responsibility{{
+		ID:           testResponsibilityID,
+		Role:         &clients.ResourceRole{ID: stewardRoleID, Name: "Steward"},
+		Owner:        &clients.ResourceRef{ID: testUserID},
+		BaseResource: &clients.ResourceRef{ID: testAssetID},
+	}}
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpRemoveResponsibility, Role: "Steward", UserID: testUserID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.deletedResponsibilityIDs) != 1 || s.deletedResponsibilityIDs[0] != testResponsibilityID {
+		t.Fatalf("expected delete of %s, got %+v", testResponsibilityID, s.deletedResponsibilityIDs)
+	}
+	if out.Results[0].PreviousValue != testResponsibilityID {
+		t.Fatalf("expected removed responsibility ID in PreviousValue, got %q", out.Results[0].PreviousValue)
+	}
+}
+
+func TestEditAsset_RemoveResponsibility_NotFound(t *testing.T) {
+	s := newStub() // no existing responsibilities
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpRemoveResponsibility, Role: "Steward", UserID: testUserID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no \"Steward\" responsibility found") {
+		t.Fatalf("expected not-found error, got %+v", out)
+	}
+	if len(s.deletedResponsibilityIDs) != 0 {
+		t.Fatalf("expected no delete, got %+v", s.deletedResponsibilityIDs)
+	}
+}
+
+func TestEditAsset_RemoveResponsibility_InheritedNotRemovable(t *testing.T) {
+	s := newStub()
+	// Same role+owner, but defined on a parent (baseResource != asset) — inherited.
+	s.existingResponsibilities = []clients.Responsibility{{
+		ID:           testResponsibilityID,
+		Role:         &clients.ResourceRole{ID: stewardRoleID, Name: "Steward"},
+		Owner:        &clients.ResourceRef{ID: testUserID},
+		BaseResource: &clients.ResourceRef{ID: "00000000-0000-0000-0000-0000000000ff"},
+	}}
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpRemoveResponsibility, Role: "Steward", UserID: testUserID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "inherited") {
+		t.Fatalf("expected inherited error, got %+v", out)
+	}
+	if len(s.deletedResponsibilityIDs) != 0 {
+		t.Fatalf("expected no delete of an inherited responsibility, got %+v", s.deletedResponsibilityIDs)
 	}
 }
 

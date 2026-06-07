@@ -331,14 +331,17 @@ func executeAddTag(ctx context.Context, client *http.Client, ec *editContext, pl
 
 // --- set_responsibility -------------------------------------------------------
 
-func validateSetResponsibility(ec *editContext, plan opPlan) opPlan {
+// validateResponsibilityOp validates the shared role+userId inputs for the
+// set_responsibility and remove_responsibility operations and resolves the role
+// name to its UUID. The user identifier is resolved later, at execution time.
+func validateResponsibilityOp(ec *editContext, plan opPlan) opPlan {
 	op := plan.op
 	if strings.TrimSpace(op.Role) == "" {
-		plan.result = newErrorResult(op, "role is required for set_responsibility")
+		plan.result = newErrorResult(op, fmt.Sprintf("role is required for %s", op.Type))
 		return plan
 	}
 	if strings.TrimSpace(op.UserID) == "" {
-		plan.result = newErrorResult(op, "userId is required for set_responsibility (UUID, username, or email)")
+		plan.result = newErrorResult(op, fmt.Sprintf("userId is required for %s (UUID, username, or email)", op.Type))
 		return plan
 	}
 	role, ok := ec.roleByName[normalize(op.Role)]
@@ -353,36 +356,48 @@ func validateSetResponsibility(ec *editContext, plan opPlan) opPlan {
 	return plan
 }
 
+// resolveOwnerID turns a user identifier (UUID, email, or username) into the
+// owner UUID used by responsibility writes. A UUID passes through; an email
+// goes to the exact email lookup; anything else is treated as a username.
+// Returns ("", nil) when no user matches and ("", err) on a lookup failure.
+func resolveOwnerID(ctx context.Context, client *http.Client, userID string) (string, error) {
+	if _, parseErr := uuid.Parse(userID); parseErr == nil {
+		return userID, nil
+	}
+	var (
+		user *clients.EditAssetUser
+		err  error
+	)
+	if strings.Contains(userID, "@") {
+		user, err = clients.FindUserByEmail(ctx, client, userID)
+	} else {
+		user, err = clients.FindUserByUsername(ctx, client, userID)
+	}
+	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", nil
+	}
+	return user.ID, nil
+}
+
 func executeSetResponsibility(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
-	// Resolve userId at execution time. UUIDs pass through; emails go to
-	// the email lookup; anything else is treated as a username. Failures
-	// surface as per-op errors.
-	ownerID := plan.op.UserID
-	if _, parseErr := uuid.Parse(plan.op.UserID); parseErr != nil {
-		var (
-			user *clients.EditAssetUser
-			err  error
-		)
-		if strings.Contains(plan.op.UserID, "@") {
-			user, err = clients.FindUserByEmail(ctx, client, plan.op.UserID)
-		} else {
-			user, err = clients.FindUserByUsername(ctx, client, plan.op.UserID)
-		}
-		if err != nil {
-			plan.result = newErrorResult(plan.op, fmt.Sprintf("resolving user %q: %s", plan.op.UserID, err.Error()))
-			return plan
-		}
-		if user == nil {
-			plan.result = newErrorResult(plan.op, fmt.Sprintf("no user found matching %q (try the user's username, email, or UUID)", plan.op.UserID))
-			return plan
-		}
-		ownerID = user.ID
+	ownerID, err := resolveOwnerID(ctx, client, plan.op.UserID)
+	if err != nil {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("resolving user %q: %s", plan.op.UserID, err.Error()))
+		return plan
+	}
+	if ownerID == "" {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("no user found matching %q (try the user's username, email, or UUID)", plan.op.UserID))
+		return plan
 	}
 
 	created, err := clients.CreateResponsibility(ctx, client, clients.EditAssetCreateResponsibilityRequest{
-		RoleID:     plan.roleID,
-		OwnerID:    ownerID,
-		ResourceID: ec.asset.ID,
+		RoleID:       plan.roleID,
+		OwnerID:      ownerID,
+		ResourceID:   ec.asset.ID,
+		ResourceType: "Asset",
 	})
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
@@ -390,6 +405,60 @@ func executeSetResponsibility(ctx context.Context, client *http.Client, ec *edit
 	}
 	res := newSuccessResult(plan.op)
 	res.NewValue = created.ID
+	plan.result = res
+	return plan
+}
+
+func executeRemoveResponsibility(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
+	ownerID, err := resolveOwnerID(ctx, client, plan.op.UserID)
+	if err != nil {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("resolving user %q: %s", plan.op.UserID, err.Error()))
+		return plan
+	}
+	if ownerID == "" {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("no user found matching %q (try the user's username, email, or UUID)", plan.op.UserID))
+		return plan
+	}
+
+	// Find the responsibility instance for this role+owner. We delete only a
+	// responsibility defined directly on this asset; an inherited one lives on a
+	// parent domain/community and can't be removed here.
+	responsibilities, err := clients.GetResponsibilities(ctx, client, ec.asset.ID)
+	if err != nil {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("looking up responsibilities: %s", err.Error()))
+		return plan
+	}
+	var match *clients.Responsibility
+	inheritedOnly := false
+	for i := range responsibilities {
+		r := responsibilities[i]
+		if r.Role == nil || r.Role.ID != plan.roleID || r.Owner == nil || r.Owner.ID != ownerID {
+			continue
+		}
+		if r.BaseResource != nil && r.BaseResource.ID == ec.asset.ID {
+			match = &responsibilities[i]
+			break
+		}
+		inheritedOnly = true
+	}
+	if match == nil {
+		if inheritedOnly {
+			plan.result = newErrorResult(plan.op, fmt.Sprintf(
+				"the %q responsibility for %q is inherited from a parent domain or community and cannot be removed from this asset; remove it where it is defined",
+				plan.op.Role, plan.op.UserID))
+			return plan
+		}
+		plan.result = newErrorResult(plan.op, fmt.Sprintf(
+			"no %q responsibility found for %q on this asset", plan.op.Role, plan.op.UserID))
+		return plan
+	}
+
+	if err := clients.DeleteResponsibility(ctx, client, match.ID); err != nil {
+		plan.result = newErrorResult(plan.op, err.Error())
+		return plan
+	}
+	res := newSuccessResult(plan.op)
+	res.PreviousValue = match.ID
 	plan.result = res
 	return plan
 }
