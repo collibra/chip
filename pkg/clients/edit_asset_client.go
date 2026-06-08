@@ -778,7 +778,7 @@ type editAssetUsersList struct {
 func FindUserByUsername(ctx context.Context, client *http.Client, username string) (*EditAssetUser, error) {
 	params := url.Values{}
 	params.Set("name", username)
-	params.Set("limit", "1000")
+	params.Set("limit", "100")
 	users, err := listUsers(ctx, client, params)
 	if err != nil {
 		return nil, err
