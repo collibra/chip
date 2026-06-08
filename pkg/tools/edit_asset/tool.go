@@ -52,8 +52,9 @@ const (
 	OpUpdateProperty    OperationType = "update_property"
 	OpAddRelation       OperationType = "add_relation"
 	OpRemoveRelation    OperationType = "remove_relation"
-	OpAddTag            OperationType = "add_tag"
-	OpSetResponsibility OperationType = "set_responsibility"
+	OpAddTag               OperationType = "add_tag"
+	OpSetResponsibility    OperationType = "set_responsibility"
+	OpRemoveResponsibility OperationType = "remove_responsibility"
 )
 
 // Whitelisted fields for update_property. Keeping this narrow avoids letting
@@ -74,7 +75,7 @@ type Input struct {
 // fields are interpreted. Unused fields are ignored. Server-side validation
 // catches missing or incompatible fields and returns a per-operation error.
 type Operation struct {
-	Type OperationType `json:"type" jsonschema:"Required. One of: update_attribute, add_attribute, remove_attribute, update_property, add_relation, remove_relation. (Phase 3: add_tag, set_responsibility.)"`
+	Type OperationType `json:"type" jsonschema:"Required. One of: update_attribute, add_attribute, remove_attribute, update_property, add_relation, remove_relation, add_tag, set_responsibility, remove_responsibility."`
 
 	// Attribute ops — used by update_attribute, add_attribute, remove_attribute.
 	AttributeName string `json:"attributeName,omitempty" jsonschema:"Attribute type name (e.g. 'Definition', 'Note'). Used by update_attribute, add_attribute, remove_attribute. The server resolves this to the attribute type UUID via the asset's scoped assignment."`
@@ -91,9 +92,9 @@ type Operation struct {
 	// Tag op — appends a tag to the asset (does not replace existing tags).
 	Tag string `json:"tag,omitempty" jsonschema:"For add_tag: a free-text tag to append to the asset (e.g. 'finance'). Existing tags are preserved."`
 
-	// Responsibility op.
-	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility: resource role name (e.g. 'Steward', 'Owner'). The server resolves this to the role UUID."`
-	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility: identifies the user (or user group) to assign to the role. Accepts a UUID, a username (e.g. 'jane.smith'), or an email address (e.g. 'jane@example.com'). Names are resolved server-side via /rest/2.0/users."`
+	// Responsibility ops — set_responsibility and remove_responsibility.
+	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility / remove_responsibility: resource role name (e.g. 'Steward', 'Owner'). The server resolves this to the role UUID. remove_responsibility deletes only a responsibility defined directly on this asset (not one inherited from a parent domain or community)."`
+	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility / remove_responsibility: identifies the user (or user group) the role is assigned to. Accepts a UUID, a username (e.g. 'jane.smith'), or an email address (e.g. 'jane@example.com'). Names are resolved server-side."`
 }
 
 // OutputStatus summarises the result of the call.
@@ -152,7 +153,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"update_property (whitelisted fields only: 'name' to rename — also updates displayName when it tracks the current name, so the user-facing label stays in sync; 'displayName' to change the display name; or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
 			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes a forward role name like 'is synonym of' plus the target assetId, remove_relation takes the relation instance UUID); " +
 			"add_tag (append a free-text tag without replacing existing tags); " +
-			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be given as a UUID, username, or email). " +
+			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be given as a UUID, username, or email); " +
+			"remove_responsibility (unassign a user or group from a resource role given the same role and user; removes only a responsibility assigned directly on the asset, not one inherited from a parent domain or community). " +
 			"Names (attribute names, relation roles, status names, resource role names, and user identifiers) are resolved server-side and matching is case- and whitespace-insensitive. " +
 			"Each operation is validated against the asset's scoped assignment before any writes; invalid ops return per-operation errors while valid siblings still apply, yielding status=success, partial_success, or error. " +
 			"On success the response includes a post-edit snapshot of the asset and per-operation before/after values.",
@@ -360,11 +362,11 @@ func (ec *editContext) availableStatusNames() []string {
 	return names
 }
 
-// opsNeedRoles reports whether the request contains a set_responsibility op,
-// so newEditContext can skip the roles fetch otherwise.
+// opsNeedRoles reports whether the request contains a responsibility op, so
+// newEditContext can skip the roles fetch otherwise.
 func opsNeedRoles(ops []Operation) bool {
 	for _, op := range ops {
-		if op.Type == OpSetResponsibility {
+		if op.Type == OpSetResponsibility || op.Type == OpRemoveResponsibility {
 			return true
 		}
 	}
@@ -453,8 +455,8 @@ func validateOperation(ec *editContext, op Operation) opPlan {
 		return validateRemoveRelation(plan)
 	case OpAddTag:
 		return validateAddTag(plan)
-	case OpSetResponsibility:
-		return validateSetResponsibility(ec, plan)
+	case OpSetResponsibility, OpRemoveResponsibility:
+		return validateResponsibilityOp(ec, plan)
 	default:
 		plan.result = newErrorResult(op, fmt.Sprintf("unsupported operation type %q", op.Type))
 		return plan
@@ -481,6 +483,8 @@ func executePlan(ctx context.Context, client *http.Client, ec *editContext, plan
 		return executeAddTag(ctx, client, ec, plan)
 	case OpSetResponsibility:
 		return executeSetResponsibility(ctx, client, ec, plan)
+	case OpRemoveResponsibility:
+		return executeRemoveResponsibility(ctx, client, ec, plan)
 	default:
 		plan.result = newErrorResult(plan.op, fmt.Sprintf("unsupported operation type %q", plan.op.Type))
 		return plan

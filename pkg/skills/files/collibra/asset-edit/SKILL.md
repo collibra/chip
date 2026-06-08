@@ -22,6 +22,7 @@ runs them in order.
 | `remove_relation` | Unlink a relation | `relationType`, target asset identifier |
 | `add_tag` | Append a free-text tag (does not replace existing tags) | `tag` |
 | `set_responsibility` | Assign a user or group to a resource role (e.g. `Steward`, `Owner`) | `role`, `userId` (UUID, username, or email) |
+| `remove_responsibility` | Unassign a user or group from a resource role | `role`, `userId` (UUID, username, or email) |
 
 ## Hard rules
 
@@ -32,10 +33,14 @@ runs them in order.
    `statusId`. Other fields return an error listing the allowed set.
 3. **`statusId` accepts names.** Pass a human-readable status name (e.g. `"Candidate"`,
    `"Accepted"`) or the UUID — chip resolves either.
-4. **`set_responsibility` accepts user identifiers in three forms.** `userId` may be a UUID,
-   a username, or an email. Chip resolves the form server-side. The same applies to
-   `relationType` targets in `add_relation` / `remove_relation`.
-5. **RICH_TEXT attribute values are Markdown.** Same rule as `create_asset` — write Markdown,
+4. **Responsibility ops accept user identifiers in three forms.** For `set_responsibility`
+   and `remove_responsibility`, `userId` may be a UUID, a username, or an email. Chip resolves
+   the form server-side. The same applies to `relationType` targets in `add_relation` /
+   `remove_relation`.
+5. **`remove_responsibility` only removes direct responsibilities.** It deletes a responsibility
+   assigned directly on the asset; one inherited from a parent domain or community can't be
+   removed here and returns an error pointing to where it's defined.
+6. **RICH_TEXT attribute values are Markdown.** Same rule as `create_asset` — write Markdown,
    chip converts to HTML. See `shared/rich-text-markdown.md` for the full rules.
 
 ## Workflow

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // EditAssetCore is the slim view of an asset returned by GET /rest/2.0/assets/{id}
@@ -769,25 +770,68 @@ type editAssetUsersList struct {
 	Results []EditAssetUser `json:"results"`
 }
 
-// FindUserByUsername returns the first user matching a username, or nil if
-// none exists. Used by set_responsibility to resolve "jane.smith" to a UUID.
+// FindUserByUsername returns the user whose username exactly matches, or nil if
+// none exists. The /rest/2.0/users `name` filter is a loose partial search over
+// username, first name and last name, so we scan the results for an exact
+// (case-insensitive) username match rather than trusting the first row —
+// otherwise an unrelated user could be returned and bound.
 func FindUserByUsername(ctx context.Context, client *http.Client, username string) (*EditAssetUser, error) {
 	params := url.Values{}
 	params.Set("name", username)
-	params.Set("limit", "1")
-	return findUserBy(ctx, client, params)
+	params.Set("limit", "100")
+	users, err := listUsers(ctx, client, params)
+	if err != nil {
+		return nil, err
+	}
+	for i := range users {
+		if strings.EqualFold(users[i].UserName, username) {
+			return &users[i], nil
+		}
+	}
+	return nil, nil
 }
 
-// FindUserByEmail returns the first user matching an email address, or nil
-// if none exists.
+// FindUserByEmail returns the user with the given email address, or nil if none
+// exists. It uses the dedicated exact-match endpoint; the list endpoint has no
+// email filter, so an unknown `emailAddress` query param is silently ignored and
+// would return an arbitrary user.
 func FindUserByEmail(ctx context.Context, client *http.Client, email string) (*EditAssetUser, error) {
-	params := url.Values{}
-	params.Set("emailAddress", email)
-	params.Set("limit", "1")
-	return findUserBy(ctx, client, params)
+	reqURL := "/rest/2.0/users/email/" + url.PathEscape(email)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("find user by email: building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("find user by email: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("find user by email: reading response: %w", err)
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("find user by email: status %d: %s", resp.StatusCode, string(body))
+	}
+	var user EditAssetUser
+	if err := json.Unmarshal(body, &user); err != nil {
+		return nil, fmt.Errorf("find user by email: decoding response: %w", err)
+	}
+	if user.ID == "" {
+		return nil, nil
+	}
+	return &user, nil
 }
 
-func findUserBy(ctx context.Context, client *http.Client, params url.Values) (*EditAssetUser, error) {
+// listUsers fetches the users matching the given query params from
+// /rest/2.0/users and returns the full result page.
+func listUsers(ctx context.Context, client *http.Client, params url.Values) ([]EditAssetUser, error) {
 	reqURL := "/rest/2.0/users?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -812,18 +856,17 @@ func findUserBy(ctx context.Context, client *http.Client, params url.Values) (*E
 	if err := json.Unmarshal(body, &page); err != nil {
 		return nil, fmt.Errorf("find user: decoding response: %w", err)
 	}
-	if len(page.Results) == 0 {
-		return nil, nil
-	}
-	user := page.Results[0]
-	return &user, nil
+	return page.Results, nil
 }
 
 // EditAssetCreateResponsibilityRequest is the body for POST /rest/2.0/responsibilities.
+// resourceType is required alongside resourceId; without it the API rejects the
+// request with a 400 (addResourceMemberIncompleteParameters).
 type EditAssetCreateResponsibilityRequest struct {
-	RoleID     string `json:"roleId"`
-	OwnerID    string `json:"ownerId"`
-	ResourceID string `json:"resourceId"`
+	RoleID       string `json:"roleId"`
+	OwnerID      string `json:"ownerId"`
+	ResourceID   string `json:"resourceId"`
+	ResourceType string `json:"resourceType"`
 }
 
 // EditAssetResponsibility is a responsibility instance linking a role, an
@@ -869,6 +912,32 @@ func CreateResponsibility(ctx context.Context, client *http.Client, payload Edit
 		return nil, fmt.Errorf("create responsibility: decoding response: %w", err)
 	}
 	return &result, nil
+}
+
+// DeleteResponsibility removes a responsibility instance by its ID via
+// DELETE /rest/2.0/responsibilities/{id}.
+func DeleteResponsibility(ctx context.Context, client *http.Client, responsibilityID string) error {
+	reqURL := "/rest/2.0/responsibilities/" + url.PathEscape(responsibilityID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("delete responsibility: building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete responsibility: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("delete responsibility: reading response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("delete responsibility: status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }
 
 // EditAssetBulkPatchAttributeItem is one row of PATCH /rest/2.0/attributes/bulk.
