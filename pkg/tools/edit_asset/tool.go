@@ -46,12 +46,12 @@ func suggestionSuffix(label string, names []string, max int) string {
 type OperationType string
 
 const (
-	OpUpdateAttribute   OperationType = "update_attribute"
-	OpAddAttribute      OperationType = "add_attribute"
-	OpRemoveAttribute   OperationType = "remove_attribute"
-	OpUpdateProperty    OperationType = "update_property"
-	OpAddRelation       OperationType = "add_relation"
-	OpRemoveRelation    OperationType = "remove_relation"
+	OpUpdateAttribute      OperationType = "update_attribute"
+	OpAddAttribute         OperationType = "add_attribute"
+	OpRemoveAttribute      OperationType = "remove_attribute"
+	OpUpdateProperty       OperationType = "update_property"
+	OpAddRelation          OperationType = "add_relation"
+	OpRemoveRelation       OperationType = "remove_relation"
 	OpAddTag               OperationType = "add_tag"
 	OpSetResponsibility    OperationType = "set_responsibility"
 	OpRemoveResponsibility OperationType = "remove_responsibility"
@@ -344,19 +344,24 @@ func (ec *editContext) availableAttributeNames() []string {
 }
 
 // availableRelationRoles returns all usable role names (forward and inverse)
-// for inclusion in error suggestions.
+// for inclusion in error suggestions, deduped — distinct relation types can
+// share a role name (e.g. "impacted by" toward different target types).
 func (ec *editContext) availableRelationRoles() []string {
+	seen := make(map[string]struct{}, len(ec.assignment.RelationTypes))
 	names := make([]string, 0, len(ec.assignment.RelationTypes))
 	for _, rt := range ec.assignment.RelationTypes {
+		name := rt.Role
 		if rt.Reversed {
-			if rt.CoRole != "" {
-				names = append(names, rt.CoRole)
-			}
-		} else {
-			if rt.Role != "" {
-				names = append(names, rt.Role)
-			}
+			name = rt.CoRole
 		}
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
 	}
 	return names
 }
@@ -416,7 +421,7 @@ type opPlan struct {
 	propertyPatch clients.EditAssetPatchRequest
 
 	// Relation ops (resolved during validation)
-	relationTypeID  string
+	relationTypeID   string
 	relationReversed bool // true when add_relation matched a CoRole; flip source/target on execute
 
 	// Responsibility op (resolved during validation)

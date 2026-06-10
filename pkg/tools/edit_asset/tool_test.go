@@ -224,9 +224,9 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 			})
 		}
 		for _, rt := range s.relationTypes {
-			direction := "SOURCE_TO_TARGET"
+			direction := "TO_TARGET"
 			if rt.Reversed {
-				direction = "TARGET_TO_SOURCE"
+				direction = "TO_SOURCE"
 			}
 			chars = append(chars, map[string]any{
 				"id":                 "rel-char-" + rt.ID,
@@ -903,8 +903,8 @@ func TestEditAsset_AddRelation_UnknownType(t *testing.T) {
 func TestEditAsset_AddRelation_CoRoleDoesNotMatch(t *testing.T) {
 	s := newStub()
 	// "has synonym" is the coRole of the synonym relation, but the mock only
-	// emits a SOURCE_TO_TARGET entry, so no TARGET_TO_SOURCE assignment exists.
-	// The coRole should not resolve — only relations with a TARGET_TO_SOURCE
+	// emits a TO_TARGET entry, so no TO_SOURCE assignment exists.
+	// The coRole should not resolve — only relations with a TO_SOURCE
 	// assignment entry can be authored via their coRole.
 	out, err := runTool(t, s, edit_asset.Input{
 		AssetID: testAssetID,
@@ -922,7 +922,7 @@ func TestEditAsset_AddRelation_CoRoleDoesNotMatch(t *testing.T) {
 
 func TestEditAsset_AddRelation_InverseRole_FlipsSourceTarget(t *testing.T) {
 	s := newStub()
-	// Add a TARGET_TO_SOURCE entry for the synonym relation, simulating the
+	// Add a TO_SOURCE entry for the synonym relation, simulating the
 	// case where the edited asset is the tail (e.g. authoring "is viewed through"
 	// from a Context Note instead of "frames" from the Context Lens).
 	s.relationTypes = append(s.relationTypes, clients.EditAssetAssignmentRelationType{

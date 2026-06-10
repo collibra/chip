@@ -270,7 +270,7 @@ func validateAddRelation(ec *editContext, plan opPlan) opPlan {
 		plan.result = newErrorResult(op, fmt.Sprintf(
 			"relation type %q is not valid for asset type %q in this domain.%s",
 			op.RelationType, ec.asset.Type.Name,
-			suggestionSuffix("Relation roles available", ec.availableRelationRoles(), 10)))
+			suggestionSuffix("Relation roles", ec.availableRelationRoles(), 25)))
 		return plan
 	}
 	plan.relationTypeID = rt.ID
