@@ -159,6 +159,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return *attrOut, nil
 		}
 
+		if out := validateRequiredAttributes(resolvedAttrs, ec.assignment); out != nil {
+			return *out, nil
+		}
+
 		// Status resolution happens last in the pre-flight so the agent
 		// gets validation errors for cheap inputs (asset type, domain,
 		// attributes) without paying for /statuses on those failures.
@@ -364,6 +368,33 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 		resolved = append(resolved, entry)
 	}
 	return resolved, nil
+}
+
+// validateRequiredAttributes checks that all required (min:1) attribute slots
+// in the scoped assignment have a corresponding entry in the resolved list.
+// Returns a validation error output if any required attribute is missing.
+func validateRequiredAttributes(resolved []resolvedAttribute, assignment *clients.PrepareCreateScopedAssignment) *Output {
+	supplied := make(map[string]struct{}, len(resolved))
+	for _, r := range resolved {
+		supplied[r.Slot.AttributeTypeID] = struct{}{}
+	}
+	var missing []string
+	for _, slot := range assignment.Attributes {
+		if !slot.Required {
+			continue
+		}
+		if _, ok := supplied[slot.AttributeTypeID]; !ok {
+			missing = append(missing, slot.AttributeTypeName)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	return &Output{
+		Status:  StatusValidationError,
+		Message: fmt.Sprintf("Missing required attribute(s): %s. These attributes are mandatory for this asset type in this domain.", strings.Join(missing, ", ")),
+	}
 }
 
 // matchAttributeSlot picks the scoped attribute slot for an input

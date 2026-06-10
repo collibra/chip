@@ -127,14 +127,17 @@ type EditAssetAssignment struct {
 }
 
 // EditAssetAssignmentRelationType is a relation type allowed by a scoped
-// assignment, in the direction where the edited asset is the source (head).
-// Role is the forward name (e.g. "synonym"); CoRole is the reverse name.
+// assignment. Role is the forward name (source→target); CoRole is the inverse
+// name (target→source). Reversed is true when the edited asset is the tail
+// (target) of this relation — add_relation must then flip source and target
+// when calling the API.
 type EditAssetAssignmentRelationType struct {
 	ID         string            `json:"id"`
 	Role       string            `json:"role"`
 	CoRole     string            `json:"coRole,omitempty"`
 	SourceType *EditAssetTypeRef `json:"sourceType,omitempty"`
 	TargetType *EditAssetTypeRef `json:"targetType,omitempty"`
+	Reversed   bool              `json:"reversed,omitempty"`
 }
 
 // --- Raw assignment response shape (Collibra's wire format) ----------------
@@ -397,10 +400,18 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 				if ct.RelationType == nil {
 					continue
 				}
-				// Only register the direction where the edited asset is the
-				// source (head). Collibra emits both directions as separate
-				// characteristic entries; TO_TARGET = forward (asset->target).
-				if ct.RoleDirection != "" && ct.RoleDirection != "TO_TARGET" {
+				// Collibra emits each relation type twice: once per direction.
+				// SOURCE_TO_TARGET (or empty for symmetric) means the edited
+				// asset is the head; TARGET_TO_SOURCE means it is the tail and
+				// the relation must be created in reverse. Any other direction
+				// value is skipped.
+				var reversed bool
+				switch ct.RoleDirection {
+				case "", "SOURCE_TO_TARGET":
+					reversed = false
+				case "TARGET_TO_SOURCE":
+					reversed = true
+				default:
 					continue
 				}
 				merged.RelationTypes = append(merged.RelationTypes, EditAssetAssignmentRelationType{
@@ -409,6 +420,7 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 					CoRole:     ct.RelationType.CoRole,
 					SourceType: ct.RelationType.SourceType,
 					TargetType: ct.RelationType.TargetType,
+					Reversed:   reversed,
 				})
 			}
 		}
