@@ -283,7 +283,7 @@ func executeAddRelation(ctx context.Context, client *http.Client, ec *editContex
 	if plan.relationReversed {
 		// CoRole matched: the edited asset is the tail; the "target" the caller
 		// named is actually the head.
-		sourceID, targetID = plan.op.TargetAssetID, ec.asset.ID
+		sourceID, targetID = targetID, sourceID
 	}
 	created, err := clients.CreateRelation(ctx, client, clients.EditAssetCreateRelationRequest{
 		SourceID: sourceID,
