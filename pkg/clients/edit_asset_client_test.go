@@ -2,7 +2,11 @@ package clients
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
 // TestEditAssetAttributeInstance_ValueAcceptsAnyScalar covers Collibra's
@@ -66,5 +70,97 @@ func TestEditAssetAttributeInstance_ListPageDecodesMixedKinds(t *testing.T) {
 		if page.Results[i].Value != w {
 			t.Fatalf("results[%d].Value = %q, want %q", i, page.Results[i].Value, w)
 		}
+	}
+}
+
+// TestGetAssignmentForAssetType_InheritsParentChain mirrors the live KPI
+// case: the subtype's own assignment carries only attributes, while its
+// relation types live on the parent type's assignment (with empty
+// domainTypes — Collibra's inherit sentinel). The lookup must walk the
+// parent chain and merge both levels, keeping head (TO_TARGET) and tail
+// (TO_SOURCE) directions and deduping anything repeated at a lower level.
+func TestGetAssignmentForAssetType_InheritsParentChain(t *testing.T) {
+	const (
+		kpiTypeID    = "00000000-0000-0000-0000-000000031107"
+		parentTypeID = "00000000-0000-0000-0000-000000031101"
+		domTypeID    = "00000000-0000-0000-0000-000000000001"
+		relTypeID    = "cd000000-0000-0000-0000-000000007002"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+kpiTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{
+			"id": "assignment-kpi",
+			"domainTypes": [{"id": "` + domTypeID + `", "name": "Business Glossary"}],
+			"characteristicTypes": [{
+				"id": "char-attr",
+				"minimumOccurrences": 0,
+				"assignedCharacteristicTypeDiscriminator": "AttributeType",
+				"attributeType": {"id": "attr-1", "name": "Definition", "resourceType": "StringAttributeType"}
+			}]
+		}]`))
+	})
+	mux.HandleFunc("GET /rest/2.0/assetTypes/"+kpiTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id": "` + kpiTypeID + `", "name": "KPI", "parent": {"id": "` + parentTypeID + `", "name": "Business Asset"}}`))
+	})
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+parentTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{
+			"id": "assignment-parent",
+			"domainTypes": [],
+			"characteristicTypes": [{
+				"id": "char-rel-fwd",
+				"minimumOccurrences": 0,
+				"roleDirection": "TO_TARGET",
+				"assignedCharacteristicTypeDiscriminator": "RelationType",
+				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
+			}, {
+				"id": "char-rel-rev",
+				"minimumOccurrences": 0,
+				"roleDirection": "TO_SOURCE",
+				"assignedCharacteristicTypeDiscriminator": "RelationType",
+				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
+			}, {
+				"id": "char-attr-dup",
+				"minimumOccurrences": 1,
+				"assignedCharacteristicTypeDiscriminator": "AttributeType",
+				"attributeType": {"id": "attr-1", "name": "Definition", "resourceType": "StringAttributeType"}
+			}]
+		}]`))
+	})
+	mux.HandleFunc("GET /rest/2.0/assetTypes/"+parentTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id": "` + parentTypeID + `", "name": "Business Asset"}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetAssignmentForAssetType(t.Context(), client, kpiTypeID, domTypeID)
+	if err != nil {
+		t.Fatalf("GetAssignmentForAssetType: %v", err)
+	}
+
+	if len(got.AttributeTypes) != 1 {
+		t.Fatalf("expected 1 attribute type (deduped across levels), got %d: %+v", len(got.AttributeTypes), got.AttributeTypes)
+	}
+	if got.AttributeTypes[0].Required {
+		t.Errorf("subtype's own (min:0) attribute entry should win over the parent's min:1 duplicate")
+	}
+	if len(got.RelationTypes) != 2 {
+		t.Fatalf("expected forward+reversed relation entries from parent assignment, got %d: %+v", len(got.RelationTypes), got.RelationTypes)
+	}
+	var sawForward, sawReversed bool
+	for _, rt := range got.RelationTypes {
+		if rt.ID != relTypeID || rt.Role != "calculated using" {
+			t.Errorf("unexpected relation entry: %+v", rt)
+		}
+		if rt.Reversed {
+			sawReversed = true
+		} else {
+			sawForward = true
+		}
+	}
+	if !sawForward || !sawReversed {
+		t.Errorf("expected both directions, forward=%v reversed=%v", sawForward, sawReversed)
 	}
 }
