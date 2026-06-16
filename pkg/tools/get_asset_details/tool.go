@@ -23,11 +23,22 @@ type Input struct {
 
 type Output struct {
 	Asset                  *clients.Asset        `json:"asset,omitempty" jsonschema:"the detailed asset information if found"`
+	AssignableAttributes   []AssignableAttribute `json:"assignableAttributes,omitempty" jsonschema:"every attribute type this asset can hold per its assignment, including ones that are currently empty. Use this to know which attributes (e.g. Definition) can be set via edit_asset, since the asset's attributes list only shows attributes that already have a value"`
 	Responsibilities       []AssetResponsibility `json:"responsibilities,omitempty" jsonschema:"the responsibilities assigned to this asset, including inherited ones"`
 	ResponsibilitiesStatus string                `json:"responsibilitiesStatus,omitempty" jsonschema:"status message for responsibilities, e.g. No responsibilities assigned"`
 	Link                   string                `json:"link,omitempty" jsonschema:"the link you can navigate to in Collibra to view the asset"`
 	Error                  string                `json:"error,omitempty" jsonschema:"error message if asset not found or other error occurred"`
 	Found                  bool                  `json:"found" jsonschema:"whether the asset was found"`
+}
+
+// AssignableAttribute is one attribute type the asset's assignment allows,
+// surfaced so the caller can tell an attribute that is empty apart from one that
+// is not valid for the asset at all — the GraphQL attribute lists only include
+// attributes that already hold a value.
+type AssignableAttribute struct {
+	Name     string `json:"name" jsonschema:"the attribute type name, e.g. Definition"`
+	Required bool   `json:"required" jsonschema:"whether the assignment requires this attribute to have a value"`
+	IsSet    bool   `json:"isSet" jsonschema:"true if the asset currently has a value for this attribute, false if it is empty but settable"`
 }
 
 // AssetResponsibility represents a role assignment (e.g., Owner, Steward) for an asset.
@@ -81,14 +92,62 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			responsibilitiesStatus = "No responsibilities assigned"
 		}
 
+		// Best-effort: surface the asset's full assignable-attribute schema so an
+		// empty attribute (e.g. an unset Definition) is distinguishable from one
+		// that isn't valid for the asset. The GraphQL attribute lists above only
+		// carry attributes that already hold a value.
+		assignable := resolveAssignableAttributes(ctx, collibraClient, assetUUID.String(), &assets[0])
+
 		return Output{
 			Asset:                  &assets[0],
+			AssignableAttributes:   assignable,
 			Responsibilities:       mappedResponsibilities,
 			ResponsibilitiesStatus: responsibilitiesStatus,
 			Found:                  true,
 			Link:                   fmt.Sprintf("%s/asset/%s", strings.TrimSuffix(collibraHost, "/"), assetUUID),
 		}, nil
 	}
+}
+
+// resolveAssignableAttributes returns the asset's full attribute schema from its
+// effective assignment, flagging which attributes already have a value. Returns
+// nil (and logs) on error — it must never fail the read.
+func resolveAssignableAttributes(ctx context.Context, collibraClient *http.Client, assetID string, asset *clients.Asset) []AssignableAttribute {
+	assignment, err := clients.GetEffectiveAssignmentForAsset(ctx, collibraClient, assetID)
+	if err != nil {
+		slog.WarnContext(ctx, fmt.Sprintf("Failed to retrieve assignable attributes: %s", err.Error()))
+		return nil
+	}
+
+	set := make(map[string]struct{})
+	addName := func(t *clients.AttributeType) {
+		if t != nil {
+			set[strings.ToLower(strings.TrimSpace(t.Name))] = struct{}{}
+		}
+	}
+	for i := range asset.StringAttributes {
+		addName(asset.StringAttributes[i].Type)
+	}
+	for i := range asset.NumericAttributes {
+		addName(asset.NumericAttributes[i].Type)
+	}
+	for i := range asset.BooleanAttributes {
+		addName(asset.BooleanAttributes[i].Type)
+	}
+	for i := range asset.DateAttributes {
+		addName(asset.DateAttributes[i].Type)
+	}
+
+	result := make([]AssignableAttribute, 0, len(assignment.AttributeTypes))
+	for _, at := range assignment.AttributeTypes {
+		_, isSet := set[strings.ToLower(strings.TrimSpace(at.Name))]
+		result = append(result, AssignableAttribute{
+			Name:     at.Name,
+			Required: at.Required,
+			IsSet:    isSet,
+		})
+	}
+	return result
 }
 
 func resolveResponsibilities(ctx context.Context, collibraClient *http.Client, responsibilities []clients.Responsibility, assetID string) []AssetResponsibility {

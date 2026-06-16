@@ -198,18 +198,10 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("GET /rest/2.0/domains/"+testDomainID, func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(clients.EditAssetDomainDetails{
-			ID:   testDomainID,
-			Name: "Marketing Glossary",
-			Type: &clients.EditAssetDomainTypeRef{ID: testDomainTypeID, Name: "Business Glossary"},
-		})
-	})
-
-	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+testAssetTypeID, func(w http.ResponseWriter, _ *http.Request) {
-		// Emit Collibra's actual response shape: top-level array with one
-		// assignment, characteristicTypes flattening attribute and relation
-		// types via assignedCharacteristicTypeDiscriminator.
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+testAssetID, func(w http.ResponseWriter, _ *http.Request) {
+		// Emit Collibra's per-asset effective-assignment shape: a single
+		// Assignment object whose characteristicTypes flatten attribute and
+		// relation types via assignedCharacteristicTypeDiscriminator.
 		chars := []map[string]any{}
 		for _, v := range s.attrTypesByID {
 			chars = append(chars, map[string]any{
@@ -242,14 +234,14 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 				},
 			})
 		}
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":        "assignment-1",
 			"assetType": map[string]any{"id": testAssetTypeID, "name": "Business Term"},
 			"domainTypes": []map[string]any{{
 				"id": testDomainTypeID, "name": "Business Glossary",
 			}},
 			"characteristicTypes": chars,
-		}})
+		})
 	})
 
 	mux.HandleFunc("POST /rest/2.0/relations", func(w http.ResponseWriter, r *http.Request) {

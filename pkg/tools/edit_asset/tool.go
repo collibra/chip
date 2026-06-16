@@ -257,18 +257,9 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		return nil, fmt.Errorf("fetching current attributes: %w", err)
 	}
 
-	domain, err := clients.GetDomainDetails(ctx, client, asset.Domain.ID)
+	assignment, err := clients.GetEffectiveAssignmentForAsset(ctx, client, assetID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching domain for scoped assignment: %w", err)
-	}
-	var domainTypeID string
-	if domain.Type != nil {
-		domainTypeID = domain.Type.ID
-	}
-
-	assignment, err := clients.GetAssignmentForAssetType(ctx, client, asset.Type.ID, domainTypeID)
-	if err != nil {
-		return nil, fmt.Errorf("fetching scoped assignment: %w", err)
+		return nil, fmt.Errorf("fetching effective assignment: %w", err)
 	}
 
 	byName := make(map[string]clients.EditAssetAssignmentAttributeType, len(assignment.AttributeTypes))
