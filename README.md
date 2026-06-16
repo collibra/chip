@@ -210,6 +210,8 @@ Some functionality ships behind an opt-in `experimental` flag. These features ar
 
 ### Known experimental features
 
+- `context-specifications` — Context specification tools: `list_context_specifications`, `get_context_specification`, and `get_context`. These tools generate structured YAML context for assets using the Semantic Blueprint API.
+
 - `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
 
   Point chip at an **external skills directory** with `--skills-dir=<path>` (or `COLLIBRA_MCP_SKILLS_DIR`, or `mcp.skills-dir` in YAML) to add your own skills on top of the embedded ones. The expected layout is `<dir>/<namespace>/<name>/SKILL.md` (with optional `references/*.md` and `_shared/*.md` siblings) — same as the bundled catalog. External skills whose name matches an embedded skill (e.g. `collibra/lineage`) **fully replace** the embedded entry, including its resources, so you can override the shipped guides without rebuilding chip. `~` and `~user` in the path are expanded.
