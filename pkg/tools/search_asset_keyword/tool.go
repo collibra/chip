@@ -7,7 +7,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -16,12 +15,12 @@ type Input struct {
 	Limit               int      `json:"limit,omitempty" jsonschema:"Optional. Maximum number of results to return. The maximum value is 1000. Default: 50."`
 	Offset              int      `json:"offset,omitempty" jsonschema:"Optional. Index of first result (pagination offset). Default: 0."`
 	ResourceTypeFilters []string `json:"resourceTypeFilters,omitempty" jsonschema:"Optional. Restrict search results to the specified resource types across all of their fields. Supported values: Asset, Domain, Community, User, UserGroup. Default: all resource types are searched"`
-	CommunityFilter     []string `json:"communityFilter,omitempty" jsonschema:"Optional. Filter by resources within the specified community UUIDs."`
-	DomainFilter        []string `json:"domainFilter,omitempty" jsonschema:"Optional. Filter by resources within the specified domain UUIDs."`
-	DomainTypeFilter    []string `json:"domainTypeFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified domain type UUIDs."`
-	AssetTypeFilter     []string `json:"assetTypeFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified asset type UUIDs."`
-	StatusFilter        []string `json:"statusFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified status UUIDs."`
-	CreatedByFilter     []string `json:"createdByFilter,omitempty" jsonschema:"Optional. Filter by resources created by the specified user UUIDs."`
+	CommunityFilter     []string `json:"communityFilter,omitempty" jsonschema:"Optional. Filter by resources within the specified communities. Accepts community names or UUIDs; names are resolved automatically."`
+	DomainFilter        []string `json:"domainFilter,omitempty" jsonschema:"Optional. Filter by resources within the specified domains. Accepts domain names or UUIDs; names are resolved automatically."`
+	DomainTypeFilter    []string `json:"domainTypeFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified domain types. Accepts domain type names or UUIDs; names are resolved automatically."`
+	AssetTypeFilter     []string `json:"assetTypeFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified asset types. Accepts asset type names (e.g. Table, Column) or UUIDs; names are resolved automatically."`
+	StatusFilter        []string `json:"statusFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified statuses. Accepts status names (e.g. Candidate, Accepted, Obsolete) or UUIDs; names are resolved automatically."`
+	CreatedByFilter     []string `json:"createdByFilter,omitempty" jsonschema:"Optional. Filter by resources created by the specified users. Accepts usernames or user UUIDs; usernames are resolved automatically."`
 }
 
 type Output struct {
@@ -51,21 +50,15 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
-		for field, vals := range map[string][]string{
-			"communityFilter":  input.CommunityFilter,
-			"domainFilter":     input.DomainFilter,
-			"domainTypeFilter": input.DomainTypeFilter,
-			"assetTypeFilter":  input.AssetTypeFilter,
-			"statusFilter":     input.StatusFilter,
-			"createdByFilter":  input.CreatedByFilter,
-		} {
-			if err := validation.UUIDs(field, vals); err != nil {
-				return Output{}, err
-			}
-		}
-
 		if input.Limit == 0 {
 			input.Limit = 50
+		}
+
+		// Resolve any name-valued filters to UUIDs (UUIDs pass through). This
+		// replaces the old strict-UUID validation: an unresolvable value yields
+		// a self-correcting error listing the valid options.
+		if err := resolveFilters(ctx, collibraClient, &input); err != nil {
+			return Output{}, err
 		}
 
 		filters := buildSearchFilters(input)
