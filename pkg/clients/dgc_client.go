@@ -169,6 +169,30 @@ func PushDataContractManifest(ctx context.Context, collibraHttpClient *http.Clie
 	return ParseAddFromManifestResponse(responseBody)
 }
 
+func InitDataContract(ctx context.Context, collibraHttpClient *http.Client, reqParams InitDataContractRequest) (*InitDataContractResponse, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Initializing data contract for governed asset ID: %s", reqParams.GovernedAssetID))
+
+	endpoint := "/rest/dataProduct/v1/dataContracts"
+
+	body, contentType, err := CreateInitDataContractRequest(reqParams)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	responseBody, err := executeRequest(collibraHttpClient, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return ParseInitDataContractResponse(responseBody)
+}
+
 func buildUrl(basePath string, params interface{}) (string, error) {
 	values, err := query.Values(params)
 	if err != nil {

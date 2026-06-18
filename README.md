@@ -42,6 +42,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
     - `add_tag` - append a free-text tag without replacing existing tags
     - `set_responsibility` - assign a user or group to a resource role (e.g. `Steward`, `Owner`) by username, email, or UUID
     - `remove_responsibility` - unassign a user or group from a resource role (only directly-assigned responsibilities, not inherited ones)
+- [`init_data_contract`](pkg/tools/init_data_contract/) - Initialize a new data contract asset governing a Data Product Port, with an optional initial manifest. **Requires:** `dgc.data-contract`
 - [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract. **Requires:** `dgc.data-contract`
 - [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match. **Requires:** `dgc.classify`, `dgc.catalog`, `dgc.data-classes-edit`
 

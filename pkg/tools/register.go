@@ -21,6 +21,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_lineage_upstream"
 	"github.com/collibra/chip/pkg/tools/get_measure_data"
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
+	"github.com/collibra/chip/pkg/tools/init_data_contract"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
@@ -53,6 +54,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, search_data_classification_matches.NewTool(client))
 	toolRegister(server, toolConfig, remove_data_classification_match.NewTool(client))
 	toolRegister(server, toolConfig, list_data_contracts.NewTool(client))
+	toolRegister(server, toolConfig, init_data_contract.NewTool(client))
 	toolRegister(server, toolConfig, push_data_contract_manifest.NewTool(client))
 	toolRegister(server, toolConfig, pull_data_contract_manifest.NewTool(client))
 	toolRegister(server, toolConfig, get_business_term_data.NewTool(client))
