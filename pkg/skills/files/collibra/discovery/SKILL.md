@@ -14,7 +14,10 @@ wrong one is the most common cause of empty results.
   "find tables with revenue figures") → `discover_data_assets` (semantic search over data
   assets) or `discover_business_glossary` (semantic search over the business glossary).
 - **Exact name known, or filtering by type/community/domain/status** → `search_asset_keyword`.
-- **Need a type UUID** to filter `search_asset_keyword` by `assetType` → `list_asset_types`.
+  Its filters accept a **name or a UUID** — pass `assetType: "Table"` or `status: "Obsolete"`
+  directly; no separate UUID lookup is needed.
+- **Browsing or disambiguating asset type names** → `list_asset_types` (not required just to
+  filter — the `assetType` filter already resolves names).
 
 Do not start with `search_asset_keyword` for paraphrased questions. The keyword search will
 miss synonyms, plurals, and definitional matches that semantic search returns.
@@ -44,8 +47,9 @@ Most chip tools require a UUID. The pattern:
    own wording — passing a rewritten query loses signal.
 2. **Resolve ambiguity before drilling down.** If two assets share a name across domains, ask
    the user which they want. Do not call detail tools on a guess.
-3. **`list_asset_types` is for type UUIDs, not for browsing.** Use it when you need a UUID to
-   pass to `search_asset_keyword`'s `assetType` filter — not as a first-step exploration tool.
+3. **`list_asset_types` is for confirming or disambiguating a type, not for browsing.**
+   `search_asset_keyword`'s `assetType` filter accepts a type **name or UUID** directly, so
+   reach for `list_asset_types` only when a name is ambiguous — not as a first-step exploration tool.
 
 ## Common follow-ups
 
