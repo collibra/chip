@@ -73,13 +73,9 @@ func TestEditAssetAttributeInstance_ListPageDecodesMixedKinds(t *testing.T) {
 	}
 }
 
-// TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment mirrors the live
-// per-asset endpoint: Collibra returns a single Assignment object whose
-// characteristicTypes already include everything that applies to the asset —
-// the asset type's own attributes plus characteristics inherited from parents
-// (the KPI add_relation case). chip parses it as-is, with no client-side
-// domain-type filtering, keeping required-ness from minimumOccurrences and both
-// head (TO_TARGET) and tail (TO_SOURCE) relation directions.
+// TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment checks parsing of
+// the per-asset endpoint's single Assignment object: required-ness from
+// minimumOccurrences and both relation directions (TO_TARGET / TO_SOURCE).
 func TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment(t *testing.T) {
 	const (
 		assetID   = "019e027f-25b9-728f-9ed8-77c315ac377f"
@@ -161,12 +157,10 @@ func TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment(t *testing.T) {
 	}
 }
 
-// TestGetAssignmentForAssetType_InheritsParentChain guards the #74 behavior that
-// edit_asset still relies on for RELATIONS: a subtype's relation types can live
-// on a parent type's assignment (with empty domainTypes — Collibra's inherit
-// sentinel). The lookup must walk the parent chain and merge both levels,
-// keeping head (TO_TARGET) and tail (TO_SOURCE) directions and deduping
-// anything repeated at a lower level.
+// TestGetAssignmentForAssetType_InheritsParentChain guards the #74 relation
+// behavior: a subtype's relation types can live on a parent's assignment (empty
+// domainTypes = inherit), so the walk must merge parent levels, keeping both
+// directions (TO_TARGET / TO_SOURCE) and deduping repeats.
 func TestGetAssignmentForAssetType_InheritsParentChain(t *testing.T) {
 	const (
 		kpiTypeID    = "00000000-0000-0000-0000-000000031107"

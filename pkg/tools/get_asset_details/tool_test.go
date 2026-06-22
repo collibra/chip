@@ -201,11 +201,9 @@ func TestGetAssetDetailsWithResponsibilities(t *testing.T) {
 	}
 }
 
-// TestGetAssetDetailsSurfacesEmptyAssignableAttribute reproduces the reported
-// bug: an Acronym whose required Definition is empty. The GraphQL attribute
-// lists only carry the populated Note, so without the assignment schema the
-// caller can't tell that Definition exists but is unset. assignableAttributes
-// must surface Definition (isSet=false, required=true) alongside the set Note.
+// TestGetAssetDetailsSurfacesEmptyAssignableAttribute: an Acronym with an empty
+// required Definition (only Note has a value) must still surface Definition in
+// assignableAttributes as isSet=false, required=true.
 func TestGetAssetDetailsSurfacesEmptyAssignableAttribute(t *testing.T) {
 	assetId, _ := uuid.NewUUID()
 	handler := http.NewServeMux()

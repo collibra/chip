@@ -31,10 +31,9 @@ type Output struct {
 	Found                  bool                  `json:"found" jsonschema:"whether the asset was found"`
 }
 
-// AssignableAttribute is one attribute type the asset's assignment allows,
-// surfaced so the caller can tell an attribute that is empty apart from one that
-// is not valid for the asset at all — the GraphQL attribute lists only include
-// attributes that already hold a value.
+// AssignableAttribute is one attribute type the asset's assignment allows. It
+// lets the caller tell an empty attribute apart from one that isn't valid at
+// all — the GraphQL attribute lists only include attributes that have a value.
 type AssignableAttribute struct {
 	Name     string `json:"name" jsonschema:"the attribute type name, e.g. Definition"`
 	Required bool   `json:"required" jsonschema:"whether the assignment requires this attribute to have a value"`
@@ -53,7 +52,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_asset_details",
 		Title:       "Get Asset Details",
-		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page).",
+		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Also returns assignableAttributes: every attribute type the asset can hold, with required and isSet flags — use this to tell an empty-but-settable attribute (e.g. an unset Definition) apart from one that isn't valid for the asset. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -92,10 +91,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			responsibilitiesStatus = "No responsibilities assigned"
 		}
 
-		// Best-effort: surface the asset's full assignable-attribute schema so an
-		// empty attribute (e.g. an unset Definition) is distinguishable from one
-		// that isn't valid for the asset. The GraphQL attribute lists above only
-		// carry attributes that already hold a value.
+		// Best-effort: surface the full assignable-attribute schema (incl. empty ones).
 		assignable := resolveAssignableAttributes(ctx, collibraClient, assetUUID.String(), &assets[0])
 
 		return Output{

@@ -40,9 +40,8 @@ type EditAssetStatusRef struct {
 	Name string `json:"name"`
 }
 
-// EditAssetDomainDetails is the view of a domain that exposes its domain type,
-// returned by GET /rest/2.0/domains/{id}. Needed to scope the relation
-// assignment lookup (GetAssignmentForAssetType).
+// EditAssetDomainDetails exposes a domain's type, used to scope the relation
+// assignment lookup.
 type EditAssetDomainDetails struct {
 	ID   string                  `json:"id"`
 	Name string                  `json:"name"`
@@ -310,25 +309,15 @@ func ListAttributesForAsset(ctx context.Context, client *http.Client, assetID st
 	return all, nil
 }
 
-// GetEffectiveAssignmentForAsset returns the fully-resolved assignment that
-// Collibra applies to a specific asset, via GET /assignments/asset/{assetId}.
-// Collibra computes the asset-type and domain inheritance/scoping server-side,
-// so for ATTRIBUTES chip no longer reconstructs it by walking the asset type's
-// parent chain and filtering by domain type. That client-side reconstruction
-// mis-resolved any asset whose domain type wasn't in its type's assignment
-// scope: e.g. an Acronym (assignment scoped to Glossary) living in a non-Glossary
-// domain lost its required Definition attribute and instead inherited the root
-// Asset type's generic attributes. The per-asset endpoint sidesteps that.
+// GetEffectiveAssignmentForAsset returns the assignment Collibra resolves for a
+// specific asset via GET /assignments/asset/{assetId}, which handles type and
+// domain inheritance server-side. Use it for ATTRIBUTES only: it is unreliable
+// for relation types (it omits some inherited relations for certain asset
+// types), so relations stay on GetAssignmentForAssetType.
 //
-// NOTE: use this for attributes only. The per-asset endpoint is NOT reliable for
-// relation types — it omits some root-inherited relation types for certain asset
-// types (e.g. "complies to" is missing for Data Set / Issue Category even though
-// those assets use it). Relation resolution therefore stays on
-// GetAssignmentForAssetType (the parent-chain walk), which is what #74 shipped.
-//
-// The response is a single Assignment whose characteristicTypes carry the same
-// shape as /assignments/assetType, so we reuse mergeEditAssignments with an
-// empty domainTypeID: the server already scoped it, so no client-side filtering.
+// The response is a single Assignment with the same characteristicTypes shape as
+// /assignments/assetType, so we reuse mergeEditAssignments with an empty
+// domainTypeID (the server already scoped it).
 func GetEffectiveAssignmentForAsset(ctx context.Context, client *http.Client, assetID string) (*EditAssetAssignment, error) {
 	reqURL := fmt.Sprintf("/rest/2.0/assignments/asset/%s", url.PathEscape(assetID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -362,12 +351,10 @@ func GetEffectiveAssignmentForAsset(ctx context.Context, client *http.Client, as
 }
 
 // GetAssignmentForAssetType resolves the assignment for an (asset type, domain
-// type) pair by walking the asset type's parent chain and merging each level
-// (filtering by domain type). edit_asset uses this for RELATION types only: a
-// subtype inherits relation roles from a parent-level assignment (e.g. KPI under
-// Business Asset), and the per-asset endpoint drops some of those, so the chain
-// walk — the behavior #74 shipped — remains the source for relations. Attributes
-// come from GetEffectiveAssignmentForAsset instead.
+// type) pair by walking the asset type's parent chain and merging each level,
+// filtering by domain type. A subtype inherits relation roles from a parent's
+// assignment (e.g. KPI under Business Asset), which the walk picks up. Used for
+// RELATION types only; attributes come from GetEffectiveAssignmentForAsset.
 func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) (*EditAssetAssignment, error) {
 	merged := EditAssetAssignment{
 		AssetType: EditAssetTypeRef{ID: assetTypeID},

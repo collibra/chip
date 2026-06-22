@@ -257,17 +257,13 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		return nil, fmt.Errorf("fetching current attributes: %w", err)
 	}
 
-	// Attributes come from the per-asset endpoint, which Collibra resolves
-	// correctly for the asset's exact type+domain (fixes attributes being
-	// dropped when an asset's domain type isn't in its type's assignment scope).
+	// Attributes from the per-asset endpoint; relations from the type-chain walk
+	// (see the respective client functions for why they differ).
 	effective, err := clients.GetEffectiveAssignmentForAsset(ctx, client, assetID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching effective assignment: %w", err)
 	}
 
-	// Relations stay on the parent-chain walk: the per-asset endpoint omits some
-	// inherited relation types for certain asset types, and the walk is what #74
-	// shipped. It needs the asset's domain type to scope the lookup.
 	domain, err := clients.GetDomainDetails(ctx, client, asset.Domain.ID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching domain for relation assignment: %w", err)
@@ -281,8 +277,6 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		return nil, fmt.Errorf("fetching relation assignment: %w", err)
 	}
 
-	// Combine: attributes from the per-asset assignment, relations from the
-	// type-chain assignment. Everything downstream reads this one struct.
 	assignment := &clients.EditAssetAssignment{
 		AssetType:      effective.AssetType,
 		AttributeTypes: effective.AttributeTypes,

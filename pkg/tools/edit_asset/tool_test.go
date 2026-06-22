@@ -198,10 +198,8 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	// characteristicTypes shared by both assignment endpoints. edit_asset now
-	// reads attributes from the per-asset endpoint and relations from the
-	// assetType (parent-chain) endpoint, so both stubs emit the same set and the
-	// combined result is unchanged.
+	// characteristicTypes shared by both assignment endpoints (attributes are read
+	// from the per-asset one, relations from the assetType one).
 	buildChars := func() []map[string]any {
 		chars := []map[string]any{}
 		for _, v := range s.attrTypesByID {
@@ -238,8 +236,7 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		return chars
 	}
 
-	// Per-asset effective assignment (single object) — edit_asset uses its
-	// attributes; get_asset_details uses it too.
+	// Per-asset effective assignment (single object) — source of attributes.
 	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+testAssetID, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":                  "assignment-asset-1",
