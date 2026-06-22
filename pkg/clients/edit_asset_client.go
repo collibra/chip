@@ -40,6 +40,15 @@ type EditAssetStatusRef struct {
 	Name string `json:"name"`
 }
 
+// EditAssetDomainDetails is the view of a domain that exposes its domain type,
+// returned by GET /rest/2.0/domains/{id}. Needed to scope the relation
+// assignment lookup (GetAssignmentForAssetType).
+type EditAssetDomainDetails struct {
+	ID   string                  `json:"id"`
+	Name string                  `json:"name"`
+	Type *EditAssetDomainTypeRef `json:"type,omitempty"`
+}
+
 // EditAssetDomainTypeRef is a reference to a domain type.
 type EditAssetDomainTypeRef struct {
 	ID   string `json:"id"`
@@ -226,6 +235,37 @@ func GetAssetCore(ctx context.Context, client *http.Client, assetID string) (*Ed
 	return &result, nil
 }
 
+// GetDomainDetails fetches a domain including its domain type reference, used
+// to scope the relation assignment lookup.
+func GetDomainDetails(ctx context.Context, client *http.Client, domainID string) (*EditAssetDomainDetails, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/domains/%s", url.PathEscape(domainID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get domain: building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get domain: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("domain %q not found", domainID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get domain: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result EditAssetDomainDetails
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("get domain: decoding response: %w", err)
+	}
+	return &result, nil
+}
+
 // ListAttributesForAsset fetches all attribute instances on an asset.
 // Pages are followed transparently so the caller gets the full list.
 func ListAttributesForAsset(ctx context.Context, client *http.Client, assetID string) ([]EditAssetAttributeInstance, error) {
@@ -272,15 +312,19 @@ func ListAttributesForAsset(ctx context.Context, client *http.Client, assetID st
 
 // GetEffectiveAssignmentForAsset returns the fully-resolved assignment that
 // Collibra applies to a specific asset, via GET /assignments/asset/{assetId}.
-// Collibra computes all asset-type and domain inheritance/scoping server-side,
-// so chip no longer reconstructs it by walking the asset type's parent chain
-// and filtering by domain type. That client-side reconstruction mis-resolved
-// any asset whose domain type wasn't in its type's assignment scope: e.g. an
-// Acronym (assignment scoped to Glossary) living in a non-Glossary domain lost
-// its required Definition attribute and instead inherited the root Asset type's
-// generic attributes. Asking Collibra for the per-asset assignment sidesteps all
-// of that — and still surfaces characteristics a subtype inherits from a parent
-// (the KPI add_relation case), because the server includes them.
+// Collibra computes the asset-type and domain inheritance/scoping server-side,
+// so for ATTRIBUTES chip no longer reconstructs it by walking the asset type's
+// parent chain and filtering by domain type. That client-side reconstruction
+// mis-resolved any asset whose domain type wasn't in its type's assignment
+// scope: e.g. an Acronym (assignment scoped to Glossary) living in a non-Glossary
+// domain lost its required Definition attribute and instead inherited the root
+// Asset type's generic attributes. The per-asset endpoint sidesteps that.
+//
+// NOTE: use this for attributes only. The per-asset endpoint is NOT reliable for
+// relation types — it omits some root-inherited relation types for certain asset
+// types (e.g. "complies to" is missing for Data Set / Issue Category even though
+// those assets use it). Relation resolution therefore stays on
+// GetAssignmentForAssetType (the parent-chain walk), which is what #74 shipped.
 //
 // The response is a single Assignment whose characteristicTypes carry the same
 // shape as /assignments/assetType, so we reuse mergeEditAssignments with an
@@ -315,6 +359,90 @@ func GetEffectiveAssignmentForAsset(ctx context.Context, client *http.Client, as
 	merged := EditAssetAssignment{AssetType: raw.AssetType}
 	mergeEditAssignments(&merged, []rawAssignmentResponse{raw}, "", make(map[string]struct{}), make(map[string]struct{}))
 	return &merged, nil
+}
+
+// GetAssignmentForAssetType resolves the assignment for an (asset type, domain
+// type) pair by walking the asset type's parent chain and merging each level
+// (filtering by domain type). edit_asset uses this for RELATION types only: a
+// subtype inherits relation roles from a parent-level assignment (e.g. KPI under
+// Business Asset), and the per-asset endpoint drops some of those, so the chain
+// walk — the behavior #74 shipped — remains the source for relations. Attributes
+// come from GetEffectiveAssignmentForAsset instead.
+func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) (*EditAssetAssignment, error) {
+	merged := EditAssetAssignment{
+		AssetType: EditAssetTypeRef{ID: assetTypeID},
+	}
+	seenAttrIDs := make(map[string]struct{})
+	seenRelKeys := make(map[string]struct{})
+	seenTypes := make(map[string]struct{})
+
+	currentID := assetTypeID
+	for depth := 0; depth < maxAssignmentChainDepth; depth++ {
+		if _, looped := seenTypes[currentID]; looped {
+			break
+		}
+		seenTypes[currentID] = struct{}{}
+
+		list, err := fetchRawEditAssignments(ctx, client, currentID, domainTypeID)
+		if err != nil {
+			if depth == 0 {
+				return nil, err
+			}
+			// Tolerate parent-level fetch errors: keep what we have.
+			break
+		}
+		mergeEditAssignments(&merged, list, domainTypeID, seenAttrIDs, seenRelKeys)
+
+		at, err := GetAssetTypeByID(ctx, client, currentID)
+		if err != nil || at.Parent == nil || at.Parent.ID == "" {
+			break
+		}
+		currentID = at.Parent.ID
+	}
+	return &merged, nil
+}
+
+// fetchRawEditAssignments is the bare /assignments/assetType/{id} fetch for
+// one chain level, decoded into edit_asset's raw shape.
+func fetchRawEditAssignments(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) ([]rawAssignmentResponse, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/assignments/assetType/%s", url.PathEscape(assetTypeID))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get assignment: building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get assignment: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("no assignment for asset type %q (domain type %q)", assetTypeID, domainTypeID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get assignment: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("get assignment: reading response: %w", err)
+	}
+
+	// Collibra returns assignments as a top-level array; tolerate a single
+	// object too just in case.
+	var list []rawAssignmentResponse
+	if err := json.Unmarshal(respBody, &list); err != nil {
+		var single rawAssignmentResponse
+		if err2 := json.Unmarshal(respBody, &single); err2 != nil {
+			return nil, fmt.Errorf("get assignment: decoding response: %w", err)
+		}
+		list = []rawAssignmentResponse{single}
+	}
+	return list, nil
 }
 
 // mergeEditAssignments folds one chain level's assignments into merged,

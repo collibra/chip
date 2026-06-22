@@ -198,10 +198,11 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+testAssetID, func(w http.ResponseWriter, _ *http.Request) {
-		// Emit Collibra's per-asset effective-assignment shape: a single
-		// Assignment object whose characteristicTypes flatten attribute and
-		// relation types via assignedCharacteristicTypeDiscriminator.
+	// characteristicTypes shared by both assignment endpoints. edit_asset now
+	// reads attributes from the per-asset endpoint and relations from the
+	// assetType (parent-chain) endpoint, so both stubs emit the same set and the
+	// combined result is unchanged.
+	buildChars := func() []map[string]any {
 		chars := []map[string]any{}
 		for _, v := range s.attrTypesByID {
 			chars = append(chars, map[string]any{
@@ -234,14 +235,37 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 				},
 			})
 		}
+		return chars
+	}
+
+	// Per-asset effective assignment (single object) — edit_asset uses its
+	// attributes; get_asset_details uses it too.
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+testAssetID, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":        "assignment-1",
-			"assetType": map[string]any{"id": testAssetTypeID, "name": "Business Term"},
-			"domainTypes": []map[string]any{{
-				"id": testDomainTypeID, "name": "Business Glossary",
-			}},
-			"characteristicTypes": chars,
+			"id":                  "assignment-asset-1",
+			"assetType":           map[string]any{"id": testAssetTypeID, "name": "Business Term"},
+			"domainTypes":         []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
+			"characteristicTypes": buildChars(),
 		})
+	})
+
+	// Domain details — used to scope the relation (assetType) assignment lookup.
+	mux.HandleFunc("GET /rest/2.0/domains/"+testDomainID, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(clients.EditAssetDomainDetails{
+			ID:   testDomainID,
+			Name: "Marketing Glossary",
+			Type: &clients.EditAssetDomainTypeRef{ID: testDomainTypeID, Name: "Business Glossary"},
+		})
+	})
+
+	// Per-asset-type assignment (top-level array) — edit_asset uses its relations.
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+testAssetTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":                  "assignment-type-1",
+			"assetType":           map[string]any{"id": testAssetTypeID, "name": "Business Term"},
+			"domainTypes":         []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
+			"characteristicTypes": buildChars(),
+		}})
 	})
 
 	mux.HandleFunc("POST /rest/2.0/relations", func(w http.ResponseWriter, r *http.Request) {
