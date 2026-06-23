@@ -12,7 +12,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 - [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. **Requires:** `dgc.ai-copilot`
 - [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. **Requires:** `dgc.ai-copilot`
-- [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID
+- [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID, including the asset's assignable attribute schema (every attribute it can hold, including empty ones)
 - [`get_business_term_data`](pkg/tools/get_business_term_data/) - Trace a business term back to its connected physical data assets
 - [`get_column_semantics`](pkg/tools/get_column_semantics/) - Retrieve data attributes, measures, and business assets connected to a column
 - [`get_lineage_downstream`](pkg/tools/get_lineage_downstream/) - Get downstream technical lineage (consumers) for a data entity

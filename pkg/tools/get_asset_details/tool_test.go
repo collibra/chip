@@ -200,3 +200,66 @@ func TestGetAssetDetailsWithResponsibilities(t *testing.T) {
 		t.Fatalf("Expected empty responsibilitiesStatus when responsibilities exist, got: '%s'", output.ResponsibilitiesStatus)
 	}
 }
+
+// TestGetAssetDetailsSurfacesEmptyAssignableAttribute: an Acronym with an empty
+// required Definition (only Note has a value) must still surface Definition in
+// assignableAttributes as isSet=false, required=true.
+func TestGetAssetDetailsSurfacesEmptyAssignableAttribute(t *testing.T) {
+	assetId, _ := uuid.NewUUID()
+	handler := http.NewServeMux()
+	handler.Handle("/graphql/knowledgeGraph/v1", testutil.JsonHandlerInOut(func(_ *http.Request, _ clients.Request) (int, clients.Response) {
+		return http.StatusOK, clients.Response{
+			Data: &clients.AssetQueryData{
+				Assets: []clients.Asset{{
+					ID:          assetId.String(),
+					DisplayName: "Acronymn_194_reach4",
+					StringAttributes: []clients.StringAttribute{
+						{Value: "a note", Type: &clients.AttributeType{Name: "Note"}},
+					},
+				}},
+			},
+		}
+	}))
+	handler.Handle("/rest/2.0/responsibilities", testutil.JsonHandlerOut(func(*http.Request) (int, clients.ResponsibilityPagedResponse) {
+		return http.StatusOK, clients.ResponsibilityPagedResponse{Limit: 100}
+	}))
+	handler.HandleFunc("GET /rest/2.0/assignments/asset/"+assetId.String(), func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "acr", "name": "Acronym"},
+			"characteristicTypes": [
+				{"id": "c1", "minimumOccurrences": 1, "assignedCharacteristicTypeDiscriminator": "AttributeType", "attributeType": {"id": "def", "name": "Definition", "resourceType": "StringAttributeType"}},
+				{"id": "c2", "minimumOccurrences": 0, "assignedCharacteristicTypeDiscriminator": "AttributeType", "attributeType": {"id": "note", "name": "Note", "resourceType": "StringAttributeType"}}
+			]
+		}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	output, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), tools.Input{AssetID: assetId.String()})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	byName := map[string]tools.AssignableAttribute{}
+	for _, a := range output.AssignableAttributes {
+		byName[a.Name] = a
+	}
+	def, ok := byName["Definition"]
+	if !ok {
+		t.Fatalf("Definition missing from assignableAttributes: %+v", output.AssignableAttributes)
+	}
+	if def.IsSet {
+		t.Errorf("Definition should be reported as empty (isSet=false)")
+	}
+	if !def.Required {
+		t.Errorf("Definition should be reported as required")
+	}
+	note, ok := byName["Note"]
+	if !ok {
+		t.Fatalf("Note missing from assignableAttributes")
+	}
+	if !note.IsSet {
+		t.Errorf("Note has a value and should be isSet=true")
+	}
+}
