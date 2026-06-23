@@ -35,7 +35,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_context_specification",
 		Title:       "Get Context Specification",
-		Description: "Inspection tool. Returns the full Context Specification including the mappingYaml configuration, so you can understand which fields and metrics will be populated before executing get_context. Use this after list_context_specifications to examine a specific spec before running it against an asset.",
+		Description: "Retrieve a specific Context Specification by ID. A Context Specification defines how to extract governed metadata from Collibra. Starting from an asset (e.g., a Data Product), it specifies which relations to traverse, what fields to pull (name, status, description), and what shape to return for a target system (Snowflake, Databricks, custom for AI agents). Use this to inspect a Context Specification's details before executing it to understand how metadata will be extracted.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

@@ -38,7 +38,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "list_context_specifications",
 		Title:       "List Context Specifications",
-		Description: "Primary discovery tool for Context Specifications. Returns all Context Specifications applicable to a given asset or asset type. Use assetId to find specs that match the type of a specific asset, or assetTypePublicId to filter by a known asset type. Call this first to discover which Context Specifications are available before calling get_context.",
+		Description: "Retrieve a list of available Context Specifications. A Context Specification defines how to extract governed metadata from Collibra. Starting from an asset (e.g., a Data Product), it specifies which relations to traverse, what fields to pull (name, status, description), and what shape to return for a target system (Snowflake, Databricks, custom for AI agents). Use this to discover which Contexts are available for querying metadata about specific asset or asset type.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
