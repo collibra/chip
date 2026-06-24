@@ -24,7 +24,7 @@ type Output struct {
 	Name           string    `json:"name" jsonschema:"The display name of the Context Specification"`
 	Description    string    `json:"description,omitempty" jsonschema:"Optional description of the Context Specification"`
 	AssetType      AssetType `json:"assetType" jsonschema:"The asset type this Context Specification applies to"`
-	MappingYaml    string    `json:"mappingYaml" jsonschema:"The raw YAML mapping configuration that defines how context is generated. Inspect this to understand which fields and metrics will be collected before executing get_context."`
+	MappingYaml    string    `json:"mappingYaml" jsonschema:"The raw YAML mapping configuration that defines how context is generated. Inspect this to understand which fields and metrics will be collected before executing get_asset_context_from_specification."`
 	CreatedBy      string    `json:"createdBy" jsonschema:"UUID of the user who created this Context Specification"`
 	CreatedOn      string    `json:"createdOn" jsonschema:"ISO-8601 timestamp when this Context Specification was created"`
 	LastModifiedBy string    `json:"lastModifiedBy" jsonschema:"UUID of the user who last modified this Context Specification"`

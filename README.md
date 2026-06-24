@@ -210,7 +210,7 @@ Some functionality ships behind an opt-in `experimental` flag. These features ar
 
 ### Known experimental features
 
-- `context-specifications` — Context specification tools: `list_context_specifications`, `get_context_specification`, and `get_context`. These tools generate structured YAML context for assets using the Semantic Blueprint API.
+- `context-specifications` — Context specification tools: `list_context_specifications`, `get_context_specification`, and `get_asset_context_from_specification`. These tools generate structured YAML context for assets using the Semantic Blueprint API.
 
 - `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
 
