@@ -1,4 +1,4 @@
-package get_context
+package get_asset_context_from_specification
 
 import (
 	"context"
@@ -32,8 +32,8 @@ type Output struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:        "get_context",
-		Title:       "Get Context",
+		Name:        "get_asset_context_from_specification",
+		Title:       "Get Asset Context From Specification",
 		Description: "Context generation execution tool. Executes a Context Specification against a specific asset and returns the generated context as structured YAML. This is the final step in the context workflow: use list_context_specifications to discover specs, optionally use get_context_specification to inspect the mapping, then call this tool to generate the context.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

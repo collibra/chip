@@ -19,7 +19,7 @@ This skill explains the three-tool workflow: **discover** which specs are availa
 |---|---|---|---|
 | `listContextSpecifications` | Discover which Context Specifications (Knowledge Graph blueprints) are available for an asset or asset type | List of spec names, descriptions, and IDs | Always, entry point |
 | `getContextSpecification` | Inspect a spec's blueprint: which relations it defines, what fields it extracts from the Knowledge Graph, what transforms it applies | Complete YAML mapping and spec metadata | Optional, only when user asks what a spec covers |
-| `getContext` | Execute a spec's blueprint against an asset to extract and shape its governed metadata subset | Structured metadata (JSON, YAML, etc.) shaped for the target system | Always, output step |
+| `getAssetContextFromSpecification` | Execute a spec's blueprint against an asset to extract and shape its governed metadata subset | Structured metadata (JSON, YAML, etc.) shaped for the target system | Always, output step |
 
 ---
 
@@ -56,7 +56,7 @@ User: "What metadata can I extract about Tables?"
 ### Handling multiple results
 
 #### Exactly one spec is returned
-Proceed directly to `getContext` as you have a clear path. No need to ask the user to decide.
+Proceed directly to `getAssetContextFromSpecification` as you have a clear path. No need to ask the user to decide.
 
 #### Multiple specs are returned
 **Don't just hand the list to the user.** Be agentic:
@@ -128,7 +128,7 @@ A data engineer needs to generate a Snowflake Semantic View from a Data Product.
    → Finds "Data Product to Snowflake Semantic View" spec
 
 3. Execute context
-   getContext(assetId="dp-001", contextSpecificationId="snowflake-spec")
+   getAssetContextFromSpecification(assetId="dp-001", contextSpecificationId="snowflake-spec")
    → Returns YAML formatted for Snowflake Semantic View
 
 4. Deploy to Snowflake
@@ -144,7 +144,7 @@ An AI agent explores a Data Product by chaining context calls.
 
 ```
 1. Get Data Product overview
-   getContext(assetId="dp-001", contextSpecificationId="product-basic")
+   getAssetContextFromSpecification(assetId="dp-001", contextSpecificationId="product-basic")
    → Returns product metadata + related metric UUIDs
 
 2. Evaluate: Did context include metric UUIDs?
@@ -152,7 +152,7 @@ An AI agent explores a Data Product by chaining context calls.
    ✗ No → ask user or work with current data
 
 3. Drill into metric details (if UUIDs available)
-   getContext(assetId="metric-001", contextSpecificationId="metric-details")
+   getAssetContextFromSpecification(assetId="metric-001", contextSpecificationId="metric-details")
    → Returns metric definition, calculation rules, source tables
 
 4. Evaluate: Can I chain further?
@@ -165,7 +165,7 @@ An AI agent explores a Data Product by chaining context calls.
 ---
 
 ### Required parameters
-`getContext` requires both:
+`getAssetContextFromSpecification` requires both:
 - `assetId`: the UUID of the specific asset to extract from
 - `contextSpecificationId`: the UUID of the Context Specification to execute
 
@@ -188,7 +188,7 @@ User: "Get me the semantic blueprint for the Orders table"
 2. listContextSpecifications(assetId="abc-123")
    → Returns: [Semantic Blueprint v1]
 
-3. getContext(assetId="abc-123", 
+3. getAssetContextFromSpecification(assetId="abc-123", 
               contextSpecificationId="spec-456",
               includeMetadata=false)
    → Returns: {name: "Orders", description: "...", columns: [...], ...}
@@ -212,7 +212,7 @@ User: "What metadata can I extract about Tables?"
 
 3. Wait for user to select one
 
-4. getContext(assetId=<user-selected-asset>, 
+4. getAssetContextFromSpecification(assetId=<user-selected-asset>, 
               contextSpecificationId=<selected-spec>)
    → Return the shaped metadata
 ```
@@ -242,7 +242,7 @@ User: "What does the Semantic Blueprint context cover?"
 1. **Always resolve the asset UUID before calling `listContextSpecifications` with `assetId`.**
    If the user names an asset, use `discover_data_assets` or `search_asset_keyword` to resolve it to a UUID first. See `collibra/discovery` for patterns.
 
-2. **Do not call `getContext` without a spec ID.**
+2. **Do not call `getAssetContextFromSpecification` without a spec ID.**
    Always call `listContextSpecifications` first to discover and confirm which spec to use, unless the user or another agent has explicitly provided a Context Specification UUID.
 
 3. **Inspect a spec before executing if your decision depends on its coverage.**
