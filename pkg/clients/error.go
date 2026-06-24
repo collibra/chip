@@ -2,6 +2,7 @@ package clients
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,7 +47,7 @@ func executeCollibraRequest(client *http.Client, req *http.Request) ([]byte, err
 			if errResp.HelpMessage != "" {
 				msg += ". Hint: " + errResp.HelpMessage
 			}
-			return nil, fmt.Errorf("%s", msg)
+			return nil, errors.New(msg)
 		}
 		return nil, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
 	}

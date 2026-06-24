@@ -56,6 +56,7 @@ func GenerateContext(
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
+	req.Header.Set("Content-Type", "application/json")
 	if includeMetadata {
 		req.Header.Set("Accept", "application/json")
 	} else {
