@@ -45,6 +45,38 @@ type PushDataContractManifestResponse struct {
 	ManifestID string `json:"manifestId"`
 }
 
+// InitDataContractRequest represents the request parameters for initializing a data contract
+type InitDataContractRequest struct {
+	GovernedAssetID string
+	Manifest        string
+	ManifestID      string
+	Version         string
+	Name            string
+	DomainID        string
+}
+
+// DataContractManifestVersion represents metadata attributes of a data contract version
+type DataContractManifestVersion struct {
+	Version        string `json:"version"`
+	Active         bool   `json:"active"`
+	Format         string `json:"format"`
+	CreatedBy      string `json:"createdBy"`
+	CreatedOn      int64  `json:"createdOn"`
+	LastModifiedBy string `json:"lastModifiedBy"`
+	LastModifiedOn int64  `json:"lastModifiedOn"`
+}
+
+// InitDataContractResponse represents the metadata for the newly created data contract version
+type InitDataContractResponse struct {
+	ID              string                      `json:"id"`
+	Name            string                      `json:"name"`
+	ManifestID      string                      `json:"manifestId"`
+	DomainName      string                      `json:"domainName"`
+	DomainID        string                      `json:"domainId"`
+	ActiveVersion   string                      `json:"activeVersion"`
+	ManifestVersion DataContractManifestVersion `json:"manifestVersion"`
+}
+
 func ParseDataContractsResponse(jsonData []byte) (*DataContractListPaginated, error) {
 	var response DataContractListPaginated
 	if err := json.Unmarshal(jsonData, &response); err != nil {
@@ -54,17 +86,26 @@ func ParseDataContractsResponse(jsonData []byte) (*DataContractListPaginated, er
 	return &response, nil
 }
 
+// writeManifestFile adds the manifest content as a multipart file part named
+// "manifest". The filename is carried in the Content-Disposition header.
+func writeManifestFile(writer *multipart.Writer, manifest string) error {
+	part, err := writer.CreateFormFile("manifest", "contract.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %w", err)
+	}
+	if _, err := part.Write([]byte(manifest)); err != nil {
+		return fmt.Errorf("failed to write manifest content: %w", err)
+	}
+	return nil
+}
+
 func CreateAddFromManifestRequest(req PushDataContractManifestRequest) (*bytes.Buffer, string, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
 	// Add the manifest file with Content-Disposition header
-	part, err := writer.CreateFormFile("manifest", "contract.yaml")
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create form file: %w", err)
-	}
-	if _, err := part.Write([]byte(req.Manifest)); err != nil {
-		return nil, "", fmt.Errorf("failed to write manifest content: %w", err)
+	if err := writeManifestFile(writer, req.Manifest); err != nil {
+		return nil, "", err
 	}
 
 	// Add optional fields
@@ -103,6 +144,63 @@ func ParseAddFromManifestResponse(jsonData []byte) (*PushDataContractManifestRes
 	var response PushDataContractManifestResponse
 	if err := json.Unmarshal(jsonData, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse add from manifest response: %w", err)
+	}
+
+	return &response, nil
+}
+
+func CreateInitDataContractRequest(req InitDataContractRequest) (*bytes.Buffer, string, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Add optional manifest file with Content-Disposition header
+	if req.Manifest != "" {
+		if err := writeManifestFile(writer, req.Manifest); err != nil {
+			return nil, "", err
+		}
+	}
+
+	// Add required governedAssetId
+	if err := writer.WriteField("governedAssetId", req.GovernedAssetID); err != nil {
+		return nil, "", fmt.Errorf("failed to write governedAssetId field: %w", err)
+	}
+
+	// Add optional fields
+	if req.ManifestID != "" {
+		if err := writer.WriteField("manifestId", req.ManifestID); err != nil {
+			return nil, "", fmt.Errorf("failed to write manifestId field: %w", err)
+		}
+	}
+
+	if req.Version != "" {
+		if err := writer.WriteField("version", req.Version); err != nil {
+			return nil, "", fmt.Errorf("failed to write version field: %w", err)
+		}
+	}
+
+	if req.Name != "" {
+		if err := writer.WriteField("name", req.Name); err != nil {
+			return nil, "", fmt.Errorf("failed to write name field: %w", err)
+		}
+	}
+
+	if req.DomainID != "" {
+		if err := writer.WriteField("domainId", req.DomainID); err != nil {
+			return nil, "", fmt.Errorf("failed to write domainId field: %w", err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, "", fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	return body, writer.FormDataContentType(), nil
+}
+
+func ParseInitDataContractResponse(jsonData []byte) (*InitDataContractResponse, error) {
+	var response InitDataContractResponse
+	if err := json.Unmarshal(jsonData, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse init data contract response: %w", err)
 	}
 
 	return &response, nil

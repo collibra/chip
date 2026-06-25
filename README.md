@@ -12,7 +12,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 - [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
 - [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
-- [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID
+- [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID, including the asset's assignable attribute schema (every attribute it can hold, including empty ones)
 - [`get_business_term_data`](pkg/tools/get_business_term_data/) - Trace a business term back to its connected physical data assets
 - [`get_column_semantics`](pkg/tools/get_column_semantics/) - Retrieve data attributes, measures, and business assets connected to a column
 - [`get_lineage_downstream`](pkg/tools/get_lineage_downstream/) - Get downstream technical lineage (consumers) for a data entity
@@ -25,7 +25,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`list_data_contract`](pkg/tools/list_data_contracts/) - List data contracts with pagination
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
-- [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets
+- [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets; filters (status, community, domain, domain type, asset type, created-by) accept names or UUIDs
 - [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters. **Requires:** `dgc.data-classes-read`
 - [`search_data_classification_match`](pkg/tools/search_data_classification_matches/) - Search for associations between data classes and assets. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`search_lineage_entities`](pkg/tools/search_lineage_entities/) - Search for entities in the technical lineage graph
@@ -42,6 +42,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
     - `add_tag` - append a free-text tag without replacing existing tags
     - `set_responsibility` - assign a user or group to a resource role (e.g. `Steward`, `Owner`) by username, email, or UUID
     - `remove_responsibility` - unassign a user or group from a resource role (only directly-assigned responsibilities, not inherited ones)
+- [`init_data_contract`](pkg/tools/init_data_contract/) - Initialize a new data contract asset governing a Data Product Port, with an optional initial manifest. **Requires:** `dgc.data-contract`
 - [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract. **Requires:** `dgc.data-contract`
 - [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match. **Requires:** `dgc.classify`, `dgc.catalog`, `dgc.data-classes-edit`
 

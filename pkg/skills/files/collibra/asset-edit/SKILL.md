@@ -29,6 +29,9 @@ runs them in order.
 1. **`update_attribute` vs `add_attribute`.** `update_attribute` fails if the attribute does
    not already exist on the asset — the error suggests calling `add_attribute` instead.
    `add_attribute` always appends and is valid only for multi-valued attribute types.
+   To see which attributes an asset can hold — including ones that are valid but currently
+   empty — call `get_asset_details` and read `assignableAttributes`. An attribute missing
+   from the asset's values but present there is settable, not invalid.
 2. **`update_property` is restricted.** Only three fields are allowed: `name`, `displayName`,
    `statusId`. Other fields return an error listing the allowed set.
 3. **`statusId` accepts names.** Pass a human-readable status name (e.g. `"Candidate"`,

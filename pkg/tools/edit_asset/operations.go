@@ -258,10 +258,19 @@ func validateAddRelation(ec *editContext, plan opPlan) opPlan {
 	}
 	rt, ok := ec.relationTypeByRole[normalize(op.RelationType)]
 	if !ok {
+		// Check whether the name matches an inverse (CoRole) instead. If it
+		// does, we can still create the relation — just with source and target
+		// flipped. This lets an agent author from either end of a relation.
+		if rt, ok = ec.relationTypeByCoRole[normalize(op.RelationType)]; ok {
+			plan.relationTypeID = rt.ID
+			plan.relationReversed = true
+			plan.result = newSuccessResult(op)
+			return plan
+		}
 		plan.result = newErrorResult(op, fmt.Sprintf(
-			"relation type %q is not valid for asset type %q in this domain (edited asset must be the source/head; try the forward role name).%s",
+			"relation type %q is not valid for asset type %q in this domain.%s",
 			op.RelationType, ec.asset.Type.Name,
-			suggestionSuffix("Relation roles", ec.availableRelationRoles(), 10)))
+			suggestionSuffix("Relation roles", ec.availableRelationRoles(), 25)))
 		return plan
 	}
 	plan.relationTypeID = rt.ID
@@ -270,9 +279,15 @@ func validateAddRelation(ec *editContext, plan opPlan) opPlan {
 }
 
 func executeAddRelation(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
+	sourceID, targetID := ec.asset.ID, plan.op.TargetAssetID
+	if plan.relationReversed {
+		// CoRole matched: the edited asset is the tail; the "target" the caller
+		// named is actually the head.
+		sourceID, targetID = targetID, sourceID
+	}
 	created, err := clients.CreateRelation(ctx, client, clients.EditAssetCreateRelationRequest{
-		SourceID: ec.asset.ID,
-		TargetID: plan.op.TargetAssetID,
+		SourceID: sourceID,
+		TargetID: targetID,
 		TypeID:   plan.relationTypeID,
 	})
 	if err != nil {

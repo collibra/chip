@@ -40,8 +40,8 @@ type EditAssetStatusRef struct {
 	Name string `json:"name"`
 }
 
-// EditAssetDomainDetails is the view of a domain that exposes its domain type,
-// returned by GET /rest/2.0/domains/{id}. Needed to scope the assignment.
+// EditAssetDomainDetails exposes a domain's type, used to scope the relation
+// assignment lookup.
 type EditAssetDomainDetails struct {
 	ID   string                  `json:"id"`
 	Name string                  `json:"name"`
@@ -115,10 +115,9 @@ type editAssetAttributesList struct {
 	Results []EditAssetAttributeInstance `json:"results"`
 }
 
-// EditAssetAssignment is the scoped assignment for a (asset type, domain type)
-// pair — lists which attribute and relation types are valid for assets of
-// this shape. This is the public shape the edit_asset tool consumes; it is
-// built up from Collibra's raw assignment response by GetAssignmentForAssetType.
+// EditAssetAssignment lists which attribute and relation types are valid for an
+// asset. This is the public shape the edit_asset tool consumes; it is built from
+// Collibra's raw assignment response by GetEffectiveAssignmentForAsset.
 type EditAssetAssignment struct {
 	AssetType      EditAssetTypeRef                   `json:"assetType"`
 	DomainType     *EditAssetDomainTypeRef            `json:"domainType,omitempty"`
@@ -127,14 +126,17 @@ type EditAssetAssignment struct {
 }
 
 // EditAssetAssignmentRelationType is a relation type allowed by a scoped
-// assignment, in the direction where the edited asset is the source (head).
-// Role is the forward name (e.g. "synonym"); CoRole is the reverse name.
+// assignment. Role is the forward name (source→target); CoRole is the inverse
+// name (target→source). Reversed is true when the edited asset is the tail
+// (target) of this relation — add_relation must then flip source and target
+// when calling the API.
 type EditAssetAssignmentRelationType struct {
 	ID         string            `json:"id"`
 	Role       string            `json:"role"`
 	CoRole     string            `json:"coRole,omitempty"`
 	SourceType *EditAssetTypeRef `json:"sourceType,omitempty"`
 	TargetType *EditAssetTypeRef `json:"targetType,omitempty"`
+	Reversed   bool              `json:"reversed,omitempty"`
 }
 
 // --- Raw assignment response shape (Collibra's wire format) ----------------
@@ -233,7 +235,7 @@ func GetAssetCore(ctx context.Context, client *http.Client, assetID string) (*Ed
 }
 
 // GetDomainDetails fetches a domain including its domain type reference, used
-// to scope the assignment lookup.
+// to scope the relation assignment lookup.
 func GetDomainDetails(ctx context.Context, client *http.Client, domainID string) (*EditAssetDomainDetails, error) {
 	reqURL := fmt.Sprintf("/rest/2.0/domains/%s", url.PathEscape(domainID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -307,21 +309,90 @@ func ListAttributesForAsset(ctx context.Context, client *http.Client, assetID st
 	return all, nil
 }
 
-// GetAssignmentForAssetType returns the scoped assignment for an (asset type,
-// domain type) pair, listing valid attribute and relation types. Collibra's
-// endpoint returns an array — typically one entry per matching scope. We
-// merge attribute and relation types across the returned entries; if a
-// domainTypeID was supplied, we filter to entries that match it (when present
-// on the entry), otherwise we use everything returned.
+// GetEffectiveAssignmentForAsset returns the assignment Collibra resolves for a
+// specific asset via GET /assignments/asset/{assetId}, which handles type and
+// domain inheritance server-side. Use it for ATTRIBUTES only: it is unreliable
+// for relation types (it omits some inherited relations for certain asset
+// types), so relations stay on GetAssignmentForAssetType.
+//
+// The response is a single Assignment with the same characteristicTypes shape as
+// /assignments/assetType, so we reuse mergeEditAssignments with an empty
+// domainTypeID (the server already scoped it).
+func GetEffectiveAssignmentForAsset(ctx context.Context, client *http.Client, assetID string) (*EditAssetAssignment, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/assignments/asset/%s", url.PathEscape(assetID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get effective assignment: building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get effective assignment: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("no assignment found for asset %q", assetID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get effective assignment: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var raw rawAssignmentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("get effective assignment: decoding response: %w", err)
+	}
+
+	merged := EditAssetAssignment{AssetType: raw.AssetType}
+	mergeEditAssignments(&merged, []rawAssignmentResponse{raw}, "", make(map[string]struct{}), make(map[string]struct{}))
+	return &merged, nil
+}
+
+// GetAssignmentForAssetType resolves the assignment for an (asset type, domain
+// type) pair by walking the asset type's parent chain and merging each level,
+// filtering by domain type. A subtype inherits relation roles from a parent's
+// assignment (e.g. KPI under Business Asset), which the walk picks up. Used for
+// RELATION types only; attributes come from GetEffectiveAssignmentForAsset.
 func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) (*EditAssetAssignment, error) {
-	params := url.Values{}
-	if domainTypeID != "" {
-		params.Set("domainTypeId", domainTypeID)
+	merged := EditAssetAssignment{
+		AssetType: EditAssetTypeRef{ID: assetTypeID},
 	}
+	seenAttrIDs := make(map[string]struct{})
+	seenRelKeys := make(map[string]struct{})
+	seenTypes := make(map[string]struct{})
+
+	currentID := assetTypeID
+	for depth := 0; depth < maxAssignmentChainDepth; depth++ {
+		if _, looped := seenTypes[currentID]; looped {
+			break
+		}
+		seenTypes[currentID] = struct{}{}
+
+		list, err := fetchRawEditAssignments(ctx, client, currentID, domainTypeID)
+		if err != nil {
+			if depth == 0 {
+				return nil, err
+			}
+			// Tolerate parent-level fetch errors: keep what we have.
+			break
+		}
+		mergeEditAssignments(&merged, list, domainTypeID, seenAttrIDs, seenRelKeys)
+
+		at, err := GetAssetTypeByID(ctx, client, currentID)
+		if err != nil || at.Parent == nil || at.Parent.ID == "" {
+			break
+		}
+		currentID = at.Parent.ID
+	}
+	return &merged, nil
+}
+
+// fetchRawEditAssignments is the bare /assignments/assetType/{id} fetch for
+// one chain level, decoded into edit_asset's raw shape.
+func fetchRawEditAssignments(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) ([]rawAssignmentResponse, error) {
 	reqURL := fmt.Sprintf("/rest/2.0/assignments/assetType/%s", url.PathEscape(assetTypeID))
-	if q := params.Encode(); q != "" {
-		reqURL += "?" + q
-	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -358,10 +429,15 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 		}
 		list = []rawAssignmentResponse{single}
 	}
+	return list, nil
+}
 
-	merged := EditAssetAssignment{
-		AssetType: EditAssetTypeRef{ID: assetTypeID},
-	}
+// mergeEditAssignments folds one chain level's assignments into merged,
+// deduping attribute types by ID and relation types by (ID, direction) —
+// the subtype's own entries are merged first, so they win over a parent's.
+// An assignment applies when its domainTypes either explicitly contains the
+// target domain type or is empty (Collibra's inherit-from-parent sentinel).
+func mergeEditAssignments(merged *EditAssetAssignment, list []rawAssignmentResponse, domainTypeID string, seenAttrIDs, seenRelKeys map[string]struct{}) {
 	for _, a := range list {
 		// If the caller passed a domainTypeID, skip assignments whose
 		// domainTypes don't include it.
@@ -387,6 +463,10 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 				if ct.AttributeType == nil {
 					continue
 				}
+				if _, dup := seenAttrIDs[ct.AttributeType.ID]; dup {
+					continue
+				}
+				seenAttrIDs[ct.AttributeType.ID] = struct{}{}
 				merged.AttributeTypes = append(merged.AttributeTypes, EditAssetAssignmentAttributeType{
 					ID:       ct.AttributeType.ID,
 					Name:     ct.AttributeType.Name,
@@ -397,23 +477,41 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 				if ct.RelationType == nil {
 					continue
 				}
-				// Only register the direction where the edited asset is the
-				// source (head). Collibra emits both directions as separate
-				// characteristic entries; TO_TARGET = forward (asset->target).
-				if ct.RoleDirection != "" && ct.RoleDirection != "TO_TARGET" {
+				// Collibra emits each relation type twice: once per direction.
+				// The live wire values are TO_TARGET (edited asset is the
+				// head/source) and TO_SOURCE (edited asset is the tail —
+				// the relation must be created in reverse). Empty means
+				// symmetric/unspecified, treated as forward. The longer
+				// SOURCE_TO_TARGET / TARGET_TO_SOURCE spellings are accepted
+				// defensively. Any other direction value is skipped.
+				var reversed bool
+				switch ct.RoleDirection {
+				case "", "TO_TARGET", "SOURCE_TO_TARGET":
+					reversed = false
+				case "TO_SOURCE", "TARGET_TO_SOURCE":
+					reversed = true
+				default:
 					continue
 				}
+				relKey := ct.RelationType.ID
+				if reversed {
+					relKey += ":reversed"
+				}
+				if _, dup := seenRelKeys[relKey]; dup {
+					continue
+				}
+				seenRelKeys[relKey] = struct{}{}
 				merged.RelationTypes = append(merged.RelationTypes, EditAssetAssignmentRelationType{
 					ID:         ct.RelationType.ID,
 					Role:       ct.RelationType.Role,
 					CoRole:     ct.RelationType.CoRole,
 					SourceType: ct.RelationType.SourceType,
 					TargetType: ct.RelationType.TargetType,
+					Reversed:   reversed,
 				})
 			}
 		}
 	}
-	return &merged, nil
 }
 
 // PatchAsset updates the whitelisted core fields (name, displayName, statusId)

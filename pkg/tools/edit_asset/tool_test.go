@@ -198,18 +198,9 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("GET /rest/2.0/domains/"+testDomainID, func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(clients.EditAssetDomainDetails{
-			ID:   testDomainID,
-			Name: "Marketing Glossary",
-			Type: &clients.EditAssetDomainTypeRef{ID: testDomainTypeID, Name: "Business Glossary"},
-		})
-	})
-
-	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+testAssetTypeID, func(w http.ResponseWriter, _ *http.Request) {
-		// Emit Collibra's actual response shape: top-level array with one
-		// assignment, characteristicTypes flattening attribute and relation
-		// types via assignedCharacteristicTypeDiscriminator.
+	// characteristicTypes shared by both assignment endpoints (attributes are read
+	// from the per-asset one, relations from the assetType one).
+	buildChars := func() []map[string]any {
 		chars := []map[string]any{}
 		for _, v := range s.attrTypesByID {
 			chars = append(chars, map[string]any{
@@ -224,10 +215,14 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 			})
 		}
 		for _, rt := range s.relationTypes {
+			direction := "TO_TARGET"
+			if rt.Reversed {
+				direction = "TO_SOURCE"
+			}
 			chars = append(chars, map[string]any{
 				"id":                 "rel-char-" + rt.ID,
 				"minimumOccurrences": 0,
-				"roleDirection":      "TO_TARGET",
+				"roleDirection":      direction,
 				"assignedCharacteristicTypeDiscriminator": "RelationType",
 				"relationType": map[string]any{
 					"id":         rt.ID,
@@ -238,13 +233,35 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 				},
 			})
 		}
+		return chars
+	}
+
+	// Per-asset effective assignment (single object) — source of attributes.
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+testAssetID, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":                  "assignment-asset-1",
+			"assetType":           map[string]any{"id": testAssetTypeID, "name": "Business Term"},
+			"domainTypes":         []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
+			"characteristicTypes": buildChars(),
+		})
+	})
+
+	// Domain details — used to scope the relation (assetType) assignment lookup.
+	mux.HandleFunc("GET /rest/2.0/domains/"+testDomainID, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(clients.EditAssetDomainDetails{
+			ID:   testDomainID,
+			Name: "Marketing Glossary",
+			Type: &clients.EditAssetDomainTypeRef{ID: testDomainTypeID, Name: "Business Glossary"},
+		})
+	})
+
+	// Per-asset-type assignment (top-level array) — edit_asset uses its relations.
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+testAssetTypeID, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"id":        "assignment-1",
-			"assetType": map[string]any{"id": testAssetTypeID, "name": "Business Term"},
-			"domainTypes": []map[string]any{{
-				"id": testDomainTypeID, "name": "Business Glossary",
-			}},
-			"characteristicTypes": chars,
+			"id":                  "assignment-type-1",
+			"assetType":           map[string]any{"id": testAssetTypeID, "name": "Business Term"},
+			"domainTypes":         []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
+			"characteristicTypes": buildChars(),
 		}})
 	})
 
@@ -898,7 +915,10 @@ func TestEditAsset_AddRelation_UnknownType(t *testing.T) {
 
 func TestEditAsset_AddRelation_CoRoleDoesNotMatch(t *testing.T) {
 	s := newStub()
-	// "has synonym" is the coRole; we intentionally only match forward roles.
+	// "has synonym" is the coRole of the synonym relation, but the mock only
+	// emits a TO_TARGET entry, so no TO_SOURCE assignment exists.
+	// The coRole should not resolve — only relations with a TO_SOURCE
+	// assignment entry can be authored via their coRole.
 	out, err := runTool(t, s, edit_asset.Input{
 		AssetID: testAssetID,
 		Operations: []edit_asset.Operation{{
@@ -910,6 +930,41 @@ func TestEditAsset_AddRelation_CoRoleDoesNotMatch(t *testing.T) {
 	}
 	if out.Status != edit_asset.StatusError {
 		t.Fatalf("expected error for coRole-only match, got %q", out.Status)
+	}
+}
+
+func TestEditAsset_AddRelation_InverseRole_FlipsSourceTarget(t *testing.T) {
+	s := newStub()
+	// Add a TO_SOURCE entry for the synonym relation, simulating the
+	// case where the edited asset is the tail (e.g. authoring "is viewed through"
+	// from a Context Note instead of "frames" from the Context Lens).
+	s.relationTypes = append(s.relationTypes, clients.EditAssetAssignmentRelationType{
+		ID:         synonymRelTypeID,
+		Role:       "is synonym of",
+		CoRole:     "has synonym",
+		SourceType: &clients.EditAssetTypeRef{ID: testAssetTypeID, Name: "Business Term"},
+		TargetType: &clients.EditAssetTypeRef{ID: testAssetTypeID, Name: "Business Term"},
+		Reversed:   true,
+	})
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddRelation, RelationType: "has synonym", TargetAssetID: targetAssetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success for inverse-role add_relation, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.createdRelations) != 1 {
+		t.Fatalf("expected one POST to /rest/2.0/relations, got %+v", s.createdRelations)
+	}
+	got := s.createdRelations[0]
+	// Source and target must be flipped: the named "target" becomes the source.
+	if got.SourceID != targetAssetID || got.TargetID != testAssetID || got.TypeID != synonymRelTypeID {
+		t.Fatalf("expected source=%s target=%s type=%s, got %+v", targetAssetID, testAssetID, synonymRelTypeID, got)
 	}
 }
 

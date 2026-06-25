@@ -46,12 +46,12 @@ func suggestionSuffix(label string, names []string, max int) string {
 type OperationType string
 
 const (
-	OpUpdateAttribute   OperationType = "update_attribute"
-	OpAddAttribute      OperationType = "add_attribute"
-	OpRemoveAttribute   OperationType = "remove_attribute"
-	OpUpdateProperty    OperationType = "update_property"
-	OpAddRelation       OperationType = "add_relation"
-	OpRemoveRelation    OperationType = "remove_relation"
+	OpUpdateAttribute      OperationType = "update_attribute"
+	OpAddAttribute         OperationType = "add_attribute"
+	OpRemoveAttribute      OperationType = "remove_attribute"
+	OpUpdateProperty       OperationType = "update_property"
+	OpAddRelation          OperationType = "add_relation"
+	OpRemoveRelation       OperationType = "remove_relation"
 	OpAddTag               OperationType = "add_tag"
 	OpSetResponsibility    OperationType = "set_responsibility"
 	OpRemoveResponsibility OperationType = "remove_responsibility"
@@ -231,6 +231,9 @@ type editContext struct {
 	attributeTypeByName  map[string]clients.EditAssetAssignmentAttributeType
 	attributesByTypeName map[string][]clients.EditAssetAttributeInstance
 	relationTypeByRole   map[string]clients.EditAssetAssignmentRelationType
+	// relationTypeByCoRole indexes inverse (TARGET_TO_SOURCE) relation types
+	// by their CoRole name so add_relation can author from the tail asset.
+	relationTypeByCoRole map[string]clients.EditAssetAssignmentRelationType
 	// roleByName is populated only when the request contains at least one
 	// set_responsibility op, saving a GET on calls that don't need roles.
 	roleByName map[string]clients.EditAssetRole
@@ -254,18 +257,30 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		return nil, fmt.Errorf("fetching current attributes: %w", err)
 	}
 
+	// Attributes from the per-asset endpoint; relations from the type-chain walk
+	// (see the respective client functions for why they differ).
+	effective, err := clients.GetEffectiveAssignmentForAsset(ctx, client, assetID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching effective assignment: %w", err)
+	}
+
 	domain, err := clients.GetDomainDetails(ctx, client, asset.Domain.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching domain for scoped assignment: %w", err)
+		return nil, fmt.Errorf("fetching domain for relation assignment: %w", err)
 	}
 	var domainTypeID string
 	if domain.Type != nil {
 		domainTypeID = domain.Type.ID
 	}
-
-	assignment, err := clients.GetAssignmentForAssetType(ctx, client, asset.Type.ID, domainTypeID)
+	relationAssignment, err := clients.GetAssignmentForAssetType(ctx, client, asset.Type.ID, domainTypeID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching scoped assignment: %w", err)
+		return nil, fmt.Errorf("fetching relation assignment: %w", err)
+	}
+
+	assignment := &clients.EditAssetAssignment{
+		AssetType:      effective.AssetType,
+		AttributeTypes: effective.AttributeTypes,
+		RelationTypes:  relationAssignment.RelationTypes,
 	}
 
 	byName := make(map[string]clients.EditAssetAssignmentAttributeType, len(assignment.AttributeTypes))
@@ -279,10 +294,17 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		attrsByTypeName[key] = append(attrsByTypeName[key], a)
 	}
 
-	relationByRole := make(map[string]clients.EditAssetAssignmentRelationType, len(assignment.RelationTypes))
+	relationByRole := make(map[string]clients.EditAssetAssignmentRelationType)
+	relationByCoRole := make(map[string]clients.EditAssetAssignmentRelationType)
 	for _, rt := range assignment.RelationTypes {
-		if rt.Role != "" {
-			relationByRole[normalize(rt.Role)] = rt
+		if rt.Reversed {
+			if rt.CoRole != "" {
+				relationByCoRole[normalize(rt.CoRole)] = rt
+			}
+		} else {
+			if rt.Role != "" {
+				relationByRole[normalize(rt.Role)] = rt
+			}
 		}
 	}
 
@@ -317,6 +339,7 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		attributeTypeByName:  byName,
 		attributesByTypeName: attrsByTypeName,
 		relationTypeByRole:   relationByRole,
+		relationTypeByCoRole: relationByCoRole,
 		roleByName:           rolesByName,
 		statusByName:         statusesByName,
 	}, nil
@@ -332,14 +355,25 @@ func (ec *editContext) availableAttributeNames() []string {
 	return names
 }
 
-// availableRelationRoles returns the forward-direction role names from
-// the assignment, for inclusion in error suggestions.
+// availableRelationRoles returns all usable role names (forward and inverse)
+// for inclusion in error suggestions, deduped — distinct relation types can
+// share a role name (e.g. "impacted by" toward different target types).
 func (ec *editContext) availableRelationRoles() []string {
+	seen := make(map[string]struct{}, len(ec.assignment.RelationTypes))
 	names := make([]string, 0, len(ec.assignment.RelationTypes))
 	for _, rt := range ec.assignment.RelationTypes {
-		if rt.Role != "" {
-			names = append(names, rt.Role)
+		name := rt.Role
+		if rt.Reversed {
+			name = rt.CoRole
 		}
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
 	}
 	return names
 }
@@ -399,7 +433,8 @@ type opPlan struct {
 	propertyPatch clients.EditAssetPatchRequest
 
 	// Relation ops (resolved during validation)
-	relationTypeID string
+	relationTypeID   string
+	relationReversed bool // true when add_relation matched a CoRole; flip source/target on execute
 
 	// Responsibility op (resolved during validation)
 	roleID string
