@@ -79,7 +79,7 @@ type Operation struct {
 
 	// Attribute ops — used by update_attribute, add_attribute, remove_attribute.
 	AttributeName string `json:"attributeName,omitempty" jsonschema:"Attribute type name (e.g. 'Definition', 'Note'). Used by update_attribute, add_attribute, remove_attribute. The server resolves this to the attribute type UUID via the asset's scoped assignment."`
-	Value         string `json:"value,omitempty" jsonschema:"New value. Used by update_attribute, add_attribute, and update_property."`
+	Value         string `json:"value,omitempty" jsonschema:"New value. Used by update_attribute, add_attribute, and update_property. For RICH_TEXT attribute types (e.g. 'Definition'), supply Markdown — the server converts it to HTML before writing."`
 
 	// update_property — whitelisted fields only.
 	Field string `json:"field,omitempty" jsonschema:"For update_property: one of 'name', 'displayName', 'statusId'. When field is 'statusId', value may be either the status UUID or the status name (e.g. 'Candidate', 'Accepted'); the server resolves names automatically. When field is 'name' and the asset's current displayName equals its current name (Collibra's create-time default), displayName is also updated to the new value so the user-facing label stays in sync — set field=displayName separately if the user has already customized it differently."`
@@ -126,20 +126,21 @@ type AssetSummary struct {
 
 // OperationResult is the outcome of a single operation in the input array.
 type OperationResult struct {
-	Operation           OperationType `json:"operation"`
-	Status              string        `json:"status" jsonschema:"'success' or 'error'."`
-	AttributeName       string        `json:"attributeName,omitempty"`
-	Field               string        `json:"field,omitempty"`
-	RelationType        string        `json:"relationType,omitempty"`
-	RelationID          string        `json:"relationId,omitempty"`
-	TargetAssetID       string        `json:"targetAssetId,omitempty"`
-	Tag                 string        `json:"tag,omitempty"`
-	Role                string        `json:"role,omitempty"`
-	UserID              string        `json:"userId,omitempty"`
-	PreviousValue       string        `json:"previousValue,omitempty"`
-	NewValue            string        `json:"newValue,omitempty"`
-	CascadedDisplayName bool          `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
-	Error               string        `json:"error,omitempty"`
+	Operation             OperationType `json:"operation"`
+	Status                string        `json:"status" jsonschema:"'success' or 'error'."`
+	AttributeName         string        `json:"attributeName,omitempty"`
+	Field                 string        `json:"field,omitempty"`
+	RelationType          string        `json:"relationType,omitempty"`
+	RelationID            string        `json:"relationId,omitempty"`
+	TargetAssetID         string        `json:"targetAssetId,omitempty"`
+	Tag                   string        `json:"tag,omitempty"`
+	Role                  string        `json:"role,omitempty"`
+	UserID                string        `json:"userId,omitempty"`
+	PreviousValue         string        `json:"previousValue,omitempty"`
+	NewValue              string        `json:"newValue,omitempty"`
+	CascadedDisplayName   bool          `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
+	ConvertedFromMarkdown bool          `json:"convertedFromMarkdown,omitempty" jsonschema:"True when the attribute value was treated as Markdown and converted to HTML before writing, because the attribute type is RICH_TEXT (e.g. 'Definition'). Only set on add_attribute / update_attribute results."`
+	Error                 string        `json:"error,omitempty"`
 }
 
 // NewTool returns the registered tool.
@@ -149,7 +150,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title: "Edit Asset",
 		Description: "Edit an existing Collibra asset by submitting a list of typed operations against a single assetId. " +
 			"Supported operations: " +
-			"update_attribute / add_attribute / remove_attribute (change, append, or clear an attribute value such as 'Definition' or 'Note', identified by attribute type name); " +
+			"update_attribute / add_attribute / remove_attribute (change, append, or clear an attribute value such as 'Definition' or 'Note', identified by attribute type name; for RICH_TEXT attributes like 'Definition' the value is treated as Markdown and converted to HTML before writing); " +
 			"update_property (whitelisted fields only: 'name' to rename — also updates displayName when it tracks the current name, so the user-facing label stays in sync; 'displayName' to change the display name; or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
 			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes a forward role name like 'is synonym of' plus the target assetId, remove_relation takes the relation instance UUID); " +
 			"add_tag (append a free-text tag without replacing existing tags); " +
@@ -187,6 +188,9 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		for i, op := range input.Operations {
 			plans[i] = validateOperation(ec, op)
 		}
+		// Render RICH_TEXT attribute values from Markdown to HTML before any
+		// write, so add/update_attribute matches create_asset's behaviour.
+		resolveAttributeWriteValues(ctx, collibraClient, plans)
 		executeValidPlans(ctx, collibraClient, ec, plans)
 
 		results := make([]OperationResult, len(plans))
@@ -426,8 +430,15 @@ type opPlan struct {
 
 	// Attribute ops (resolved during validation)
 	attributeTypeID   string
+	attributeKind     string // assignment discriminator, e.g. "StringAttributeType"
 	targetAttributeID string
 	previousValue     string
+
+	// writeValue is the attribute value actually submitted to Collibra. It
+	// defaults to op.Value but is replaced with the HTML rendering when the
+	// attribute type is RICH_TEXT (see resolveAttributeWriteValues).
+	writeValue            string
+	convertedFromMarkdown bool
 
 	// Property op (resolved during validation)
 	propertyPatch clients.EditAssetPatchRequest

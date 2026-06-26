@@ -43,9 +43,13 @@ const (
 // override attribute instances (e.g. to simulate ambiguous or missing ones)
 // and capture what the handler under test wrote to the API.
 type stub struct {
-	attributes               []clients.EditAssetAttributeInstance
-	asset                    *clients.EditAssetCore
-	attrTypesByID            map[string]clients.EditAssetAssignmentAttributeType
+	attributes    []clients.EditAssetAttributeInstance
+	asset         *clients.EditAssetCore
+	attrTypesByID map[string]clients.EditAssetAssignmentAttributeType
+	// attrStringTypeByID overrides the stringType returned by the full
+	// /attributeTypes/{id} endpoint; "RICH_TEXT" triggers Markdown→HTML
+	// conversion. Defaults to PLAIN_TEXT for any type not listed.
+	attrStringTypeByID       map[string]string
 	relationTypes            []clients.EditAssetAssignmentRelationType
 	roles                    []clients.EditAssetRole
 	statuses                 []clients.EditAssetStatus
@@ -148,6 +152,22 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		}
 		s.asset = &updated
 		_ = json.NewEncoder(w).Encode(updated)
+	})
+
+	// Full attribute-type lookup — supplies stringType so the handler can
+	// decide whether to render RICH_TEXT values from Markdown to HTML.
+	mux.HandleFunc("GET /rest/2.0/attributeTypes/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		stringType := s.attrStringTypeByID[id]
+		if stringType == "" {
+			stringType = "PLAIN_TEXT"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":                         id,
+			"name":                       s.attrTypesByID[id].Name,
+			"attributeTypeDiscriminator": "StringAttributeType",
+			"stringType":                 stringType,
+		})
 	})
 
 	mux.HandleFunc("GET /rest/2.0/attributes", func(w http.ResponseWriter, _ *http.Request) {
@@ -514,6 +534,76 @@ func TestEditAsset_AddAttribute_HappyPath(t *testing.T) {
 	}
 	if len(s.createdAttrs) != 1 || s.createdAttrs[0].TypeID != noteAttrTypeID {
 		t.Fatalf("expected POST to create Note attribute, got %+v", s.createdAttrs)
+	}
+}
+
+func TestEditAsset_UpdateAttribute_RichTextConvertsMarkdownToHTML(t *testing.T) {
+	s := newStub()
+	s.attrStringTypeByID = map[string]string{defAttrTypeID: "RICH_TEXT"}
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "**bold** term",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	got := s.patchedAttrs[defAttrInstanceID]
+	if !strings.Contains(got, "<strong>bold</strong>") {
+		t.Fatalf("expected HTML-rendered value written, got %q", got)
+	}
+	if !out.Results[0].ConvertedFromMarkdown {
+		t.Fatalf("expected ConvertedFromMarkdown=true on result")
+	}
+}
+
+func TestEditAsset_AddAttribute_RichTextConvertsMarkdownToHTML(t *testing.T) {
+	s := newStub()
+	s.attrStringTypeByID = map[string]string{noteAttrTypeID: "RICH_TEXT"}
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddAttribute, AttributeName: "Note", Value: "see [docs](http://x)",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q", out.Status)
+	}
+	if len(s.createdAttrs) != 1 {
+		t.Fatalf("expected one created attribute, got %+v", s.createdAttrs)
+	}
+	if !strings.Contains(s.createdAttrs[0].Value, "<a href=\"http://x\"") {
+		t.Fatalf("expected HTML-rendered value written, got %q", s.createdAttrs[0].Value)
+	}
+	if !out.Results[0].ConvertedFromMarkdown {
+		t.Fatalf("expected ConvertedFromMarkdown=true on result")
+	}
+}
+
+func TestEditAsset_UpdateAttribute_PlainTextNotConverted(t *testing.T) {
+	s := newStub()
+	// Definition defaults to PLAIN_TEXT — Markdown must pass through verbatim.
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "**not bold**",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := s.patchedAttrs[defAttrInstanceID]; got != "**not bold**" {
+		t.Fatalf("expected verbatim value, got %q", got)
+	}
+	if out.Results[0].ConvertedFromMarkdown {
+		t.Fatalf("expected ConvertedFromMarkdown=false for plain text")
 	}
 }
 

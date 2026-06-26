@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/markdown"
 	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/google/uuid"
 )
@@ -44,22 +45,25 @@ func validateUpdateAttribute(ec *editContext, plan opPlan) opPlan {
 		plan.result = newErrorResult(op, err.Error())
 		return plan
 	}
+	plan.attributeTypeID = attrType.ID
+	plan.attributeKind = attrType.Kind
 	plan.result = newSuccessResult(op)
 	return plan
 }
 
 func executeUpdateAttribute(ctx context.Context, client *http.Client, plan opPlan) opPlan {
-	updated, err := clients.PatchAttributeValue(ctx, client, plan.targetAttributeID, plan.op.Value)
+	updated, err := clients.PatchAttributeValue(ctx, client, plan.targetAttributeID, plan.writeValue)
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
 	}
 	plan.result = OperationResult{
-		Operation:     plan.op.Type,
-		Status:        "success",
-		AttributeName: plan.op.AttributeName,
-		PreviousValue: plan.previousValue,
-		NewValue:      updated.Value,
+		Operation:             plan.op.Type,
+		Status:                "success",
+		AttributeName:         plan.op.AttributeName,
+		PreviousValue:         plan.previousValue,
+		NewValue:              updated.Value,
+		ConvertedFromMarkdown: plan.convertedFromMarkdown,
 	}
 	return plan
 }
@@ -85,21 +89,23 @@ func validateAddAttribute(ec *editContext, plan opPlan) opPlan {
 		return plan
 	}
 	plan.attributeTypeID = attrType.ID
+	plan.attributeKind = attrType.Kind
 	plan.result = newSuccessResult(op)
 	return plan
 }
 
 func executeAddAttribute(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
-	created, err := clients.CreateAttributeOnAsset(ctx, client, ec.asset.ID, plan.attributeTypeID, plan.op.Value)
+	created, err := clients.CreateAttributeOnAsset(ctx, client, ec.asset.ID, plan.attributeTypeID, plan.writeValue)
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
 	}
 	plan.result = OperationResult{
-		Operation:     plan.op.Type,
-		Status:        "success",
-		AttributeName: plan.op.AttributeName,
-		NewValue:      created.Value,
+		Operation:             plan.op.Type,
+		Status:                "success",
+		AttributeName:         plan.op.AttributeName,
+		NewValue:              created.Value,
+		ConvertedFromMarkdown: plan.convertedFromMarkdown,
 	}
 	return plan
 }
@@ -479,6 +485,45 @@ func executeRemoveResponsibility(ctx context.Context, client *http.Client, ec *e
 }
 
 // --- shared helpers -----------------------------------------------------------
+
+// resolveAttributeWriteValues sets the value each add/update_attribute plan will
+// submit. For string-kind attribute types it fetches the full attribute type to
+// read its stringType and, when that is RICH_TEXT, renders the supplied value
+// from Markdown to HTML — mirroring create_asset so the two tools store rich
+// text identically. Plans that failed validation or aren't attribute writes are
+// left untouched. A failed attribute-type lookup falls back to the raw value.
+func resolveAttributeWriteValues(ctx context.Context, client *http.Client, plans []opPlan) {
+	for i := range plans {
+		p := &plans[i]
+		if p.result.Status == "error" {
+			continue
+		}
+		if p.op.Type != OpUpdateAttribute && p.op.Type != OpAddAttribute {
+			continue
+		}
+		p.writeValue = p.op.Value
+		if !isStringKind(p.attributeKind) {
+			continue
+		}
+		details, err := clients.GetAttributeTypeFull(ctx, client, p.attributeTypeID)
+		if err == nil && markdown.IsRichTextStringType(details.StringType) {
+			p.writeValue = markdown.ToHTML(p.op.Value)
+			p.convertedFromMarkdown = true
+		}
+	}
+}
+
+// isStringKind covers the assignment discriminators that map to a string value
+// at the API level — the kinds where stringType (and thus RICH_TEXT-ness) is
+// meaningful. Kept in sync with create_asset's equivalent.
+func isStringKind(discriminator string) bool {
+	switch discriminator {
+	case "StringAttributeType", "ScriptAttributeType", "SingleValueListAttributeType", "MultiValueListAttributeType":
+		return true
+	default:
+		return false
+	}
+}
 
 func validateAttributeValue(attrType clients.EditAssetAssignmentAttributeType, value string) error {
 	c := attrType.Constraints
