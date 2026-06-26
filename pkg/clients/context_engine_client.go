@@ -10,7 +10,9 @@ import (
 )
 
 type generateContextRequest struct {
-	AssetId string `json:"assetId"`
+	AssetId                string `json:"assetId"`
+	ContextSpecificationId string `json:"contextSpecificationId"`
+	IncludeMetadata        bool   `json:"includeMetadata"`
 }
 
 // GeneratedContextMetadata is the JSON envelope returned when includeMetadata=true.
@@ -32,7 +34,7 @@ type GenerateContextResult struct {
 	Metadata *GeneratedContextMetadata
 }
 
-// GenerateContext calls POST /rest/semanticBlueprint/v1/contextSpecifications/{id}/generate.
+// GenerateContext calls POST /rest/contextEngine/v1/contexts/generate.
 // When includeMetadata is false the raw YAML is returned in Result.Content.
 // When includeMetadata is true the JSON envelope is returned in Result.Metadata.
 func GenerateContext(
@@ -43,15 +45,18 @@ func GenerateContext(
 ) (*GenerateContextResult, error) {
 	slog.InfoContext(ctx, fmt.Sprintf("Generating context for asset %s with spec %s, includeMetadata: %v", assetId, contextSpecificationId, includeMetadata))
 
-	reqBody := generateContextRequest{AssetId: assetId}
+	reqBody := generateContextRequest{
+		AssetId:                assetId,
+		ContextSpecificationId: contextSpecificationId,
+		IncludeMetadata:        includeMetadata,
+	}
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("/rest/semanticBlueprint/v1/contextSpecifications/%s/generate", contextSpecificationId)
-	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", "/rest/contextEngine/v1/contexts/generate", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
