@@ -14,22 +14,48 @@ If you have a question or aren't sure how to contribute, the best way to get in 
 
 ## 🤝 How to Contribute
 
-We follow a standard branch-based workflow.
+We follow a standard branch-based workflow. The exact first step depends on whether you're a Collibra org member or an external contributor.
+
+### Are you an external contributor (not in the Collibra GitHub org)?
+
+You **cannot** push branches directly to `collibra/chip`. Only org members on specific teams have write access. Instead, use the standard **fork-based** workflow. This is fully supported, and it's the expected way for the wider community to contribute:
+
+1.  **Fork** the repository to your own account using the **Fork** button at the top of the [repository page](https://github.com/collibra/chip).
+2.  **Clone your fork** to your local machine:
+    ```bash
+    git clone https://github.com/<your-username>/chip.git
+    cd chip
+    ```
+3.  **Add the upstream remote** so you can keep your fork in sync:
+    ```bash
+    git remote add upstream https://github.com/collibra/chip.git
+    ```
+4.  Continue with **"Making your changes"** below. When you push, push to *your fork* (`origin`), then open a PR from your fork's branch to `collibra/chip:main`.
+
+> **Note:** On your first contribution, a maintainer will need to approve the CI workflows before they run on your PR. This is a one-time, automatic GitHub safeguard for outside contributors.
+
+### Are you a Collibra org member with write access?
+
+You can branch directly in this repository:
 
 1.  **Clone** the repository to your local machine:
     ```bash
     git clone https://github.com/collibra/chip.git
     cd chip
     ```
-2.  **Create a new branch** for your changes. Please use a descriptive name:
+2.  Continue with **"Making your changes"** below, pushing your branch directly to `origin`.
+
+### Making your changes
+
+1.  **Create a new branch** for your changes. Please use a descriptive name:
     ```bash
     # For a new feature
     git checkout -b feat/my-new-feature
     # For a bug fix
     git checkout -b fix/issue-123
     ```
-3.  **Make your changes** to the code.
-4.  **Run tests and linters** to ensure your code is ready.
+2.  **Make your changes** to the code.
+3.  **Run tests and linters** to ensure your code is ready.
     ```bash
     # Run tests (with the race detector!)
     go test -race ./...
@@ -37,13 +63,14 @@ We follow a standard branch-based workflow.
     # Run the linter (we use golangci-lint)
     golangci-lint run
     ```
-5.  **Commit your changes** using our commit message convention (see below).
-6.  **Push** your branch to the repository:
+4.  **Commit your changes** using our commit message convention (see below).
+5.  **Push** your branch:
     ```bash
+    # External contributors push to their fork; org members push to the repo.
     git push origin feat/my-new-feature
     ```
-7.  **Open a Pull Request (PR)** from your branch to our `main` branch.
-8.  A maintainer will review your PR, and we'll work with you to get it merged.
+6.  **Open a Pull Request (PR)** to the `main` branch of `collibra/chip`.
+7.  A maintainer (from `@collibra/ai-ml`, our code owners) will review your PR, and we'll work with you to get it merged.
 
 ---
 
