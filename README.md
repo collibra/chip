@@ -35,6 +35,8 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
+- [`create_dq_rule`](pkg/tools/create_dq_rule/) - Create a data quality rule (monitor) on an existing DQ job. `monitorType` is `FREEFORM_SQL` (full SQL query) or `SIMPLE_SQL` (single-column check); defaults to active and not suppressed. Uses the DQ monitoring API and requires permission to create rules on the target job
+- [`run_dq_job`](pkg/tools/run_dq_job/) - Trigger a run of an existing DQ job, executing its configured rules. Optional `runDate`/`runDateEnd` (with `dateKind` of `DATE` or `TIMESTAMP`) and `backrun` backfill; defaults to the current date/time. Returns the `jobRunId`. Requires permission to run the target job
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `update_attribute`, `add_attribute`, `remove_attribute` - change, append, or clear an attribute value (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
