@@ -12,12 +12,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- update_attribute ---------------------------------------------------------
+// --- set_attribute ------------------------------------------------------------
 
-func validateUpdateAttribute(ec *editContext, plan opPlan) opPlan {
+// validateSetAttribute resolves whether the op creates or patches, using the
+// asset's already-fetched attribute instances — so the right write is chosen up
+// front in a single call, no matter which tool name the caller used. (Also
+// serves the deprecated update_attribute alias.)
+func validateSetAttribute(ec *editContext, plan opPlan) opPlan {
 	op := plan.op
 	if strings.TrimSpace(op.AttributeName) == "" {
-		plan.result = newErrorResult(op, "attributeName is required for update_attribute")
+		plan.result = newErrorResult(op, "attributeName is required for set_attribute")
 		return plan
 	}
 	key := normalize(op.AttributeName)
@@ -29,30 +33,42 @@ func validateUpdateAttribute(ec *editContext, plan opPlan) opPlan {
 			suggestionSuffix("Attributes", ec.availableAttributeNames(), 10)))
 		return plan
 	}
-	instances := ec.attributesByTypeName[key]
-	switch len(instances) {
-	case 0:
-		plan.result = newErrorResult(op, fmt.Sprintf("no existing %q attribute to update on this asset (use add_attribute)", op.AttributeName))
-		return plan
-	case 1:
-		plan.targetAttributeID = instances[0].ID
-		plan.previousValue = instances[0].Value
-	default:
-		plan.result = newErrorResult(op, fmt.Sprintf("%d %q attributes on this asset — cannot disambiguate by name alone", len(instances), op.AttributeName))
-		return plan
-	}
 	if err := validateAttributeValue(attrType, op.Value); err != nil {
 		plan.result = newErrorResult(op, err.Error())
 		return plan
 	}
 	plan.attributeTypeID = attrType.ID
 	plan.attributeKind = attrType.Kind
+	instances := ec.attributesByTypeName[key]
+	switch len(instances) {
+	case 0:
+		// No value yet → create. (This is the case the old update_attribute
+		// erroneously rejected, forcing the agent into a second call.)
+		plan.attrCreate = true
+	case 1:
+		plan.targetAttributeID = instances[0].ID
+		plan.previousValue = instances[0].Value
+	default:
+		// Multiple values means a multi-valued attribute — "set" is ambiguous.
+		plan.result = newErrorResult(op, fmt.Sprintf(
+			"%d %q values on this asset — set_attribute can't pick one; use remove_attribute then add_attribute, or edit in the UI",
+			len(instances), op.AttributeName))
+		return plan
+	}
 	plan.result = newSuccessResult(op)
 	return plan
 }
 
-func executeUpdateAttribute(ctx context.Context, client *http.Client, plan opPlan) opPlan {
-	updated, err := clients.PatchAttributeValue(ctx, client, plan.targetAttributeID, plan.writeValue)
+func executeSetAttribute(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
+	if plan.attrCreate {
+		return executeAddAttribute(ctx, client, ec, plan)
+	}
+	return patchAttribute(ctx, client, plan.targetAttributeID, plan.previousValue, plan)
+}
+
+// patchAttribute updates an existing attribute instance to plan.writeValue.
+func patchAttribute(ctx context.Context, client *http.Client, attrID, prevValue string, plan opPlan) opPlan {
+	updated, err := clients.PatchAttributeValue(ctx, client, attrID, plan.writeValue)
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
@@ -61,7 +77,7 @@ func executeUpdateAttribute(ctx context.Context, client *http.Client, plan opPla
 		Operation:             plan.op.Type,
 		Status:                "success",
 		AttributeName:         plan.op.AttributeName,
-		PreviousValue:         plan.previousValue,
+		PreviousValue:         prevValue,
 		NewValue:              updated.Value,
 		ConvertedFromMarkdown: plan.convertedFromMarkdown,
 	}
@@ -498,7 +514,7 @@ func resolveAttributeWriteValues(ctx context.Context, client *http.Client, plans
 		if p.result.Status == "error" {
 			continue
 		}
-		if p.op.Type != OpUpdateAttribute && p.op.Type != OpAddAttribute {
+		if p.op.Type != OpSetAttribute && p.op.Type != OpUpdateAttribute && p.op.Type != OpAddAttribute {
 			continue
 		}
 		p.writeValue = p.op.Value
