@@ -70,6 +70,23 @@ func GetAssetSummary(
 	return ParseAssetDetailsGraphQLResponse(body)
 }
 
+// GetAssetWithRelations fetches a single asset (with its first page of incoming/outgoing relations)
+// by UUID string. Thin wrapper over GetAssetSummary for callers that have a string id.
+func GetAssetWithRelations(ctx context.Context, collibraHttpClient *http.Client, assetID string) (*Asset, error) {
+	id, err := uuid.Parse(assetID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid asset id %q: %w", assetID, err)
+	}
+	assets, err := GetAssetSummary(ctx, collibraHttpClient, id, "", "")
+	if err != nil {
+		return nil, err
+	}
+	if len(assets) == 0 {
+		return nil, fmt.Errorf("asset %s not found", assetID)
+	}
+	return &assets[0], nil
+}
+
 func ListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, limit int, offset int) (*AssetTypePagedResponse, error) {
 	slog.InfoContext(ctx, fmt.Sprintf("Listing asset types with limit: %d, offset: %d", limit, offset))
 
