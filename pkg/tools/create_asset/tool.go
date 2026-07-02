@@ -370,9 +370,13 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 	return resolved, nil
 }
 
-// validateRequiredAttributes checks that all required (min:1) attribute slots
-// in the scoped assignment have a corresponding entry in the resolved list.
-// Returns a validation error output if any required attribute is missing.
+// validateRequiredAttributes checks that every attribute slot required on the
+// asset type's OWN assignment has a corresponding entry in the resolved list.
+// Slots unioned in from a parent asset type's assignment are skipped even when
+// required there (DEV-202031): the parent's requirement is not part of this
+// type's assignment in the domain, and Collibra itself would accept the
+// create. Returns a validation error output if any required attribute is
+// missing.
 func validateRequiredAttributes(resolved []resolvedAttribute, assignment *clients.PrepareCreateScopedAssignment) *Output {
 	supplied := make(map[string]struct{}, len(resolved))
 	for _, r := range resolved {
@@ -380,7 +384,7 @@ func validateRequiredAttributes(resolved []resolvedAttribute, assignment *client
 	}
 	var missing []string
 	for _, slot := range assignment.Attributes {
-		if !slot.Required {
+		if !slot.Required || !slot.FromOwnAssignment {
 			continue
 		}
 		if _, ok := supplied[slot.AttributeTypeID]; !ok {
