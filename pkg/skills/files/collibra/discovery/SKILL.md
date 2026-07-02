@@ -58,3 +58,4 @@ Most chip tools require a UUID. The pattern:
 - Found a **column** → `get_column_semantics` for its data attributes and measures.
 - Found a **measure** → `get_measure_data` to trace it to underlying columns and tables.
 - Found a data asset whose lineage matters → `collibra/lineage`.
+- Need governed YAML output for an asset (semantic blueprints, metric definitions, etc.) → `collibra/context`.
