@@ -19,7 +19,7 @@ This skill explains the three-tool workflow: **discover** which specs are availa
 |---|---|---|---|
 | `list_context_specifications` | Discover which Context Specifications (Knowledge Graph blueprints) are available for an asset or asset type | List of spec names, descriptions, and IDs | Always, entry point |
 | `get_context_specification` | Inspect a spec's blueprint: which relations it defines, what fields it extracts from the Knowledge Graph, what transforms it applies | Complete YAML mapping and spec metadata | Optional, only when user asks what a spec covers |
-| `get_asset_context_from_specification` | Execute a spec's blueprint against an asset to extract and shape its governed metadata subset | Structured metadata (JSON, YAML, etc.) shaped for the target system | Always, output step |
+| `get_asset_details` (with `contextSpecificationId`) | Execute a spec's blueprint against an asset to extract and shape its governed metadata subset; returns full asset details alongside the generated context | Asset details + structured YAML context shaped for the target system | Always, output step |
 
 ---
 
@@ -56,7 +56,7 @@ User: "What metadata can I extract about Tables?"
 ### Handling multiple results
 
 #### Exactly one spec is returned
-Proceed directly to `get_asset_context_from_specification` as you have a clear path. No need to ask the user to decide.
+Proceed directly to `get_asset_details` with `contextSpecificationId` as you have a clear path. No need to ask the user to decide.
 
 #### Multiple specs are returned
 **Don't just hand the list to the user.** Be agentic:
@@ -126,8 +126,8 @@ A data engineer needs to generate a Snowflake Semantic View from a Data Product.
    → Finds "Data Product to Snowflake Semantic View" spec
 
 3. Execute context
-   get_asset_context_from_specification(assetId="dp-001", contextSpecificationId="snowflake-spec")
-   → Returns YAML formatted for Snowflake Semantic View
+   get_asset_details(assetId="dp-001", contextSpecificationId="snowflake-spec")
+   → Returns asset details + YAML formatted for Snowflake Semantic View in assetContext
 
 4. Deploy to Snowflake
 ```
@@ -142,16 +142,16 @@ An AI agent explores a Data Product by chaining context calls.
 
 ```
 1. Get Data Product overview
-   get_asset_context_from_specification(assetId="dp-001", contextSpecificationId="product-basic")
-   → Returns product metadata + related metric UUIDs
+   get_asset_details(assetId="dp-001", contextSpecificationId="product-basic")
+   → Returns asset details + product metadata + related metric UUIDs in assetContext
 
 2. Evaluate: Did context include metric UUIDs?
    ✓ Yes → proceed to step 3
    ✗ No → ask user or work with current data
 
 3. Drill into metric details (if UUIDs available)
-   get_asset_context_from_specification(assetId="metric-001", contextSpecificationId="metric-details")
-   → Returns metric definition, calculation rules, source tables
+   get_asset_details(assetId="metric-001", contextSpecificationId="metric-details")
+   → Returns asset details + metric definition, calculation rules, source tables in assetContext
 
 4. Evaluate: Can I chain further?
    ✓ If context returned table UUIDs → call table lineage context
@@ -163,13 +163,11 @@ An AI agent explores a Data Product by chaining context calls.
 ---
 
 ### Required parameters
-`get_asset_context_from_specification` requires both:
+`get_asset_details` with context generation requires:
 - `assetId`: the UUID of the specific asset to extract from
 - `contextSpecificationId`: the UUID of the Context Specification to execute
 
-### Optional: includeMetadata
-- `includeMetadata: false` (default): Returns only the extracted metadata shaped for the target system. Use this for most cases, it's what downstream systems (Snowflake, Databricks, AI agents) actually consume.
-- `includeMetadata: true`: Includes provenance alongside the content (spec name, asset type, execution timestamp). Use this only when you need to surface context and traceability to the user.
+The generated YAML context is returned in the `assetContext` field of the response. If context generation fails, `assetContextError` is set but the main asset details are still returned.
 
 ---
 
@@ -186,10 +184,8 @@ User: "Get me the semantic blueprint for the Orders table"
 2. list_context_specifications(assetId="abc-123")
    → Returns: [Semantic Blueprint v1]
 
-3. get_asset_context_from_specification(assetId="abc-123", 
-              contextSpecificationId="spec-456",
-              includeMetadata=false)
-   → Returns: {name: "Orders", description: "...", columns: [...], ...}
+3. get_asset_details(assetId="abc-123", contextSpecificationId="spec-456")
+   → Returns asset details; assetContext = {name: "Orders", description: "...", columns: [...], ...}
 
 4. Return the shaped metadata to the user
 ```
@@ -210,9 +206,8 @@ User: "What metadata can I extract about Tables?"
 
 3. Wait for user to select one
 
-4. get_asset_context_from_specification(assetId=<user-selected-asset>, 
-              contextSpecificationId=<selected-spec>)
-   → Return the shaped metadata
+4. get_asset_details(assetId=<user-selected-asset>, contextSpecificationId=<selected-spec>)
+   → Return the shaped metadata from assetContext
 ```
 
 ### Workflow 3: "Show me what a context extracts"
@@ -240,7 +235,7 @@ User: "What does the Semantic Blueprint context cover?"
 1. **Always resolve the asset UUID before calling `list_context_specifications` with `assetId`.**
    If the user names an asset, use `discover_data_assets` or `search_asset_keyword` to resolve it to a UUID first. See `collibra/discovery` for patterns.
 
-2. **Do not call `get_asset_context_from_specification` without a spec ID.**
+2. **Do not call `get_asset_details` with `contextSpecificationId` without first discovering the spec.**
    Always call `list_context_specifications` first to discover and confirm which spec to use, unless the user or another agent has explicitly provided a Context Specification UUID.
 
 3. **Inspect a spec before executing if your decision depends on its coverage.**

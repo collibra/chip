@@ -39,7 +39,7 @@ func TestGetAssetDetails(t *testing.T) {
 
 	client := testutil.NewClient(server)
 
-	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
+	output, err := tools.NewTool(client, false).Handler(t.Context(), tools.Input{
 		AssetID: assetId.String(),
 	})
 	if err != nil {
@@ -148,7 +148,7 @@ func TestGetAssetDetailsWithResponsibilities(t *testing.T) {
 
 	client := testutil.NewClient(server)
 
-	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
+	output, err := tools.NewTool(client, false).Handler(t.Context(), tools.Input{
 		AssetID: assetId.String(),
 	})
 	if err != nil {
@@ -201,6 +201,81 @@ func TestGetAssetDetailsWithResponsibilities(t *testing.T) {
 	}
 }
 
+func TestGetAssetDetailsWithContextSpecification(t *testing.T) {
+	assetId, _ := uuid.NewUUID()
+	specId, _ := uuid.NewUUID()
+	handler := http.NewServeMux()
+	handler.Handle("/graphql/knowledgeGraph/v1", testutil.JsonHandlerInOut(func(_ *http.Request, _ clients.Request) (int, clients.Response) {
+		return http.StatusOK, clients.Response{
+			Data: &clients.AssetQueryData{
+				Assets: []clients.Asset{{ID: assetId.String(), DisplayName: "My Asset"}},
+			},
+		}
+	}))
+	handler.Handle("/rest/2.0/responsibilities", testutil.JsonHandlerOut(func(*http.Request) (int, clients.ResponsibilityPagedResponse) {
+		return http.StatusOK, clients.ResponsibilityPagedResponse{Limit: 100}
+	}))
+	handler.HandleFunc("POST /rest/contextEngine/v1/contexts/generate", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("name: My Asset\ntype: Table\n"))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	output, err := tools.NewTool(testutil.NewClient(server), true).Handler(t.Context(), tools.Input{
+		AssetID:                assetId.String(),
+		ContextSpecificationId: specId.String(),
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if !output.Found {
+		t.Fatalf("Asset not found")
+	}
+	if output.AssetContextError != "" {
+		t.Fatalf("Unexpected context error: %q", output.AssetContextError)
+	}
+	if output.AssetContext != "name: My Asset\ntype: Table\n" {
+		t.Fatalf("Expected YAML context, got: %q", output.AssetContext)
+	}
+}
+
+func TestGetAssetDetailsContextSpecFeatureDisabled(t *testing.T) {
+	assetId, _ := uuid.NewUUID()
+	specId, _ := uuid.NewUUID()
+	handler := http.NewServeMux()
+	handler.Handle("/graphql/knowledgeGraph/v1", testutil.JsonHandlerInOut(func(_ *http.Request, _ clients.Request) (int, clients.Response) {
+		return http.StatusOK, clients.Response{
+			Data: &clients.AssetQueryData{
+				Assets: []clients.Asset{{ID: assetId.String(), DisplayName: "My Asset"}},
+			},
+		}
+	}))
+	handler.Handle("/rest/2.0/responsibilities", testutil.JsonHandlerOut(func(*http.Request) (int, clients.ResponsibilityPagedResponse) {
+		return http.StatusOK, clients.ResponsibilityPagedResponse{Limit: 100}
+	}))
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	output, err := tools.NewTool(testutil.NewClient(server), false).Handler(t.Context(), tools.Input{
+		AssetID:                assetId.String(),
+		ContextSpecificationId: specId.String(),
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if !output.Found {
+		t.Fatalf("Asset not found")
+	}
+	if output.AssetContext != "" {
+		t.Fatalf("Expected no context when feature disabled, got: %q", output.AssetContext)
+	}
+	if output.AssetContextError == "" {
+		t.Fatalf("Expected AssetContextError when feature is disabled")
+	}
+}
+
 // TestGetAssetDetailsSurfacesEmptyAssignableAttribute: an Acronym with an empty
 // required Definition (only Note has a value) must still surface Definition in
 // assignableAttributes as isSet=false, required=true.
@@ -236,7 +311,7 @@ func TestGetAssetDetailsSurfacesEmptyAssignableAttribute(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	output, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), tools.Input{AssetID: assetId.String()})
+	output, err := tools.NewTool(testutil.NewClient(server), false).Handler(t.Context(), tools.Input{AssetID: assetId.String()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
