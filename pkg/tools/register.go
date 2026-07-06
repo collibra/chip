@@ -16,8 +16,12 @@ import (
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
+	"github.com/collibra/chip/pkg/tools/find_connections"
+	"github.com/collibra/chip/pkg/tools/find_domain_types"
+	"github.com/collibra/chip/pkg/tools/find_users"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
+	"github.com/collibra/chip/pkg/tools/get_catalog_job_status"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
 	"github.com/collibra/chip/pkg/tools/get_context_specification"
 	"github.com/collibra/chip/pkg/tools/get_data_source_setup_guide"
@@ -92,16 +96,24 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
 	}
+	toolRegister(server, toolConfig, find_users.NewTool(client))
+	toolRegister(server, toolConfig, find_domain_types.NewTool(client))
+	toolRegister(server, toolConfig, find_connections.NewTool(client))
 	toolRegister(server, toolConfig, list_edge_sites.NewTool(client))
 	toolRegister(server, toolConfig, list_capability_types.NewTool(client))
 	toolRegister(server, toolConfig, create_community.NewTool(client))
 	toolRegister(server, toolConfig, create_domain.NewTool(client))
-	toolRegister(server, toolConfig, upload_file.NewTool(client))
+	if toolConfig.AllowLocalFileUpload {
+		toolRegister(server, toolConfig, upload_file.NewToolWithFilePath(client))
+	} else {
+		toolRegister(server, toolConfig, upload_file.NewTool(client))
+	}
 	toolRegister(server, toolConfig, get_data_source_setup_guide.NewTool(client))
 	toolRegister(server, toolConfig, create_connection.NewTool(client))
 	toolRegister(server, toolConfig, create_capability.NewTool(client))
 	toolRegister(server, toolConfig, test_connection.NewTool(client))
 	toolRegister(server, toolConfig, get_job_status.NewTool(client))
+	toolRegister(server, toolConfig, get_catalog_job_status.NewTool(client))
 	toolRegister(server, toolConfig, configure_database.NewTool(client))
 	toolRegister(server, toolConfig, start_ingestion.NewTool(client))
 

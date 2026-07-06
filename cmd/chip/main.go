@@ -31,11 +31,12 @@ func main() {
 	client := newCollibraClient(config)
 
 	toolConfig := &chip.ServerToolConfig{
-		EnabledTools:     config.Mcp.EnabledTools,
-		DisabledTools:    config.Mcp.DisabledTools,
-		EnableDebugTools: config.Mcp.EnableDebugTools,
-		Experimental:  config.Mcp.Experimental,
-		SkillsDir:     config.Mcp.SkillsDir,
+		EnabledTools:         config.Mcp.EnabledTools,
+		DisabledTools:        config.Mcp.DisabledTools,
+		EnableDebugTools:     config.Mcp.EnableDebugTools,
+		AllowLocalFileUpload: config.Mcp.AllowLocalFileUpload,
+		Experimental:         config.Mcp.Experimental,
+		SkillsDir:            config.Mcp.SkillsDir,
 	}
 
 	serverOpts := []chip.ServerOption{

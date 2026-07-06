@@ -182,18 +182,16 @@ func TestCreateConnection_AdditionalProperties_CustomKey(t *testing.T) {
 	}
 }
 
-func TestCreateConnection_DriverJarUpload(t *testing.T) {
+// create_connection deliberately does not fetch driver files from arbitrary URLs
+// (Collibra Marketplace requires an authenticated download — see upload_file's
+// policy doc) — the only supported path is referencing an artifact URI that was
+// already uploaded via upload_file, passed through like any other parameter.
+func TestCreateConnection_PreUploadedDriverJar(t *testing.T) {
 	siteID, _ := uuid.NewUUID()
 	connID, _ := uuid.NewUUID()
+	const uploadedJarURI = "jar://test-uuid/driver.jar"
 
-	var uploadedJarURI string
 	handler := http.NewServeMux()
-	handler.HandleFunc("POST /edge/api/rest/v2/upload", func(w http.ResponseWriter, r *http.Request) {
-		uploadedJarURI = "jar://test-uuid/driver.jar"
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`"` + uploadedJarURI + `"`))
-	})
 	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.Connection) {
 		if in.Parameters["driver-jar"] != uploadedJarURI {
 			t.Fatalf("expected driver-jar %q, got %v", uploadedJarURI, in.Parameters["driver-jar"])
@@ -206,21 +204,15 @@ func TestCreateConnection_DriverJarUpload(t *testing.T) {
 		}
 	}))
 
-	edgeServer := httptest.NewServer(handler)
-	defer edgeServer.Close()
+	server := httptest.NewServer(handler)
+	defer server.Close()
 
-	driverServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("fake jar bytes"))
-	}))
-	defer driverServer.Close()
-
-	client := testutil.NewClient(edgeServer)
+	client := testutil.NewClient(server)
 	output, err := tools.NewTool(client).Handler(t.Context(), tools.Input{
-		Name:              "local-postgres-source",
-		TypeID:            "Generic",
-		EdgeSiteID:        siteID.String(),
-		DriverJarURL:      driverServer.URL,
-		DriverJarFilename: "driver.jar",
+		Name:       "local-postgres-source",
+		TypeID:     "Generic",
+		EdgeSiteID: siteID.String(),
+		Parameters: map[string]any{"driver-jar": uploadedJarURI},
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)

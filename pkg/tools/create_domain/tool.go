@@ -18,7 +18,7 @@ type Input struct {
 	Name                         string `json:"name" jsonschema:"The domain name."`
 	Description                  string `json:"description,omitempty" jsonschema:"Optional description of the domain."`
 	CommunityID                  string `json:"communityId" jsonschema:"UUID of the community (created via create_community) this domain belongs to."`
-	TypeID                       string `json:"typeId" jsonschema:"UUID of the domain type. There is no discovery endpoint for this in DGC's public API; the well-known 'Physical Data Dictionary' domain type id (00000000-0000-0000-0000-000000030011), used for jdbc-ingestion databases, is stable across DGC versions."`
+	TypeID                       string `json:"typeId" jsonschema:"UUID of the domain type. Use find_domain_types to resolve a name (e.g. 'Physical Data Dictionary', used for jdbc-ingestion databases) to its UUID."`
 	ExcludedFromAutoHyperlinking bool   `json:"excludedFromAutoHyperlinking,omitempty" jsonschema:"Optional. If true, assets in this domain are excluded from automatic hyperlinking."`
 }
 
