@@ -98,7 +98,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Handler: func(ctx context.Context, input Input) (Output, error) {
 			return upload(ctx, collibraClient, input.Filename, input.ContentBase64, "")
 		},
-		Permissions: []string{},
+		Permissions: []string{"dgc.edge-integration-capability-manage"},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
 	}
 }
@@ -114,7 +114,7 @@ func NewToolWithFilePath(collibraClient *http.Client) *chip.Tool[InputWithFilePa
 		Handler: func(ctx context.Context, input InputWithFilePath) (Output, error) {
 			return upload(ctx, collibraClient, input.Filename, input.ContentBase64, input.FilePath)
 		},
-		Permissions: []string{},
+		Permissions: []string{"dgc.edge-integration-capability-manage"},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
 	}
 }

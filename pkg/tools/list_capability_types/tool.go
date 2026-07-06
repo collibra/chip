@@ -30,7 +30,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title:       "List Capability and Connection Types",
 		Description: "Lists the capability and connection types available on an edge site. Without query, returns just the ids (an edge site can have 80+ types, each with a large manifest). Pass query to filter to matching types and get their full manifest describing expected parameters for create_capability/create_connection.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.edge-view-connections-and-capabilities"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }

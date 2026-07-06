@@ -35,7 +35,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title:       "Create or Update Edge Capability",
 		Description: "Creates or updates an Edge capability (e.g. jdbc-ingestion) via the private Edge capability management API. Does not run the capability — use start_ingestion to trigger a jdbc-ingestion run.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.edge-integration-capability-manage"},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
 	}
 }

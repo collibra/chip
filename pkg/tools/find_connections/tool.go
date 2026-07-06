@@ -31,7 +31,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title:       "Find Edge Connections",
 		Description: "Finds Edge connections by name (and optionally edge site). Use this to pick up a connection that already exists — e.g. one the user created manually via the DGC/Edge UI for a driver file too large to pass through upload_file — instead of creating a duplicate with create_connection.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.edge-view-connections-and-capabilities"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }

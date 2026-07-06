@@ -31,7 +31,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title:       "Test Edge Connection",
 		Description: "Tests whether an Edge connection can reach its data source. Without timeoutSec, returns immediately with a jobId to poll via get_job_status; with timeoutSec, waits up to that many seconds and returns the final result.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.edge-integration-capability-manage"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
