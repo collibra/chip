@@ -7,7 +7,12 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/configure_database"
 	"github.com/collibra/chip/pkg/tools/create_asset"
+	"github.com/collibra/chip/pkg/tools/create_capability"
+	"github.com/collibra/chip/pkg/tools/create_community"
+	"github.com/collibra/chip/pkg/tools/create_connection"
+	"github.com/collibra/chip/pkg/tools/create_domain"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
@@ -15,7 +20,9 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
 	"github.com/collibra/chip/pkg/tools/get_context_specification"
+	"github.com/collibra/chip/pkg/tools/get_data_source_setup_guide"
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
+	"github.com/collibra/chip/pkg/tools/get_job_status"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
@@ -24,8 +31,10 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/init_data_contract"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
+	"github.com/collibra/chip/pkg/tools/list_capability_types"
 	"github.com/collibra/chip/pkg/tools/list_context_specifications"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
+	"github.com/collibra/chip/pkg/tools/list_edge_sites"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
@@ -35,6 +44,9 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/tools/start_ingestion"
+	"github.com/collibra/chip/pkg/tools/test_connection"
+	"github.com/collibra/chip/pkg/tools/upload_file"
 )
 
 // ContextSpecificationsFeature is the experimental-feature identifier used to
@@ -80,6 +92,18 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
 	}
+	toolRegister(server, toolConfig, list_edge_sites.NewTool(client))
+	toolRegister(server, toolConfig, list_capability_types.NewTool(client))
+	toolRegister(server, toolConfig, create_community.NewTool(client))
+	toolRegister(server, toolConfig, create_domain.NewTool(client))
+	toolRegister(server, toolConfig, upload_file.NewTool(client))
+	toolRegister(server, toolConfig, get_data_source_setup_guide.NewTool(client))
+	toolRegister(server, toolConfig, create_connection.NewTool(client))
+	toolRegister(server, toolConfig, create_capability.NewTool(client))
+	toolRegister(server, toolConfig, test_connection.NewTool(client))
+	toolRegister(server, toolConfig, get_job_status.NewTool(client))
+	toolRegister(server, toolConfig, configure_database.NewTool(client))
+	toolRegister(server, toolConfig, start_ingestion.NewTool(client))
 
 	if toolConfig.EnableDebugTools {
 		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))
