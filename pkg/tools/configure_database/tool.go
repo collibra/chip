@@ -38,13 +38,16 @@ type Input struct {
 	DatabaseName     string   `json:"databaseName,omitempty" jsonschema:"Optional. Exact name of the database (catalog) to register, as it appears at the data source. Required if the data source exposes more than one database/catalog through this connection; if there is exactly one, it is selected automatically."`
 	CommunityID      string   `json:"communityId" jsonschema:"UUID of the community the Database asset (and its automatically created domain) will be created in."`
 	ParentSystemID   string   `json:"parentSystemId" jsonschema:"UUID of the parent System asset the Database asset will be linked to."`
-	OwnerIDs         []string `json:"ownerIds" jsonschema:"UUIDs of the users to assign as owners of the Database asset."`
+	OwnerIDs         []string `json:"ownerIds" jsonschema:"UUIDs of the users to assign as owners of the Database asset. Use find_users to resolve a name (e.g. 'Admin') to its UUID."`
 	Description      string   `json:"description,omitempty" jsonschema:"Optional description of the Database asset."`
 
-	Include        string `json:"include,omitempty" jsonschema:"Optional. Comma-separated table name pattern to synchronize, '*' wildcard supported. Defaults to '*' (all tables)."`
-	Exclude        string `json:"exclude,omitempty" jsonschema:"Optional. Comma-separated table name pattern to exclude from synchronization."`
-	TargetDomainID string `json:"targetDomainId,omitempty" jsonschema:"Optional. UUID of a domain to create synchronized assets in. If omitted, an automatically created domain per schema is used."`
-	SkipViews      bool   `json:"skipViews,omitempty" jsonschema:"Optional. If true, database views are excluded from synchronization."`
+	Include                     string `json:"include,omitempty" jsonschema:"Optional. Comma-separated table name pattern to synchronize, '*' wildcard supported. Defaults to '*' (all tables)."`
+	Exclude                     string `json:"exclude,omitempty" jsonschema:"Optional. Comma-separated table name pattern to exclude from synchronization."`
+	TargetDomainID              string `json:"targetDomainId,omitempty" jsonschema:"Optional. UUID of a domain to create synchronized assets in. If omitted, an automatically created domain per schema is used."`
+	SkipViews                   bool   `json:"skipViews,omitempty" jsonschema:"Optional. If true, database views are excluded from synchronization."`
+	RegisterSourceTags          bool   `json:"registerSourceTags,omitempty" jsonschema:"Optional. If true, registers tags from the data source (when supported by the driver)."`
+	IngestSemanticViews         bool   `json:"ingestSemanticViews,omitempty" jsonschema:"Optional. If true, ingests semantic views (when supported by the driver)."`
+	RegisterDataUsageStatistics bool   `json:"registerDataUsageStatistics,omitempty" jsonschema:"Optional. If true, calculates data usage statistics for the synchronized tables (when supported by the data source)."`
 }
 
 type Output struct {
@@ -58,7 +61,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "configure_database",
 		Title:       "Configure Database for Ingestion",
-		Description: "Discovers a database through an Edge connection, registers it as a Database asset, and configures which tables get synchronized. Prerequisite for start_ingestion. Assumes the target community, and parent System asset already exist.",
+		Description: "Discovers a database through an Edge connection, registers it as a Database asset, and configures which tables get synchronized. Prerequisite for start_ingestion. Assumes the target community and parent System asset already exist (create_community/create_domain/create_asset), and that a jdbc-ingestion capability referencing this connection has already been created via create_capability — the discovery/refresh steps here only find data because that capability actually performs the crawl; without one, this fails with a discovery-timeout-shaped error even though the real cause is the missing capability.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
@@ -75,6 +78,9 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 		if err := validation.UUID("parentSystemId", input.ParentSystemID); err != nil {
 			return Output{}, err
+		}
+		if len(input.OwnerIDs) == 0 {
+			return Output{}, fmt.Errorf("ownerIds must contain at least one user UUID — use find_users to resolve a name to an id")
 		}
 		if err := validation.UUIDs("ownerIds", input.OwnerIDs); err != nil {
 			return Output{}, err
@@ -115,10 +121,13 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				SchemaConnectionID: schemaConnection.ID,
 				SynchronizationRules: []clients.MetadataSynchronizationRule{
 					{
-						Include:        include,
-						Exclude:        input.Exclude,
-						TargetDomainID: input.TargetDomainID,
-						SkipViews:      input.SkipViews,
+						Include:                     include,
+						Exclude:                     input.Exclude,
+						TargetDomainID:              input.TargetDomainID,
+						SkipViews:                   input.SkipViews,
+						RegisterSourceTags:          input.RegisterSourceTags,
+						IngestSemanticViews:         input.IngestSemanticViews,
+						RegisterDataUsageStatistics: input.RegisterDataUsageStatistics,
 					},
 				},
 			}
@@ -157,7 +166,7 @@ func discoverDatabaseConnection(ctx context.Context, client *http.Client, edgeCo
 	}
 
 	if len(connections) == 0 {
-		return nil, fmt.Errorf("no database connections were discovered for edge connection %s after %d attempts; the refresh may still be in progress — retry this tool call", edgeConnectionID, pollAttempts)
+		return nil, fmt.Errorf("no database connections were discovered for edge connection %s after %d attempts. Either the refresh is still in progress (retry this tool call), or — more commonly — no capability referencing this connection exists yet: the discovery/refresh only finds data because a jdbc-ingestion capability actually performs the crawl. Verify a capability exists for this connection (create_capability) before retrying", edgeConnectionID, pollAttempts)
 	}
 
 	if databaseName != "" {
@@ -196,5 +205,5 @@ func discoverSchemaConnections(ctx context.Context, client *http.Client, databas
 		}
 	}
 
-	return nil, fmt.Errorf("no schemas were discovered for database connection %s after %d attempts; the refresh may still be in progress — retry this tool call", databaseConnectionID, pollAttempts)
+	return nil, fmt.Errorf("no schemas were discovered for database connection %s after %d attempts. Either the refresh is still in progress (retry this tool call), or no capability referencing this connection exists yet — verify with create_capability", databaseConnectionID, pollAttempts)
 }

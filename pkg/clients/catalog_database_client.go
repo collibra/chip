@@ -50,12 +50,16 @@ type AddDatabaseRequest struct {
 	Description          string   `json:"description,omitempty"`
 }
 
-// MetadataSynchronizationRule defines which tables of a schema get synchronized.
+// MetadataSynchronizationRule defines which tables of a schema get synchronized and
+// what additional metadata is captured for them.
 type MetadataSynchronizationRule struct {
-	Include        string `json:"include,omitempty"`
-	Exclude        string `json:"exclude,omitempty"`
-	TargetDomainID string `json:"targetDomainId,omitempty"`
-	SkipViews      bool   `json:"skipViews,omitempty"`
+	Include                     string `json:"include,omitempty"`
+	Exclude                     string `json:"exclude,omitempty"`
+	TargetDomainID              string `json:"targetDomainId,omitempty"`
+	SkipViews                   bool   `json:"skipViews,omitempty"`
+	RegisterSourceTags          bool   `json:"registerSourceTags,omitempty"`
+	IngestSemanticViews         bool   `json:"ingestSemanticViews,omitempty"`
+	RegisterDataUsageStatistics bool   `json:"registerDataUsageStatistics,omitempty"`
 }
 
 // SchemaMetadataConfiguration links a schema connection to the synchronization rules

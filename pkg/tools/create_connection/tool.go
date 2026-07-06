@@ -6,7 +6,6 @@ package create_connection
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -22,10 +21,7 @@ type Input struct {
 	TypeID       string         `json:"typeId" jsonschema:"The id of the connection type (e.g. 'Generic' for a generic JDBC connection, or a vendor-specific type such as a Snowflake connection type). Determines which parameters are expected — use list_capability_types to inspect a type's manifest."`
 	EdgeSiteID   string         `json:"edgeSiteId" jsonschema:"UUID of the edge site where this connection will be valid. Use the list_edge_sites tool to discover available sites."`
 	VaultID      string         `json:"vaultId,omitempty" jsonschema:"Optional UUID of the vault to retrieve vault-backed parameters from."`
-	Parameters   map[string]any `json:"parameters" jsonschema:"Fixed connection parameters as defined by the connection type's manifest (e.g. driver-class, connection-string for the 'Generic' JDBC connection type). If driverJarUrl is provided, the driver-jar parameter is set automatically and does not need to be included here. Do NOT put open-ended/vendor-specific properties (e.g. a Snowflake connection's Role, Warehouse, User, Database, or a private key file) here — use additionalProperties instead. If you don't already know a data source's driver class, connection string format, or required properties, call get_data_source_setup_guide first instead of guessing."`
-
-	DriverJarURL      string `json:"driverJarUrl,omitempty" jsonschema:"Optional. A URL to download a JDBC driver jar from (e.g. a Maven Central artifact URL). If provided, the jar is downloaded and uploaded to the edge site, and the resulting artifact URI is set as the 'driver-jar' connection parameter."`
-	DriverJarFilename string `json:"driverJarFilename,omitempty" jsonschema:"Required if driverJarUrl is provided. The filename to upload the driver jar as (e.g. 'postgresql-42.7.11.jar')."`
+	Parameters   map[string]any `json:"parameters" jsonschema:"Fixed connection parameters as defined by the connection type's manifest (e.g. driver-class, connection-string for the 'Generic' JDBC connection type). Do NOT put open-ended/vendor-specific properties (e.g. a Snowflake connection's Role, Warehouse, User, Database, or a private key file) here — use additionalProperties instead. If you don't already know a data source's driver class, connection string format, required properties, or verified driver source, call get_data_source_setup_guide first instead of guessing. For 'driver-jar' (and any other FILE-type parameter), the value is an artifact URI from upload_file — see that tool's policy on where driver files may come from."`
 
 	AdditionalProperties    []AdditionalProperty `json:"additionalProperties,omitempty" jsonschema:"Optional. Open-ended, connection-type-defined properties beyond the fixed manifest parameters — e.g. a Snowflake connection (via the 'Generic' JDBC connection type) uses this for Role, Warehouse, User, Database, and private_key_file. Confirmed shape: each entry is injected as {name, type, value, secret} into a single array-valued parameter (see additionalPropertiesKey). For a FILE-type property, first call upload_file and use its returned artifact URI as this entry's value with type='file'."`
 	AdditionalPropertiesKey string               `json:"additionalPropertiesKey,omitempty" jsonschema:"Optional. The manifest parameter name that additionalProperties are grouped under. Defaults to 'connection-properties', which is correct for the 'Generic' JDBC connection type (confirmed live). Other connection types may use a different key (e.g. AWS/GCP connections use 'additional-parameters') — check the type's manifest via list_capability_types if unsure."`
@@ -53,7 +49,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "create_connection",
 		Title:       "Create or Update Edge Connection",
-		Description: "Creates or updates an Edge connection (e.g. a JDBC connection for the jdbc-ingestion capability) via the private Edge connection management API.",
+		Description: "Creates or updates an Edge connection (e.g. a JDBC connection for the jdbc-ingestion capability) via the private Edge connection management API. Does not download driver files itself — see upload_file for how driver jars must be sourced (Collibra Marketplace only, not arbitrary URLs).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
@@ -75,17 +71,6 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		parameters := input.Parameters
 		if parameters == nil {
 			parameters = map[string]any{}
-		}
-
-		if input.DriverJarURL != "" {
-			if input.DriverJarFilename == "" {
-				return Output{}, fmt.Errorf("driverJarFilename is required when driverJarUrl is provided")
-			}
-			uri, err := downloadAndUploadDriver(ctx, collibraClient, input.DriverJarURL, input.DriverJarFilename)
-			if err != nil {
-				return Output{Success: false, Error: fmt.Sprintf("failed to prepare driver jar: %s", err.Error())}, nil
-			}
-			parameters["driver-jar"] = uri
 		}
 
 		if len(input.AdditionalProperties) > 0 {
@@ -134,31 +119,4 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 
 		return Output{Connection: connection, Success: true}, nil
 	}
-}
-
-// downloadAndUploadDriver fetches the driver jar bytes from an arbitrary external URL
-// (not routed through the Collibra client, since it points outside the tenant) and
-// re-uploads them to the edge site via the authenticated Collibra client.
-func downloadAndUploadDriver(ctx context.Context, collibraClient *http.Client, url, filename string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Errorf("building driver download request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("downloading driver jar: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("downloading driver jar: unexpected status %d", resp.StatusCode)
-	}
-
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading driver jar content: %w", err)
-	}
-
-	return clients.UploadFile(ctx, collibraClient, filename, content)
 }

@@ -94,6 +94,11 @@ func initConfigOptions() {
 	_ = viper.BindPFlag("mcp.enable-debug-tools", pflag.Lookup("enable-debug-tools"))
 	viper.SetDefault("mcp.enable-debug-tools", false)
 
+	pflag.Bool("allow-local-file-upload", false, "Allow upload_file to read files directly from this machine's local disk (filePath input); off by default. Only meaningful when running chip locally against your own files — never enable this for a shared/remote deployment (env: COLLIBRA_MCP_ALLOW_LOCAL_FILE_UPLOAD)")
+	_ = viper.BindEnv("mcp.allow-local-file-upload", "COLLIBRA_MCP_ALLOW_LOCAL_FILE_UPLOAD")
+	_ = viper.BindPFlag("mcp.allow-local-file-upload", pflag.Lookup("allow-local-file-upload"))
+	viper.SetDefault("mcp.allow-local-file-upload", false)
+
 	pflag.StringSlice("experimental", []string{}, "Comma-separated list of opt-in experimental features to enable (env: COLLIBRA_MCP_EXPERIMENTAL). See EXPERIMENTAL FEATURES below for valid names.")
 	_ = viper.BindEnv("mcp.experimental", "COLLIBRA_MCP_EXPERIMENTAL")
 	_ = viper.BindPFlag("mcp.experimental", pflag.Lookup("experimental"))
@@ -128,6 +133,7 @@ ENVIRONMENT VARIABLES:
   COLLIBRA_MCP_ENABLED_TOOLS    Optional comma-separated list of tool names to enable instead of enabling all tools, cannot be used with disabled-tools
   COLLIBRA_MCP_DISABLED_TOOLS   Optional comma-separated list of tool names to disable while enabling the remaining tools, cannot be used with enabled-tools
   COLLIBRA_MCP_ENABLE_DEBUG_TOOLS  Enable debug tools (default: false)
+  COLLIBRA_MCP_ALLOW_LOCAL_FILE_UPLOAD  Allow upload_file to read files from local disk (default: false); local/personal use only, never for a shared deployment
   COLLIBRA_MCP_EXPERIMENTAL     Comma-separated list of opt-in experimental features to enable (see EXPERIMENTAL FEATURES below)
   COLLIBRA_MCP_SKILLS_DIR       Optional path to an external skills directory merged on top of the embedded catalog (requires the 'skills' experimental feature)
 
@@ -162,6 +168,7 @@ CONFIGURATION FILE EXAMPLE:
     #   - "tool3"
     #   - "tool4"
     enable-debug-tools: false  # Optional: enable debug tools (default: false)
+    allow-local-file-upload: false  # Optional: allow upload_file to read local files (default: false; local use only)
     # experimental:  # Optional: opt-in experimental features (off by default)
     #   - "skills"
     # skills-dir: "/path/to/skills"  # Optional: external skills dir (requires the 'skills' experimental feature)
@@ -218,14 +225,15 @@ type CollibraApiConfig struct {
 
 // ServerConfig holds server configuration
 type McpConfig struct {
-	Mode          string      `mapstructure:"mode"` // "stdio", "http", "http-sse", or "http-streamable"
-	Http          HttpConfig  `mapstructure:"http"`
-	Stdio         StdioConfig `mapstructure:"stdio"`
-	EnabledTools  []string    `mapstructure:"enabled-tools"`
-	DisabledTools []string    `mapstructure:"disabled-tools"`
-	EnableDebugTools bool     `mapstructure:"enable-debug-tools"`
-	Experimental  []string    `mapstructure:"experimental"`
-	SkillsDir     string      `mapstructure:"skills-dir"`
+	Mode                 string      `mapstructure:"mode"` // "stdio", "http", "http-sse", or "http-streamable"
+	Http                 HttpConfig  `mapstructure:"http"`
+	Stdio                StdioConfig `mapstructure:"stdio"`
+	EnabledTools         []string    `mapstructure:"enabled-tools"`
+	DisabledTools        []string    `mapstructure:"disabled-tools"`
+	EnableDebugTools     bool        `mapstructure:"enable-debug-tools"`
+	AllowLocalFileUpload bool        `mapstructure:"allow-local-file-upload"`
+	Experimental         []string    `mapstructure:"experimental"`
+	SkillsDir            string      `mapstructure:"skills-dir"`
 }
 
 type HttpConfig struct {

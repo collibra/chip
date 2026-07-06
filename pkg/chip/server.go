@@ -117,7 +117,17 @@ type ServerToolConfig struct {
 	DisabledTools []string
 	// EnableDebugTools, when true, registers debug tools that are otherwise hidden.
 	EnableDebugTools bool
-	Experimental     []string
+	// AllowLocalFileUpload, when true, registers upload_file with its filePath
+	// input (reads a file directly off this process's local disk). Only meaningful
+	// for a chip instance running locally with access to the caller's own
+	// filesystem (the standalone chip binary) — a shared/remote deployment (e.g.
+	// chip-service) must never set this, since there "local disk" means the
+	// server container's disk, not any user's machine. There is deliberately no
+	// environment-variable escape hatch checked at call time for this — it is
+	// gated purely by whether the binary's own startup wiring passes true here,
+	// so chip-service's code has no path that could turn it on even by mistake.
+	AllowLocalFileUpload bool
+	Experimental         []string
 	// SkillsDir is the optional path to an external skills directory whose
 	// contents are merged on top of the embedded catalog. Empty means the
 	// embedded catalog alone is served. Only consulted when the "skills"

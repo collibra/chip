@@ -45,6 +45,51 @@ func CreateOrUpdateConnection(ctx context.Context, client *http.Client, connecti
 	return doConnectionRequest(ctx, client, http.MethodPut, endpoint, request)
 }
 
+// ConnectionFindRequest is the request body for POST /edge/api/rest/v2/connections/find.
+type ConnectionFindRequest struct {
+	EdgeSiteID    string `json:"edgeSiteId,omitempty"`
+	Name          string `json:"name,omitempty"`
+	NameMatchMode string `json:"nameMatchMode,omitempty"`
+}
+
+// FindConnections searches Edge connections via POST /edge/api/rest/v2/connections/find.
+// Useful for picking up a connection a user created manually (e.g. via the DGC/Edge UI,
+// for a driver file too large to pass through this tool) by name, instead of needing
+// its id.
+func FindConnections(ctx context.Context, client *http.Client, request ConnectionFindRequest) ([]Connection, error) {
+	body, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("finding connections: marshaling request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "/edge/api/rest/v2/connections/find", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("finding connections: building request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("finding connections: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("finding connections: reading response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("finding connections: unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result []Connection
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("finding connections: decoding response: %w", err)
+	}
+	return result, nil
+}
+
 func doConnectionRequest(ctx context.Context, client *http.Client, method, endpoint string, request ConnectionRequest) (*Connection, error) {
 	body, err := json.Marshal(request)
 	if err != nil {
