@@ -24,7 +24,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title:       "List Edge Sites",
 		Description: "Lists available Edge sites, including their id, name, and status. Use this to find the edgeSiteId needed by create_connection and create_capability.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.edge-view-connections-and-capabilities"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }

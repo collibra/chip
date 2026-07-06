@@ -51,7 +51,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title:       "Create or Update Edge Connection",
 		Description: "Creates or updates an Edge connection (e.g. a JDBC connection for the jdbc-ingestion capability) via the private Edge connection management API. Does not download driver files itself — see upload_file for how driver jars must be sourced (Collibra Marketplace only, not arbitrary URLs).",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.edge-integration-capability-manage"},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
 	}
 }
