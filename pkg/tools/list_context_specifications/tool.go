@@ -11,8 +11,8 @@ import (
 )
 
 type Input struct {
-	AssetId           string `json:"assetId,omitempty" jsonschema:"Optional. UUID of the asset to discover applicable Context Specifications for. Only specs whose source asset type matches the asset type of this asset will be returned."`
-	AssetTypePublicId string `json:"assetTypePublicId,omitempty" jsonschema:"Optional. Filter by asset type public ID (e.g. 'Table'). Only Context Specifications with a matching asset type will be returned."`
+	AssetId           string `json:"assetId,omitempty" jsonschema:"Optional. UUID of the asset to discover applicable Context Specifications for. Only specs whose source asset type matches or is the parent of the asset type of this asset will be returned."`
+	AssetTypePublicId string `json:"assetTypePublicId,omitempty" jsonschema:"Optional. Filter by asset type public ID (e.g. 'Table'). Only Context Specifications with an asset type that matches or is a parent of the given asset type will be returned."`
 	Offset            int    `json:"offset,omitempty" jsonschema:"Optional. Index of the first result to retrieve. Default: 0."`
 	Limit             int    `json:"limit,omitempty" jsonschema:"Optional. Maximum number of results to retrieve. Default: 50. Maximum: 1000."`
 }
