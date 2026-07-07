@@ -69,8 +69,9 @@ type SchemaMetadataConfiguration struct {
 	SynchronizationRules []MetadataSynchronizationRule `json:"synchronizationRules,omitempty"`
 }
 
-// Job represents an asynchronous job triggered by the database registration API.
-type Job struct {
+// CatalogJob represents an asynchronous job triggered by the database (catalog)
+// registration API, e.g. POST /databases/{id}/synchronizeMetadata.
+type CatalogJob struct {
 	ID      string `json:"id"`
 	State   string `json:"state,omitempty"`
 	Result  string `json:"result,omitempty"`
@@ -157,13 +158,13 @@ func SetSchemaMetadataConfigurationsBatch(ctx context.Context, client *http.Clie
 // Database asset via POST /databases/{databaseId}/synchronizeMetadata. An empty
 // schemaConnectionIds list synchronizes all schemas that already have a
 // SchemaMetadataConfiguration.
-func SynchronizeDatabaseMetadata(ctx context.Context, client *http.Client, databaseID string, schemaConnectionIDs []string) (*Job, error) {
+func SynchronizeDatabaseMetadata(ctx context.Context, client *http.Client, databaseID string, schemaConnectionIDs []string) (*CatalogJob, error) {
 	body, err := json.Marshal(DatabaseMetadataSynchronizationRequest{SchemaConnectionIDs: schemaConnectionIDs})
 	if err != nil {
 		return nil, fmt.Errorf("starting ingestion: marshaling request: %w", err)
 	}
 	endpoint := catalogDatabaseBasePath + "/databases/" + databaseID + "/synchronizeMetadata"
-	var job Job
+	var job CatalogJob
 	if err := doCatalogDatabasePostJSON(ctx, client, endpoint, body, http.StatusAccepted, &job); err != nil {
 		return nil, err
 	}

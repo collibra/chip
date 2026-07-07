@@ -19,14 +19,14 @@ type Input struct {
 }
 
 type Output struct {
-	Name               string  `json:"name,omitempty" jsonschema:"The job's name."`
-	Type               string  `json:"type,omitempty" jsonschema:"The job's type (e.g. 'DELTA_INGESTION')."`
-	State              string  `json:"state,omitempty" jsonschema:"The job's current state: WAITING, RUNNING, CANCELING, COMPLETED, CANCELED, or ERROR."`
-	Result             string  `json:"result,omitempty" jsonschema:"The job's result once finished: NOT_SET (not finished yet), SUCCESS, COMPLETED_WITH_ERROR, FAILURE, or ABORTED."`
-	Message            string  `json:"message,omitempty" jsonschema:"Status message from the job."`
-	ProgressPercentage float64 `json:"progressPercentage,omitempty" jsonschema:"Progress percentage, 0-100."`
-	StartDate          string  `json:"startDate,omitempty"`
-	EndDate            string  `json:"endDate,omitempty" jsonschema:"When the job finished, if it has."`
+	Name               string `json:"name,omitempty" jsonschema:"The job's name."`
+	Type               string `json:"type,omitempty" jsonschema:"The job's type (e.g. 'DELTA_INGESTION')."`
+	State              string `json:"state,omitempty" jsonschema:"The job's current state: WAITING, RUNNING, CANCELING, COMPLETED, CANCELED, or ERROR."`
+	Result             string `json:"result,omitempty" jsonschema:"The job's result once finished: NOT_SET (not finished yet), SUCCESS, COMPLETED_WITH_ERROR, FAILURE, or ABORTED."`
+	Message            string `json:"message,omitempty" jsonschema:"Status message from the job."`
+	ProgressPercentage int    `json:"progressPercentage,omitempty" jsonschema:"Progress percentage, 0-100."`
+	StartDate          string `json:"startDate,omitempty"`
+	EndDate            string `json:"endDate,omitempty" jsonschema:"When the job finished, if it has."`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
@@ -46,7 +46,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{}, err
 		}
 
-		job, err := clients.GetCatalogJob(ctx, collibraClient, input.JobID)
+		job, err := clients.GetJob(ctx, collibraClient, input.JobID)
 		if err != nil {
 			return Output{}, err
 		}

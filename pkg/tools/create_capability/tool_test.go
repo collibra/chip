@@ -16,14 +16,14 @@ func TestCreateCapability_Create(t *testing.T) {
 	capID, _ := uuid.NewUUID()
 
 	handler := http.NewServeMux()
-	handler.Handle("POST /edge/api/rest/v2/capabilities", testutil.JsonHandlerInOut(func(r *http.Request, in clients.CapabilityRequest) (int, clients.Capability) {
+	handler.Handle("POST /edge/api/rest/v2/capabilities", testutil.JsonHandlerInOut(func(r *http.Request, in clients.CapabilityRequest) (int, clients.EdgeCapability) {
 		if in.TypeID != "jdbc-ingestion" {
 			t.Fatalf("unexpected typeId: %s", in.TypeID)
 		}
-		return http.StatusCreated, clients.Capability{
-			ID:         capID.String(),
+		return http.StatusCreated, clients.EdgeCapability{
+			Id:         capID.String(),
 			Name:       in.Name,
-			EdgeSiteID: in.EdgeSiteID,
+			EdgeSiteId: in.EdgeSiteID,
 			Parameters: in.Parameters,
 		}
 	}))
@@ -44,8 +44,8 @@ func TestCreateCapability_Create(t *testing.T) {
 	if !output.Success {
 		t.Fatalf("expected success, got error: %s", output.Error)
 	}
-	if output.Capability.ID != capID.String() {
-		t.Fatalf("expected id %s, got %s", capID.String(), output.Capability.ID)
+	if output.Capability.Id != capID.String() {
+		t.Fatalf("expected id %s, got %s", capID.String(), output.Capability.Id)
 	}
 }
 
@@ -54,11 +54,11 @@ func TestCreateCapability_UpdateWithKnownID(t *testing.T) {
 	capID, _ := uuid.NewUUID()
 
 	handler := http.NewServeMux()
-	handler.Handle("PUT /edge/api/rest/v2/capabilities/"+capID.String(), testutil.JsonHandlerInOut(func(r *http.Request, in clients.CapabilityRequest) (int, clients.Capability) {
-		return http.StatusOK, clients.Capability{
-			ID:         capID.String(),
+	handler.Handle("PUT /edge/api/rest/v2/capabilities/"+capID.String(), testutil.JsonHandlerInOut(func(r *http.Request, in clients.CapabilityRequest) (int, clients.EdgeCapability) {
+		return http.StatusOK, clients.EdgeCapability{
+			Id:         capID.String(),
 			Name:       in.Name,
-			EdgeSiteID: in.EdgeSiteID,
+			EdgeSiteId: in.EdgeSiteID,
 			Parameters: in.Parameters,
 		}
 	}))

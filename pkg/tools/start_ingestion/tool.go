@@ -19,7 +19,7 @@ type Input struct {
 }
 
 type Output struct {
-	Job     *clients.Job `json:"job,omitempty" jsonschema:"The started synchronization job. Poll its id with get_catalog_job_status (NOT get_job_status, which is for Edge-site jobs) to see when it completes."`
+	Job     *clients.CatalogJob `json:"job,omitempty" jsonschema:"The started synchronization job. Poll its id with get_catalog_job_status (NOT get_job_status, which is for Edge-site jobs) to see when it completes."`
 	Success bool         `json:"success" jsonschema:"Whether the ingestion job was started."`
 	Error   string       `json:"error,omitempty" jsonschema:"Error message if starting the job failed."`
 }

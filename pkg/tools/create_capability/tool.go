@@ -24,7 +24,7 @@ type Input struct {
 }
 
 type Output struct {
-	Capability *clients.Capability `json:"capability,omitempty" jsonschema:"The created or updated capability."`
+	Capability *clients.EdgeCapability `json:"capability,omitempty" jsonschema:"The created or updated capability."`
 	Success    bool                `json:"success" jsonschema:"Whether the capability was saved successfully."`
 	Error      string              `json:"error,omitempty" jsonschema:"Error message if saving the capability failed."`
 }
@@ -62,7 +62,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			Parameters:  parameters,
 		}
 
-		var capability *clients.Capability
+		var capability *clients.EdgeCapability
 		var err error
 		if input.CapabilityID != "" {
 			capability, err = clients.CreateOrUpdateCapability(ctx, collibraClient, input.CapabilityID, request)

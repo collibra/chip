@@ -10,17 +10,6 @@ import (
 	"net/http"
 )
 
-// Connection is the response shape returned by the Edge connection management API.
-type Connection struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	TypeID      string         `json:"typeId,omitempty"`
-	EdgeSiteID  string         `json:"edgeSiteId"`
-	VaultID     string         `json:"vaultId,omitempty"`
-	Parameters  map[string]any `json:"parameters"`
-}
-
 // ConnectionRequest is the request body for creating or updating a connection via
 // POST /edge/api/rest/v2/connections or PUT /edge/api/rest/v2/connections/{id}.
 type ConnectionRequest struct {
@@ -34,13 +23,13 @@ type ConnectionRequest struct {
 
 // CreateConnection creates a new Edge connection via POST /edge/api/rest/v2/connections.
 // The server assigns the connection id.
-func CreateConnection(ctx context.Context, client *http.Client, request ConnectionRequest) (*Connection, error) {
+func CreateConnection(ctx context.Context, client *http.Client, request ConnectionRequest) (*EdgeConnection, error) {
 	return doConnectionRequest(ctx, client, http.MethodPost, "/edge/api/rest/v2/connections", request)
 }
 
 // CreateOrUpdateConnection creates or updates an Edge connection with a known id via
 // PUT /edge/api/rest/v2/connections/{connectionId}.
-func CreateOrUpdateConnection(ctx context.Context, client *http.Client, connectionID string, request ConnectionRequest) (*Connection, error) {
+func CreateOrUpdateConnection(ctx context.Context, client *http.Client, connectionID string, request ConnectionRequest) (*EdgeConnection, error) {
 	endpoint := "/edge/api/rest/v2/connections/" + connectionID
 	return doConnectionRequest(ctx, client, http.MethodPut, endpoint, request)
 }
@@ -56,7 +45,7 @@ type ConnectionFindRequest struct {
 // Useful for picking up a connection a user created manually (e.g. via the DGC/Edge UI,
 // for a driver file too large to pass through this tool) by name, instead of needing
 // its id.
-func FindConnections(ctx context.Context, client *http.Client, request ConnectionFindRequest) ([]Connection, error) {
+func FindConnections(ctx context.Context, client *http.Client, request ConnectionFindRequest) ([]EdgeConnection, error) {
 	body, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("finding connections: marshaling request: %w", err)
@@ -83,14 +72,14 @@ func FindConnections(ctx context.Context, client *http.Client, request Connectio
 		return nil, fmt.Errorf("finding connections: unexpected status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var result []Connection
+	var result []EdgeConnection
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("finding connections: decoding response: %w", err)
 	}
 	return result, nil
 }
 
-func doConnectionRequest(ctx context.Context, client *http.Client, method, endpoint string, request ConnectionRequest) (*Connection, error) {
+func doConnectionRequest(ctx context.Context, client *http.Client, method, endpoint string, request ConnectionRequest) (*EdgeConnection, error) {
 	body, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("saving connection: marshaling request: %w", err)
@@ -125,7 +114,7 @@ func doConnectionRequest(ctx context.Context, client *http.Client, method, endpo
 		}
 	}
 
-	var result Connection
+	var result EdgeConnection
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("saving connection: decoding response: %w", err)
 	}
@@ -187,4 +176,66 @@ func UploadFile(ctx context.Context, client *http.Client, filename string, conte
 	}
 
 	return uri, nil
+}
+
+// EdgeConnection is the full connection resource returned by the list/get endpoints.
+// It is distinct from Connection (the create/update request-response shape) because
+// these read endpoints expose the connection type as a structured object.
+type EdgeConnection struct {
+	Id             string              `json:"id,omitempty"`
+	Name           string              `json:"name,omitempty"`
+	Description    string              `json:"description,omitempty"`
+	TypeId         string              `json:"typeId,omitempty"`
+	EdgeSiteId     string              `json:"edgeSiteId,omitempty"`
+	VaultId        string              `json:"vaultId,omitempty"`
+	ConnectionType *EdgeConnectionType `json:"connectionType,omitempty"`
+	Parameters     map[string]any      `json:"parameters,omitempty"`
+}
+
+type EdgeConnectionType struct {
+	Id string `json:"id,omitempty"`
+}
+
+// ListConnections lists all Edge connections via GET /edge/api/rest/v2/connections.
+func ListConnections(ctx context.Context, client *http.Client) ([]EdgeConnection, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "/edge/api/rest/v2/connections", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, err := executeRequest(client, req)
+	if err != nil {
+		return nil, err
+	}
+	var connections []EdgeConnection
+	if err := json.Unmarshal(body, &connections); err != nil {
+		return nil, fmt.Errorf("failed to parse connections response: %w", err)
+	}
+	return connections, nil
+}
+
+// GetConnection fetches a single Edge connection via GET /edge/api/rest/v2/connections/{id}.
+func GetConnection(ctx context.Context, client *http.Client, id string) (*EdgeConnection, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "/edge/api/rest/v2/connections/"+id, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, err := executeRequest(client, req)
+	if err != nil {
+		return nil, err
+	}
+	var conn EdgeConnection
+	if err := json.Unmarshal(body, &conn); err != nil {
+		return nil, fmt.Errorf("failed to parse connection response: %w", err)
+	}
+	return &conn, nil
+}
+
+// DeleteConnection deletes an Edge connection via DELETE /edge/api/rest/v2/connections/{id}.
+func DeleteConnection(ctx context.Context, client *http.Client, id string) error {
+	req, err := http.NewRequestWithContext(ctx, "DELETE", "/edge/api/rest/v2/connections/"+id, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	_, err = executeRequest(client, req)
+	return err
 }

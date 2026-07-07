@@ -16,12 +16,12 @@ func TestFindConnections(t *testing.T) {
 	siteID, _ := uuid.NewUUID()
 
 	handler := http.NewServeMux()
-	handler.Handle("POST /edge/api/rest/v2/connections/find", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionFindRequest) (int, []clients.Connection) {
+	handler.Handle("POST /edge/api/rest/v2/connections/find", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionFindRequest) (int, []clients.EdgeConnection) {
 		if in.Name != "snowflake-manual" {
 			t.Fatalf("unexpected name: %s", in.Name)
 		}
-		return http.StatusOK, []clients.Connection{
-			{ID: connID.String(), Name: "snowflake-manual", EdgeSiteID: siteID.String()},
+		return http.StatusOK, []clients.EdgeConnection{
+			{Id: connID.String(), Name: "snowflake-manual", EdgeSiteId: siteID.String()},
 		}
 	}))
 
@@ -33,7 +33,7 @@ func TestFindConnections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if len(output.Connections) != 1 || output.Connections[0].ID != connID.String() {
+	if len(output.Connections) != 1 || output.Connections[0].Id != connID.String() {
 		t.Fatalf("unexpected output: %+v", output)
 	}
 }

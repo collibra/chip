@@ -56,3 +56,25 @@ func GetJobStatusLog(ctx context.Context, client *http.Client, jobID string) (*J
 	}
 	return &result, nil
 }
+
+// CancelEdgeJob cancels a running Edge job via POST /edge/api/rest/v2/jobs/{id}/cancel.
+func CancelEdgeJob(ctx context.Context, client *http.Client, id string) error {
+	req, err := http.NewRequestWithContext(ctx, "POST", "/edge/api/rest/v2/jobs/"+id+"/cancel", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	_, err = executeRequest(client, req)
+	return err
+}
+
+// GetEdgeJobStatusHistory returns all status updates for an Edge job in reverse
+// chronological order (most recent first) via
+// GET /edge/api/rest/v2/jobs/{id}/statusLogHistory.
+func GetEdgeJobStatusHistory(ctx context.Context, client *http.Client, id string) ([]JobStatusLog, error) {
+	endpoint := "/edge/api/rest/v2/jobs/" + id + "/statusLogHistory"
+	var result []JobStatusLog
+	if err := getJSON(ctx, client, endpoint, "getting job status history", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
