@@ -40,10 +40,13 @@ the most common way this goes wrong.
    step.
 8. **`configure_database`** — one call does the full refresh-connection →
    register-database → refresh-schema → set-sync-rules flow. Needs `communityId`,
-   `parentSystemId` (an existing System asset), and `ownerIds` (from step 7). If it
-   returns a retryable-looking error, it usually means the underlying async refresh
-   hasn't completed yet (cold-start data source connections can take 30–60s) — just
-   call it again; it's idempotent.
+   `parentSystemId` (an existing System asset), and `ownerIds` (from step 7). **Never
+   default to "sync everything" — always confirm which database, which schemas, and
+   which tables with the user first.** See "Confirm scope before configuring the
+   database" below; the tool itself refuses to guess when there's more than one
+   database or schema. If it returns a retryable-looking error, it usually means the
+   underlying async refresh hasn't completed yet (cold-start data source connections
+   can take 30–60s) — just call it again; it's idempotent.
 9. **`start_ingestion`** — triggers the actual sync using the database id from step 8.
 10. **`get_catalog_job_status`** — poll the job id `start_ingestion` returned. A
     202/success from `start_ingestion` only means the job was accepted, not that
@@ -67,6 +70,31 @@ If this chip instance also exposes a generic "run capability" tool (e.g.
 catalog database-registration bookkeeping (linking the job back to the Database asset,
 updating sync state) that a raw capability run skips entirely — a direct run would
 appear to succeed on the Edge side while leaving the catalog side out of sync.
+
+## Confirm scope before configuring the database
+
+`configure_database` will not silently register the wrong database or sync every table
+in every schema — it's built to refuse ambiguity rather than guess:
+
+- **`databaseName`** is required if the data source exposes more than one
+  database/catalog through the connection. The tool errors and names the discovered
+  candidates if you omit it while more than one exists.
+- **`schemaNames`** is required if the database has more than one schema. Same
+  behavior: omit it with multiple schemas discovered and the tool errors, listing them.
+  Pass the literal `["*"]` to configure every schema — only do this after the user has
+  actually said they want everything, not as a shortcut when you don't know yet.
+- **`include`** has no default. You must always pass a table pattern (`"*"` for all
+  tables, or a specific comma-separated pattern) — there is no silent "sync
+  everything" fallback.
+
+The practical flow: call `configure_database` once with just the required identifiers
+and let it fail on ambiguity to discover the candidate databases/schemas, **or** if you
+already know multiple exist, ask the user up front which database, which schemas, and
+which tables (or "all") they want before calling at all. Either way, do not pass `"*"`
+for `schemaNames` or `include` on your own initiative — confirm with the user first.
+The one exception: if discovery finds exactly one database and one schema, the tool
+auto-selects them — no ambiguity to resolve, so no need to ask about *which* database
+or schema, though you should still confirm the table pattern (`include`/`exclude`).
 
 ## Picking up an existing connection instead of duplicating one
 
@@ -98,3 +126,6 @@ need to pick the file and click through. Once they confirm it's saved, use
    vendor-specific connection type — jdbc-ingestion cannot use those.
 3. **Always poll after `start_ingestion`.** A successful call only means the job was
    accepted.
+4. **Never pick a database, schema set, or table scope for the user.** When more than
+   one is possible, ask; when `configure_database` reports ambiguity, relay the
+   candidates and ask rather than picking one yourself or retrying with `"*"`.

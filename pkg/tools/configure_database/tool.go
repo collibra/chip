@@ -8,12 +8,20 @@
 // with a bounded number of attempts; if a stage hasn't completed within that budget,
 // it returns an error asking the agent to retry the tool call (the refresh calls are
 // idempotent to re-issue).
+//
+// Ambiguity guards: databaseName is required when more than one database/catalog is
+// discovered, schemaNames is required when more than one schema is discovered, and
+// include has no default — all three force an explicit choice instead of silently
+// registering the wrong database or syncing every schema/table. schemaNames/include
+// still accept an explicit "*" to opt into "everything", but that must be a deliberate
+// choice (confirmed with the user), never this tool's default behavior.
 package configure_database
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -41,7 +49,9 @@ type Input struct {
 	OwnerIDs         []string `json:"ownerIds" jsonschema:"UUIDs of the users to assign as owners of the Database asset. Use find_users to resolve a name (e.g. 'Admin') to its UUID."`
 	Description      string   `json:"description,omitempty" jsonschema:"Optional description of the Database asset."`
 
-	Include                     string `json:"include,omitempty" jsonschema:"Optional. Comma-separated table name pattern to synchronize, '*' wildcard supported. Defaults to '*' (all tables)."`
+	SchemaNames []string `json:"schemaNames,omitempty" jsonschema:"Exact names of the schemas to configure for synchronization, as they appear at the data source. Required if the database exposes more than one schema; if there is exactly one, it is selected automatically. Pass the single value '*' to configure every discovered schema — only do this after confirming with the user which schemas they actually want synced, never as a silent default when multiple schemas exist."`
+
+	Include                     string `json:"include" jsonschema:"Comma-separated table name pattern to synchronize, '*' wildcard supported. Required — there is no default. Confirm with the user which tables they want before calling; do not pass '*' (all tables) without asking first. Applies to every schema selected via schemaNames."`
 	Exclude                     string `json:"exclude,omitempty" jsonschema:"Optional. Comma-separated table name pattern to exclude from synchronization."`
 	TargetDomainID              string `json:"targetDomainId,omitempty" jsonschema:"Optional. UUID of a domain to create synchronized assets in. If omitted, an automatically created domain per schema is used."`
 	SkipViews                   bool   `json:"skipViews,omitempty" jsonschema:"Optional. If true, database views are excluded from synchronization."`
@@ -61,7 +71,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "configure_database",
 		Title:       "Configure Database for Ingestion",
-		Description: "Discovers a database through an Edge connection, registers it as a Database asset, and configures which tables get synchronized. Prerequisite for start_ingestion. Assumes the target community and parent System asset already exist (create_community/create_domain/create_asset), and that a jdbc-ingestion capability referencing this connection has already been created via create_capability — the discovery/refresh steps here only find data because that capability actually performs the crawl; without one, this fails with a discovery-timeout-shaped error even though the real cause is the missing capability.",
+		Description: "Discovers a database through an Edge connection, registers it as a Database asset, and configures which schemas/tables get synchronized. Prerequisite for start_ingestion. Assumes the target community and parent System asset already exist (create_community/create_domain/create_asset), and that a jdbc-ingestion capability referencing this connection has already been created via create_capability — the discovery/refresh steps here only find data because that capability actually performs the crawl; without one, this fails with a discovery-timeout-shaped error even though the real cause is the missing capability. If more than one database or schema is discovered, or include isn't provided, this returns an error naming the candidates instead of guessing — confirm the database, schemas, and table pattern with the user, do not default to configuring everything.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
@@ -88,6 +98,9 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if err := validation.UUIDOptional("targetDomainId", input.TargetDomainID); err != nil {
 			return Output{}, err
 		}
+		if strings.TrimSpace(input.Include) == "" {
+			return Output{}, fmt.Errorf("include is required — confirm with the user which tables to synchronize (or that they want '*', all tables) before calling")
+		}
 
 		databaseConnection, err := discoverDatabaseConnection(ctx, collibraClient, input.EdgeConnectionID, input.DatabaseName)
 		if err != nil {
@@ -105,14 +118,14 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{Success: false, Error: fmt.Sprintf("failed to register database: %s", err.Error())}, nil
 		}
 
-		schemaConnections, err := discoverSchemaConnections(ctx, collibraClient, databaseConnection.ID)
+		discoveredSchemaConnections, err := discoverSchemaConnections(ctx, collibraClient, databaseConnection.ID)
 		if err != nil {
 			return Output{Database: database, Success: false, Error: err.Error()}, nil
 		}
 
-		include := input.Include
-		if include == "" {
-			include = "*"
+		schemaConnections, err := selectSchemaConnections(discoveredSchemaConnections, input.SchemaNames)
+		if err != nil {
+			return Output{Database: database, Success: false, Error: err.Error()}, nil
 		}
 
 		configurations := make([]clients.SchemaMetadataConfiguration, len(schemaConnections))
@@ -121,7 +134,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				SchemaConnectionID: schemaConnection.ID,
 				SynchronizationRules: []clients.MetadataSynchronizationRule{
 					{
-						Include:                     include,
+						Include:                     input.Include,
 						Exclude:                     input.Exclude,
 						TargetDomainID:              input.TargetDomainID,
 						SkipViews:                   input.SkipViews,
@@ -206,4 +219,48 @@ func discoverSchemaConnections(ctx context.Context, client *http.Client, databas
 	}
 
 	return nil, fmt.Errorf("no schemas were discovered for database connection %s after %d attempts. Either the refresh is still in progress (retry this tool call), or no capability referencing this connection exists yet — verify with create_capability", databaseConnectionID, pollAttempts)
+}
+
+// selectSchemaConnections narrows discovered to the schemas named in schemaNames. An
+// empty schemaNames is only accepted when there's no ambiguity (a single discovered
+// schema); with more than one discovered schema, the caller must either name the ones
+// they want or pass ["*"] to explicitly opt into configuring all of them — this
+// mirrors discoverDatabaseConnection's databaseName requirement, so a multi-schema
+// database can never be synchronized wholesale by omission.
+func selectSchemaConnections(discovered []clients.SchemaConnection, schemaNames []string) ([]clients.SchemaConnection, error) {
+	if len(schemaNames) == 1 && schemaNames[0] == "*" {
+		return discovered, nil
+	}
+
+	if len(schemaNames) == 0 {
+		if len(discovered) > 1 {
+			names := make([]string, len(discovered))
+			for i, s := range discovered {
+				names[i] = s.Name
+			}
+			return nil, fmt.Errorf("multiple schemas discovered (%s); specify schemaNames to select which to configure, or pass [\"*\"] to configure all of them", strings.Join(names, ", "))
+		}
+		return discovered, nil
+	}
+
+	byName := make(map[string]clients.SchemaConnection, len(discovered))
+	for _, s := range discovered {
+		byName[s.Name] = s
+	}
+
+	selected := make([]clients.SchemaConnection, 0, len(schemaNames))
+	var missing []string
+	for _, name := range schemaNames {
+		s, ok := byName[name]
+		if !ok {
+			missing = append(missing, name)
+			continue
+		}
+		selected = append(selected, s)
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("schema(s) not found among discovered schemas: %s", strings.Join(missing, ", "))
+	}
+
+	return selected, nil
 }
