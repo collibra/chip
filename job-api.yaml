@@ -1,0 +1,777 @@
+---
+openapi: 3.0.3
+info:
+  description: This API provides the ability to retrieve job progress.
+  title: Collibra Job API
+  version: 1.0.0
+  x-audience: public
+servers:
+- url: /rest/jobs/v1
+security:
+- basicAuth: []
+- jwtAuth: []
+tags:
+- description: Job endpoints provide the ability to retrieve job progress.
+  name: Jobs
+paths:
+  /jobs:
+    get:
+      description: Returns jobs matching the given search criteria. Only parameters
+        that are specified in this request and have not <code>null</code> values are
+        used for filtering. All other parameters are ignored.
+      operationId: findJobs
+      parameters:
+      - description: "The match mode used to compare <code>name</code>. If the match\
+          \ mode is <code>EXACT</code> the search is case-sensitive, otherwise the\
+          \ search is case-insensitive."
+        explode: true
+        in: query
+        name: nameMatchMode
+        required: false
+        schema:
+          default: ANYWHERE
+          enum:
+          - START
+          - END
+          - ANYWHERE
+          - EXACT
+          example: EXACT
+          type: string
+        style: form
+      - description: The name of the job to search for.
+        explode: true
+        in: query
+        name: name
+        required: false
+        schema:
+          example: Sample job
+          type: string
+        style: form
+      - description: The list of results which the jobs should be searched for.
+        explode: true
+        in: query
+        name: result
+        required: false
+        schema:
+          items:
+            enum:
+            - NOT_SET
+            - SUCCESS
+            - COMPLETED_WITH_ERROR
+            - FAILURE
+            - ABORTED
+            example: SUCCESS
+            type: string
+          type: array
+        style: form
+      - description: The list of states which the jobs should be searched for.
+        explode: true
+        in: query
+        name: state
+        required: false
+        schema:
+          items:
+            enum:
+            - WAITING
+            - RUNNING
+            - COMPLETED
+            - FAILED
+            - DELETED
+            example: COMPLETED
+            type: string
+          type: array
+        style: form
+      - description: The list of types of the jobs.
+        explode: true
+        in: query
+        name: type
+        required: false
+        schema:
+          items:
+            example: IMPORT
+            type: string
+          type: array
+        style: form
+      - description: The ID of the user who created the searched job.
+        explode: true
+        in: query
+        name: user
+        required: false
+        schema:
+          example: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+          format: uuid
+          type: string
+        style: form
+      - description: "The field that should be used as reference for sorting, \nin\
+          \ addition to the <code>CREATED_ON</code> field in <code>DESC</code> order.\n"
+        explode: true
+        in: query
+        name: sortField
+        required: false
+        schema:
+          enum:
+          - NAME
+          - TYPE
+          - START_DATE
+          - END_DATE
+          - STATE
+          - RESULT
+          example: NAME
+          type: string
+        style: form
+      - description: The order of sorting.
+        explode: true
+        in: query
+        name: sortOrder
+        required: false
+        schema:
+          default: DESC
+          enum:
+          - ASC
+          - DESC
+          example: ASC
+          type: string
+        style: form
+      - description: "The cursor pointing to the first resource to be included in\
+          \ the response. \nThis cursor cannot be created and must have been extracted\
+          \ from a response returned by a previous API call.\n\nIf this parameter\
+          \ is missing, the API returns the resources starting from the first available\
+          \ resource, at index `0`.\n"
+        explode: true
+        in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: |
+          The maximum number of resources to retrieve.
+
+          If not set, the default limit of `10` is be used. The maximum value for this parameter is `50`.
+        explode: true
+        in: query
+        name: pageSize
+        required: false
+        schema:
+          default: 10
+          maximum: 50
+          minimum: 1
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobPagedResponse"
+          description: The paged response with jobs matching filter criteria
+        "400":
+          content:
+            application/json:
+              example:
+                userMessage: The request is not valid.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: The request is not valid.
+        "401":
+          content:
+            application/json:
+              example:
+                userMessage: Failed to authenticate the request through basic credentials.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: The client is not authenticated.
+        "500":
+          content:
+            application/json:
+              example:
+                userMessage: Internal server error.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: Internal server error.
+      summary: Find jobs
+      tags:
+      - Jobs
+  /jobs/{jobId}:
+    delete:
+      description: |
+        Soft deletes the Job identified by the given UUID.
+        Users can delete their own jobs and Admins can delete any job.
+      operationId: deleteJob
+      parameters:
+      - description: The ID of the job.
+        explode: false
+        in: path
+        name: jobId
+        required: true
+        schema:
+          example: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+          format: uuid
+          type: string
+        style: simple
+      - description: An optional message for the job deletion.
+        explode: true
+        in: query
+        name: message
+        required: false
+        schema:
+          default: Deleted by user
+          maxLength: 128
+          type: string
+        style: form
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobDelete"
+        description: |
+          Use the message query parameter instead. Deprecated, will be removed in 2026.06.
+          Note: The message defined in the query parameter takes precedence over the request body.
+        required: false
+      responses:
+        "204":
+          description: Job successfully deleted.
+        "400":
+          content:
+            application/json:
+              example:
+                userMessage: The request is not valid.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: The request is not valid.
+        "401":
+          content:
+            application/json:
+              example:
+                userMessage: Failed to authenticate the request through basic credentials.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: The client is not authenticated.
+        "404":
+          content:
+            application/json:
+              example:
+                userMessage: The resource could not be found.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: Resource not found.
+        "500":
+          content:
+            application/json:
+              example:
+                userMessage: Internal server error.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: Internal server error.
+      security:
+      - basicAuth: []
+      - jwtAuth: []
+      summary: Soft delete Job.
+      tags:
+      - Jobs
+    get:
+      description: Retrieves the Job identified by the given UUID.
+      operationId: getJob
+      parameters:
+      - description: The ID of the job.
+        explode: false
+        in: path
+        name: jobId
+        required: true
+        schema:
+          example: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+          description: Job found.
+        "400":
+          content:
+            application/json:
+              example:
+                userMessage: The request is not valid.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: The request is not valid.
+        "401":
+          content:
+            application/json:
+              example:
+                userMessage: Failed to authenticate the request through basic credentials.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: The client is not authenticated.
+        "404":
+          content:
+            application/json:
+              example:
+                userMessage: The resource could not be found.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: Resource not found.
+        "500":
+          content:
+            application/json:
+              example:
+                userMessage: Internal server error.
+              schema:
+                $ref: "#/components/schemas/StandardErrorResponse"
+          description: Internal server error.
+      summary: Get Job.
+      tags:
+      - Jobs
+components:
+  parameters:
+    PageSizeQueryParam:
+      description: |
+        The maximum number of resources to retrieve.
+
+        If not set, the default limit of `10` is be used. The maximum value for this parameter is `50`.
+      explode: true
+      in: query
+      name: pageSize
+      required: false
+      schema:
+        default: 10
+        maximum: 50
+        minimum: 1
+        type: integer
+      style: form
+    CursorQueryParam:
+      description: "The cursor pointing to the first resource to be included in the\
+        \ response. \nThis cursor cannot be created and must have been extracted from\
+        \ a response returned by a previous API call.\n\nIf this parameter is missing,\
+        \ the API returns the resources starting from the first available resource,\
+        \ at index `0`.\n"
+      explode: true
+      in: query
+      name: cursor
+      required: false
+      schema:
+        type: string
+      style: form
+    UserQueryParam:
+      description: The ID of the user who created the searched job.
+      explode: true
+      in: query
+      name: user
+      required: false
+      schema:
+        example: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+        format: uuid
+        type: string
+      style: form
+    JobIdQueryParam:
+      description: The ID of the job.
+      explode: false
+      in: path
+      name: jobId
+      required: true
+      schema:
+        example: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+        format: uuid
+        type: string
+      style: simple
+    MessageQueryParam:
+      description: An optional message for the job deletion.
+      explode: true
+      in: query
+      name: message
+      required: false
+      schema:
+        default: Deleted by user
+        maxLength: 128
+        type: string
+      style: form
+    NameQueryParam:
+      description: The name of the job to search for.
+      explode: true
+      in: query
+      name: name
+      required: false
+      schema:
+        example: Sample job
+        type: string
+      style: form
+    NameMatchModeQueryParam:
+      description: "The match mode used to compare <code>name</code>. If the match\
+        \ mode is <code>EXACT</code> the search is case-sensitive, otherwise the search\
+        \ is case-insensitive."
+      explode: true
+      in: query
+      name: nameMatchMode
+      required: false
+      schema:
+        default: ANYWHERE
+        enum:
+        - START
+        - END
+        - ANYWHERE
+        - EXACT
+        example: EXACT
+        type: string
+      style: form
+    ResultQueryParam:
+      description: The list of results which the jobs should be searched for.
+      explode: true
+      in: query
+      name: result
+      required: false
+      schema:
+        items:
+          enum:
+          - NOT_SET
+          - SUCCESS
+          - COMPLETED_WITH_ERROR
+          - FAILURE
+          - ABORTED
+          example: SUCCESS
+          type: string
+        type: array
+      style: form
+    SortFieldQueryParam:
+      description: "The field that should be used as reference for sorting, \nin addition\
+        \ to the <code>CREATED_ON</code> field in <code>DESC</code> order.\n"
+      explode: true
+      in: query
+      name: sortField
+      required: false
+      schema:
+        enum:
+        - NAME
+        - TYPE
+        - START_DATE
+        - END_DATE
+        - STATE
+        - RESULT
+        example: NAME
+        type: string
+      style: form
+    SortOrderQueryParam:
+      description: The order of sorting.
+      explode: true
+      in: query
+      name: sortOrder
+      required: false
+      schema:
+        default: DESC
+        enum:
+        - ASC
+        - DESC
+        example: ASC
+        type: string
+      style: form
+    StateQueryParam:
+      description: The list of states which the jobs should be searched for.
+      explode: true
+      in: query
+      name: state
+      required: false
+      schema:
+        items:
+          enum:
+          - WAITING
+          - RUNNING
+          - COMPLETED
+          - FAILED
+          - DELETED
+          example: COMPLETED
+          type: string
+        type: array
+      style: form
+    TypeQueryParam:
+      description: The list of types of the jobs.
+      explode: true
+      in: query
+      name: type
+      required: false
+      schema:
+        items:
+          example: IMPORT
+          type: string
+        type: array
+      style: form
+  responses:
+    "400_Bad_Request":
+      content:
+        application/json:
+          example:
+            userMessage: The request is not valid.
+          schema:
+            $ref: "#/components/schemas/StandardErrorResponse"
+      description: The request is not valid.
+    "401_Unauthorized":
+      content:
+        application/json:
+          example:
+            userMessage: Failed to authenticate the request through basic credentials.
+          schema:
+            $ref: "#/components/schemas/StandardErrorResponse"
+      description: The client is not authenticated.
+    "500_InternalServerError":
+      content:
+        application/json:
+          example:
+            userMessage: Internal server error.
+          schema:
+            $ref: "#/components/schemas/StandardErrorResponse"
+      description: Internal server error.
+    "404_Not_Found":
+      content:
+        application/json:
+          example:
+            userMessage: The resource could not be found.
+          schema:
+            $ref: "#/components/schemas/StandardErrorResponse"
+      description: Resource not found.
+  schemas:
+    JobDelete:
+      allOf:
+      - $ref: "#/components/schemas/JobMessage"
+      deprecated: true
+      description: "(Deprecated) Represents a body for delete job. Use the message\
+        \ query parameter instead. Deprecated, will be removed in 2026.06."
+      example:
+        message: Import finished in 12s.
+    JobPagedResponse:
+      example:
+        nextCursor: Y3Vyc29yV2hLblRoZXJlSXNNb3JlRGF0YQo
+        results:
+        - endDate: 2017-07-21T17:32:28Z
+          lastModifiedBy: a073ff90-e7bc-4b35-ba90-c4d475f642fe
+          message: Import finished in 12s.
+          type: SAMPLE
+          createdOn: 2017-07-21T17:32:28Z
+          lastModifiedOn: 2017-07-21T17:32:28Z
+          result: SUCCESS
+          createdBy: 4d250cc5-e583-4640-9874-b93d82c7a6cb
+          name: Sample job.
+          progressPercentage: 50
+          id: 495756bd-419c-4fea-beb4-8a70253d8079
+          state: COMPLETED
+          user: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+          selfManaged: false
+          startDate: 2017-07-21T17:32:28Z
+        - endDate: 2017-07-21T17:32:28Z
+          lastModifiedBy: a073ff90-e7bc-4b35-ba90-c4d475f642fe
+          message: Import finished in 12s.
+          type: SAMPLE
+          createdOn: 2017-07-21T17:32:28Z
+          lastModifiedOn: 2017-07-21T17:32:28Z
+          result: SUCCESS
+          createdBy: 4d250cc5-e583-4640-9874-b93d82c7a6cb
+          name: Sample job.
+          progressPercentage: 50
+          id: 495756bd-419c-4fea-beb4-8a70253d8079
+          state: COMPLETED
+          user: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+          selfManaged: false
+          startDate: 2017-07-21T17:32:28Z
+      properties:
+        nextCursor:
+          description: "The cursor pointing to the next page. If the cursor is missing,\
+            \  there are no additional pages of resources available after the current\
+            \ one."
+          example: Y3Vyc29yV2hLblRoZXJlSXNNb3JlRGF0YQo
+          type: string
+        results:
+          description: The list of results.
+          items:
+            $ref: "#/components/schemas/Job"
+          type: array
+      type: object
+    Job:
+      allOf:
+      - properties:
+          id:
+            description: The UUID of the represented object (entity).
+            example: 495756bd-419c-4fea-beb4-8a70253d8079
+            format: uuid
+            type: string
+          createdBy:
+            description: The UUID of the user that created this resource.
+            example: 4d250cc5-e583-4640-9874-b93d82c7a6cb
+            format: uuid
+            type: string
+          createdOn:
+            description: Date and time the job was created on.
+            example: 2017-07-21T17:32:28Z
+            format: date-time
+            type: string
+          lastModifiedBy:
+            description: The UUID of the user who modified this resource the last
+              time.
+            example: a073ff90-e7bc-4b35-ba90-c4d475f642fe
+            format: uuid
+            type: string
+          lastModifiedOn:
+            description: Date and time the job was modified on.
+            example: 2017-07-21T17:32:28Z
+            format: date-time
+            type: string
+          user:
+            description: The UUID of the user that initiated this job.
+            example: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+            format: uuid
+            type: string
+          selfManaged:
+            default: false
+            description: "Whether this is a self managed job, processed outside of\
+              \ DG."
+            example: false
+            type: boolean
+        required:
+        - id
+        type: object
+      - $ref: "#/components/schemas/JobEndDate"
+      - $ref: "#/components/schemas/JobMessage"
+      - $ref: "#/components/schemas/JobName"
+      - $ref: "#/components/schemas/JobProgressPercentage"
+      - $ref: "#/components/schemas/JobResult"
+      - $ref: "#/components/schemas/JobStartDate"
+      - $ref: "#/components/schemas/JobState"
+      - $ref: "#/components/schemas/JobType"
+      description: Represents a job.
+      example:
+        endDate: 2017-07-21T17:32:28Z
+        lastModifiedBy: a073ff90-e7bc-4b35-ba90-c4d475f642fe
+        message: Import finished in 12s.
+        type: SAMPLE
+        createdOn: 2017-07-21T17:32:28Z
+        lastModifiedOn: 2017-07-21T17:32:28Z
+        result: SUCCESS
+        createdBy: 4d250cc5-e583-4640-9874-b93d82c7a6cb
+        name: Sample job.
+        progressPercentage: 50
+        id: 495756bd-419c-4fea-beb4-8a70253d8079
+        state: COMPLETED
+        user: 387ca4ee-d48c-4902-b887-9cbfe11f4dac
+        selfManaged: false
+        startDate: 2017-07-21T17:32:28Z
+    JobEndDate:
+      properties:
+        endDate:
+          description: Date and time the job was ended on.
+          example: 2017-07-21T17:32:28Z
+          format: date-time
+          type: string
+      type: object
+    JobMessage:
+      properties:
+        message:
+          description: The message of the job.
+          example: Import finished in 12s.
+          type: string
+      type: object
+    JobName:
+      properties:
+        name:
+          description: The name of the job.
+          example: Sample job.
+          type: string
+      type: object
+    JobProgressPercentage:
+      properties:
+        progressPercentage:
+          description: The progress percentage of the job.
+          example: 50
+          format: int32
+          type: integer
+      type: object
+    JobResult:
+      properties:
+        result:
+          description: |
+            The result of the job.
+
+            Possible values are:
+              * NOT_SET
+              * SUCCESS
+              * COMPLETED_WITH_ERROR
+              * FAILURE
+              * ABORTED
+          example: SUCCESS
+          type: string
+      type: object
+    JobStartDate:
+      properties:
+        startDate:
+          description: Date and time the job was started on.
+          example: 2017-07-21T17:32:28Z
+          format: date-time
+          type: string
+      type: object
+    JobState:
+      properties:
+        state:
+          description: |
+            The state of the job.
+
+            Possible values are:
+              * WAITING
+              * RUNNING
+              * COMPLETED
+              * FAILED
+              * DELETED
+          example: COMPLETED
+          type: string
+      type: object
+    JobType:
+      properties:
+        type:
+          description: The type of the job.
+          example: SAMPLE
+          type: string
+      type: object
+    StandardErrorResponse:
+      example:
+        userMessage: The request is not valid.
+        titleMessage: Bad Request
+        errorContext: a073ff90-e7bc-4b35-ba90-c4d475f642fe
+        errorCode: invalidRequest
+        helpMessage: Check the request and try again.
+        statusCode: 400
+      properties:
+        statusCode:
+          description: HTTP response code
+          example: 400
+          type: integer
+        titleMessage:
+          description: The title of the error.
+          example: Bad Request
+          type: string
+        helpMessage:
+          description: A message that can help the user to understand the error.
+          example: Check the request and try again.
+          type: string
+        userMessage:
+          description: A message that can be shown to the user.
+          example: The request is not valid.
+          type: string
+        errorCode:
+          description: The error code.
+          example: invalidRequest
+          type: string
+        errorContext:
+          description: Span context ID related to the error.
+          example: a073ff90-e7bc-4b35-ba90-c4d475f642fe
+          type: string
+      required:
+      - errorCode
+      - statusCode
+      type: object
+  securitySchemes:
+    basicAuth:
+      description: Collibra REST API authentication using Basic Authentication.
+      scheme: basic
+      type: http
+    jwtAuth:
+      bearerFormat: JWT
+      description: Collibra REST API authentication using JSON Web Token.
+      scheme: bearer
+      type: http
