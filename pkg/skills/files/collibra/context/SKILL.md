@@ -244,9 +244,6 @@ User: "What does the Semantic Blueprint context cover?"
 4. **Be intelligent when multiple specs are available.**
    Don't passively present a list and ask the user to choose. Inspect them (call `get_context_specification`), compare their coverage against your task requirements, and either pick the best one or recommend it with reasoning. Only defer to the user if specs are genuinely equivalent or if the choice depends on subjective preferences you can't determine.
 
-5. **Use `includeMetadata=true` sparingly.**
-   Only set it to `true` when you (or a downstream consumer) explicitly needs provenance, timestamps, or traceability. For most use cases (generating YAML for export, grounding AI agents), use the default `false`.
-
 ---
 
 ## Related skills
