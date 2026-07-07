@@ -101,6 +101,9 @@ func TestListCapabilityTypes_QueryFiltersAndKeepsManifest(t *testing.T) {
 	if len(output.ConnectionTypes) != 0 {
 		t.Fatalf("expected no connection types to match 'jdbc', got: %+v", output.ConnectionTypes)
 	}
+	if output.ConnectionTypes == nil {
+		t.Fatalf("expected an empty slice, not nil — a nil slice marshals to JSON null, which fails the tool's array-typed output schema")
+	}
 }
 
 func TestListCapabilityTypes_InvalidEdgeSiteID(t *testing.T) {

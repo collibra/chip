@@ -59,13 +59,13 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}, nil
 		}
 
-		var matchedCapabilities []clients.CapabilityType
+		matchedCapabilities := []clients.CapabilityType{}
 		for _, c := range capabilityTypes {
 			if strings.Contains(strings.ToLower(c.ID), query) {
 				matchedCapabilities = append(matchedCapabilities, c)
 			}
 		}
-		var matchedConnections []clients.ConnectionType
+		matchedConnections := []clients.ConnectionType{}
 		for _, c := range connectionTypes {
 			if strings.Contains(strings.ToLower(c.ID), query) {
 				matchedConnections = append(matchedConnections, c)
