@@ -17,11 +17,11 @@ func TestStartIngestion_Success(t *testing.T) {
 
 	handler := http.NewServeMux()
 	handler.Handle("POST /rest/catalogDatabase/v1/databases/"+databaseID.String()+"/synchronizeMetadata",
-		testutil.JsonHandlerInOut(func(r *http.Request, in clients.DatabaseMetadataSynchronizationRequest) (int, clients.Job) {
+		testutil.JsonHandlerInOut(func(r *http.Request, in clients.DatabaseMetadataSynchronizationRequest) (int, clients.CatalogJob) {
 			if len(in.SchemaConnectionIDs) != 0 {
 				t.Fatalf("expected no schemaConnectionIds, got: %v", in.SchemaConnectionIDs)
 			}
-			return http.StatusAccepted, clients.Job{ID: jobID.String(), State: "RUNNING"}
+			return http.StatusAccepted, clients.CatalogJob{ID: jobID.String(), State: "RUNNING"}
 		}))
 
 	server := httptest.NewServer(handler)
@@ -49,11 +49,11 @@ func TestStartIngestion_WithSchemaConnectionIDs(t *testing.T) {
 
 	handler := http.NewServeMux()
 	handler.Handle("POST /rest/catalogDatabase/v1/databases/"+databaseID.String()+"/synchronizeMetadata",
-		testutil.JsonHandlerInOut(func(r *http.Request, in clients.DatabaseMetadataSynchronizationRequest) (int, clients.Job) {
+		testutil.JsonHandlerInOut(func(r *http.Request, in clients.DatabaseMetadataSynchronizationRequest) (int, clients.CatalogJob) {
 			if len(in.SchemaConnectionIDs) != 1 || in.SchemaConnectionIDs[0] != schemaConnID.String() {
 				t.Fatalf("unexpected schemaConnectionIds: %v", in.SchemaConnectionIDs)
 			}
-			return http.StatusAccepted, clients.Job{ID: jobID.String(), State: "RUNNING"}
+			return http.StatusAccepted, clients.CatalogJob{ID: jobID.String(), State: "RUNNING"}
 		}))
 
 	server := httptest.NewServer(handler)

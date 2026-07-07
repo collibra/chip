@@ -40,7 +40,7 @@ type AdditionalProperty struct {
 }
 
 type Output struct {
-	Connection *clients.Connection `json:"connection,omitempty" jsonschema:"The created or updated connection."`
+	Connection *clients.EdgeConnection `json:"connection,omitempty" jsonschema:"The created or updated connection."`
 	Success    bool                `json:"success" jsonschema:"Whether the connection was saved successfully."`
 	Error      string              `json:"error,omitempty" jsonschema:"Error message if saving the connection failed."`
 }
@@ -106,7 +106,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			Parameters:  parameters,
 		}
 
-		var connection *clients.Connection
+		var connection *clients.EdgeConnection
 		var err error
 		if input.ConnectionID != "" {
 			connection, err = clients.CreateOrUpdateConnection(ctx, collibraClient, input.ConnectionID, request)

@@ -22,7 +22,7 @@ type Input struct {
 }
 
 type Output struct {
-	Connections []clients.Connection `json:"connections" jsonschema:"The matching connections."`
+	Connections []clients.EdgeConnection `json:"connections" jsonschema:"The matching connections."`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {

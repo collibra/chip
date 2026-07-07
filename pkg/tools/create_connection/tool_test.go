@@ -16,18 +16,18 @@ func TestCreateConnection_Create(t *testing.T) {
 	connID, _ := uuid.NewUUID()
 
 	handler := http.NewServeMux()
-	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.Connection) {
+	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.EdgeConnection) {
 		if in.Name != "local-postgres-source" {
 			t.Fatalf("unexpected name: %s", in.Name)
 		}
 		if in.EdgeSiteID != siteID.String() {
 			t.Fatalf("unexpected edgeSiteId: %s", in.EdgeSiteID)
 		}
-		return http.StatusCreated, clients.Connection{
-			ID:         connID.String(),
+		return http.StatusCreated, clients.EdgeConnection{
+			Id:         connID.String(),
 			Name:       in.Name,
-			TypeID:     in.TypeID,
-			EdgeSiteID: in.EdgeSiteID,
+			TypeId:     in.TypeID,
+			EdgeSiteId: in.EdgeSiteID,
 			Parameters: in.Parameters,
 		}
 	}))
@@ -48,8 +48,8 @@ func TestCreateConnection_Create(t *testing.T) {
 	if !output.Success {
 		t.Fatalf("expected success, got error: %s", output.Error)
 	}
-	if output.Connection.ID != connID.String() {
-		t.Fatalf("expected id %s, got %s", connID.String(), output.Connection.ID)
+	if output.Connection.Id != connID.String() {
+		t.Fatalf("expected id %s, got %s", connID.String(), output.Connection.Id)
 	}
 }
 
@@ -58,12 +58,12 @@ func TestCreateConnection_UpdateWithKnownID(t *testing.T) {
 	connID, _ := uuid.NewUUID()
 
 	handler := http.NewServeMux()
-	handler.Handle("PUT /edge/api/rest/v2/connections/"+connID.String(), testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.Connection) {
-		return http.StatusOK, clients.Connection{
-			ID:         connID.String(),
+	handler.Handle("PUT /edge/api/rest/v2/connections/"+connID.String(), testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.EdgeConnection) {
+		return http.StatusOK, clients.EdgeConnection{
+			Id:         connID.String(),
 			Name:       in.Name,
-			TypeID:     in.TypeID,
-			EdgeSiteID: in.EdgeSiteID,
+			TypeId:     in.TypeID,
+			EdgeSiteId: in.EdgeSiteID,
 			Parameters: in.Parameters,
 		}
 	}))
@@ -85,8 +85,8 @@ func TestCreateConnection_UpdateWithKnownID(t *testing.T) {
 	if !output.Success {
 		t.Fatalf("expected success, got error: %s", output.Error)
 	}
-	if output.Connection.ID != connID.String() {
-		t.Fatalf("expected id %s, got %s", connID.String(), output.Connection.ID)
+	if output.Connection.Id != connID.String() {
+		t.Fatalf("expected id %s, got %s", connID.String(), output.Connection.Id)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestCreateConnection_AdditionalProperties(t *testing.T) {
 	connID, _ := uuid.NewUUID()
 
 	handler := http.NewServeMux()
-	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.Connection) {
+	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.EdgeConnection) {
 		props, ok := in.Parameters["connection-properties"].([]any)
 		if !ok || len(props) != 2 {
 			t.Fatalf("expected 2 connection-properties entries, got: %#v", in.Parameters["connection-properties"])
@@ -124,7 +124,7 @@ func TestCreateConnection_AdditionalProperties(t *testing.T) {
 		if !ok || keyFile["name"] != "private_key_file" || keyFile["type"] != "file" || keyFile["value"] != "artifact://uuid/key.p8" || keyFile["secret"] != true {
 			t.Fatalf("unexpected private_key_file entry: %#v", props[1])
 		}
-		return http.StatusCreated, clients.Connection{ID: connID.String(), Name: in.Name, EdgeSiteID: in.EdgeSiteID, Parameters: in.Parameters}
+		return http.StatusCreated, clients.EdgeConnection{Id: connID.String(), Name: in.Name, EdgeSiteId: in.EdgeSiteID, Parameters: in.Parameters}
 	}))
 
 	server := httptest.NewServer(handler)
@@ -156,11 +156,11 @@ func TestCreateConnection_AdditionalProperties_CustomKey(t *testing.T) {
 	siteID, _ := uuid.NewUUID()
 
 	handler := http.NewServeMux()
-	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.Connection) {
+	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.EdgeConnection) {
 		if _, ok := in.Parameters["additional-parameters"]; !ok {
 			t.Fatalf("expected additional-parameters key, got parameters: %#v", in.Parameters)
 		}
-		return http.StatusCreated, clients.Connection{Parameters: in.Parameters}
+		return http.StatusCreated, clients.EdgeConnection{Parameters: in.Parameters}
 	}))
 
 	server := httptest.NewServer(handler)
@@ -192,14 +192,14 @@ func TestCreateConnection_PreUploadedDriverJar(t *testing.T) {
 	const uploadedJarURI = "jar://test-uuid/driver.jar"
 
 	handler := http.NewServeMux()
-	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.Connection) {
+	handler.Handle("POST /edge/api/rest/v2/connections", testutil.JsonHandlerInOut(func(r *http.Request, in clients.ConnectionRequest) (int, clients.EdgeConnection) {
 		if in.Parameters["driver-jar"] != uploadedJarURI {
 			t.Fatalf("expected driver-jar %q, got %v", uploadedJarURI, in.Parameters["driver-jar"])
 		}
-		return http.StatusCreated, clients.Connection{
-			ID:         connID.String(),
+		return http.StatusCreated, clients.EdgeConnection{
+			Id:         connID.String(),
 			Name:       in.Name,
-			EdgeSiteID: in.EdgeSiteID,
+			EdgeSiteId: in.EdgeSiteID,
 			Parameters: in.Parameters,
 		}
 	}))

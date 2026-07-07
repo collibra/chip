@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestGetCatalogJob(t *testing.T) {
+func TestGetJob(t *testing.T) {
 	jobID, _ := uuid.NewUUID()
 
 	handler := http.NewServeMux()
@@ -23,7 +23,7 @@ func TestGetCatalogJob(t *testing.T) {
 	defer server.Close()
 
 	client := testutil.NewClient(server)
-	job, err := clients.GetCatalogJob(t.Context(), client, jobID.String())
+	job, err := clients.GetJob(t.Context(), client, jobID.String())
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
