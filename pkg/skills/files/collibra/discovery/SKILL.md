@@ -1,6 +1,6 @@
 ---
 description: Pick between natural-language semantic search and keyword/filter search to find Collibra assets and terms.
-related: collibra/lineage, collibra/asset-create
+related: collibra/lineage, collibra/asset-create, collibra/jdbc-ingestion
 ---
 
 # Discovery — finding assets and business terms
