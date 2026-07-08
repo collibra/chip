@@ -14,8 +14,8 @@ runs them in order.
 
 | Operation | Use for | Key fields |
 |---|---|---|
-| `update_attribute` | Change an existing attribute value (e.g. update `Definition`) | `attributeName`, `value` |
-| `add_attribute` | Append a new value to an attribute (multi-valued attributes only) | `attributeName`, `value` |
+| `set_attribute` | Set an attribute's value (e.g. `Definition`, `Note`) — creates it if empty, updates it if already set | `attributeName`, `value` |
+| `add_attribute` | Append an additional value to a multi-valued attribute | `attributeName`, `value` |
 | `remove_attribute` | Clear an attribute value | `attributeName` (optionally a specific value) |
 | `update_property` | Change asset-level properties: `name`, `displayName`, `statusId` | `field`, `value` |
 | `add_relation` | Link this asset to another by relation role (e.g. `is synonym of`) | `relationType`, target asset identifier |
@@ -26,9 +26,10 @@ runs them in order.
 
 ## Hard rules
 
-1. **`update_attribute` vs `add_attribute`.** `update_attribute` fails if the attribute does
-   not already exist on the asset — the error suggests calling `add_attribute` instead.
-   `add_attribute` always appends and is valid only for multi-valued attribute types.
+1. **`set_attribute` vs `add_attribute`.** Use `set_attribute` for normal single-valued
+   attributes (like `Definition`) — it creates the value if absent and updates it if present,
+   so you never need to know the current state first. `add_attribute` only appends an extra
+   value to a multi-valued attribute.
    To see which attributes an asset can hold — including ones that are valid but currently
    empty — call `get_asset_details` and read `assignableAttributes`. An attribute missing
    from the asset's values but present there is settable, not invalid.

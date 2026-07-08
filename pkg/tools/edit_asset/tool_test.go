@@ -537,6 +537,50 @@ func TestEditAsset_AddAttribute_HappyPath(t *testing.T) {
 	}
 }
 
+func TestEditAsset_SetAttribute_CreatesWhenAbsent(t *testing.T) {
+	s := newStub() // default stub has no Note instance
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetAttribute, AttributeName: "Note", Value: "first note",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q (%q)", out.Status, out.Results[0].Error)
+	}
+	if len(s.createdAttrs) != 1 || s.createdAttrs[0].TypeID != noteAttrTypeID {
+		t.Fatalf("expected set_attribute to CREATE the absent Note, got creates=%+v patches=%+v", s.createdAttrs, s.patchedAttrs)
+	}
+	if len(s.patchedAttrs) != 0 {
+		t.Fatalf("expected no patch when creating, got %+v", s.patchedAttrs)
+	}
+}
+
+func TestEditAsset_SetAttribute_PatchesWhenPresent(t *testing.T) {
+	s := newStub() // default stub has a Definition instance
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetAttribute, AttributeName: "Definition", Value: "updated def",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q (%q)", out.Status, out.Results[0].Error)
+	}
+	if got := s.patchedAttrs[defAttrInstanceID]; got != "updated def" {
+		t.Fatalf("expected set_attribute to PATCH existing Definition, got patches=%+v creates=%+v", s.patchedAttrs, s.createdAttrs)
+	}
+	if len(s.createdAttrs) != 0 {
+		t.Fatalf("expected no create when patching, got %+v", s.createdAttrs)
+	}
+}
+
 func TestEditAsset_UpdateAttribute_RichTextConvertsMarkdownToHTML(t *testing.T) {
 	s := newStub()
 	s.attrStringTypeByID = map[string]string{defAttrTypeID: "RICH_TEXT"}
@@ -866,7 +910,7 @@ func TestEditAsset_AmbiguousAttributeName(t *testing.T) {
 	if out.Status != edit_asset.StatusError {
 		t.Fatalf("expected error, got %q", out.Status)
 	}
-	if !strings.Contains(out.Results[0].Error, "cannot disambiguate") {
+	if !strings.Contains(out.Results[0].Error, "can't pick one") {
 		t.Fatalf("expected disambiguation error, got %q", out.Results[0].Error)
 	}
 	if len(s.patchedAttrs) != 0 {

@@ -46,7 +46,8 @@ func suggestionSuffix(label string, names []string, max int) string {
 type OperationType string
 
 const (
-	OpUpdateAttribute      OperationType = "update_attribute"
+	OpSetAttribute         OperationType = "set_attribute"
+	OpUpdateAttribute      OperationType = "update_attribute" // deprecated alias of set_attribute; accepted but not advertised
 	OpAddAttribute         OperationType = "add_attribute"
 	OpRemoveAttribute      OperationType = "remove_attribute"
 	OpUpdateProperty       OperationType = "update_property"
@@ -75,11 +76,11 @@ type Input struct {
 // fields are interpreted. Unused fields are ignored. Server-side validation
 // catches missing or incompatible fields and returns a per-operation error.
 type Operation struct {
-	Type OperationType `json:"type" jsonschema:"Required. One of: update_attribute, add_attribute, remove_attribute, update_property, add_relation, remove_relation, add_tag, set_responsibility, remove_responsibility."`
+	Type OperationType `json:"type" jsonschema:"Required. One of: set_attribute, add_attribute, remove_attribute, update_property, add_relation, remove_relation, add_tag, set_responsibility, remove_responsibility."`
 
-	// Attribute ops — used by update_attribute, add_attribute, remove_attribute.
-	AttributeName string `json:"attributeName,omitempty" jsonschema:"Attribute type name (e.g. 'Definition', 'Note'). Used by update_attribute, add_attribute, remove_attribute. The server resolves this to the attribute type UUID via the asset's scoped assignment."`
-	Value         string `json:"value,omitempty" jsonschema:"New value. Used by update_attribute, add_attribute, and update_property. For RICH_TEXT attribute types (e.g. 'Definition'), supply Markdown — the server converts it to HTML before writing."`
+	// Attribute ops — used by set_attribute, add_attribute, remove_attribute.
+	AttributeName string `json:"attributeName,omitempty" jsonschema:"Attribute type name (e.g. 'Definition', 'Note'). Used by set_attribute, add_attribute, remove_attribute. The server resolves this to the attribute type UUID via the asset's scoped assignment."`
+	Value         string `json:"value,omitempty" jsonschema:"New value. Used by set_attribute, add_attribute, and update_property. For RICH_TEXT attribute types (e.g. 'Definition'), supply Markdown — the server converts it to HTML before writing."`
 
 	// update_property — whitelisted fields only.
 	Field string `json:"field,omitempty" jsonschema:"For update_property: one of 'name', 'displayName', 'statusId'. When field is 'statusId', value may be either the status UUID or the status name (e.g. 'Candidate', 'Accepted'); the server resolves names automatically. When field is 'name' and the asset's current displayName equals its current name (Collibra's create-time default), displayName is also updated to the new value so the user-facing label stays in sync — set field=displayName separately if the user has already customized it differently."`
@@ -139,7 +140,7 @@ type OperationResult struct {
 	PreviousValue         string        `json:"previousValue,omitempty"`
 	NewValue              string        `json:"newValue,omitempty"`
 	CascadedDisplayName   bool          `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
-	ConvertedFromMarkdown bool          `json:"convertedFromMarkdown,omitempty" jsonschema:"True when the attribute value was treated as Markdown and converted to HTML before writing, because the attribute type is RICH_TEXT (e.g. 'Definition'). Only set on add_attribute / update_attribute results."`
+	ConvertedFromMarkdown bool          `json:"convertedFromMarkdown,omitempty" jsonschema:"True when the attribute value was treated as Markdown and converted to HTML before writing, because the attribute type is RICH_TEXT (e.g. 'Definition'). Only set on set_attribute / add_attribute results."`
 	Error                 string        `json:"error,omitempty"`
 }
 
@@ -150,7 +151,10 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title: "Edit Asset",
 		Description: "Edit an existing Collibra asset by submitting a list of typed operations against a single assetId. " +
 			"Supported operations: " +
-			"update_attribute / add_attribute / remove_attribute (change, append, or clear an attribute value such as 'Definition' or 'Note', identified by attribute type name; for RICH_TEXT attributes like 'Definition' the value is treated as Markdown and converted to HTML before writing); " +
+			"set_attribute (set an attribute's value such as 'Definition' or 'Note' by attribute type name — creates the value if the attribute is empty, updates it if it already has one, so this is the right op for normal single-valued attributes whether or not a value exists yet); " +
+			"add_attribute (append an additional value to a multi-valued attribute; for single-valued attributes prefer set_attribute); " +
+			"remove_attribute (clear an attribute value); " +
+			"for RICH_TEXT attributes like 'Definition' the value is treated as Markdown and converted to HTML before writing; " +
 			"update_property (whitelisted fields only: 'name' to rename — also updates displayName when it tracks the current name, so the user-facing label stays in sync; 'displayName' to change the display name; or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
 			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes a forward role name like 'is synonym of' plus the target assetId, remove_relation takes the relation instance UUID); " +
 			"add_tag (append a free-text tag without replacing existing tags); " +
@@ -433,6 +437,9 @@ type opPlan struct {
 	attributeKind     string // assignment discriminator, e.g. "StringAttributeType"
 	targetAttributeID string
 	previousValue     string
+	// attrCreate is set when a set_attribute op resolves to a create (the
+	// attribute has no value yet) rather than a patch.
+	attrCreate bool
 
 	// writeValue is the attribute value actually submitted to Collibra. It
 	// defaults to op.Value but is replaced with the HTML rendering when the
@@ -487,8 +494,8 @@ func newSuccessResult(op Operation) OperationResult {
 func validateOperation(ec *editContext, op Operation) opPlan {
 	plan := opPlan{op: op}
 	switch op.Type {
-	case OpUpdateAttribute:
-		return validateUpdateAttribute(ec, plan)
+	case OpSetAttribute, OpUpdateAttribute:
+		return validateSetAttribute(ec, plan)
 	case OpAddAttribute:
 		return validateAddAttribute(ec, plan)
 	case OpRemoveAttribute:
@@ -513,8 +520,8 @@ func validateOperation(ec *editContext, op Operation) opPlan {
 // result (previous/new values on success, error message on failure).
 func executePlan(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
 	switch plan.op.Type {
-	case OpUpdateAttribute:
-		return executeUpdateAttribute(ctx, client, plan)
+	case OpSetAttribute, OpUpdateAttribute:
+		return executeSetAttribute(ctx, client, ec, plan)
 	case OpAddAttribute:
 		return executeAddAttribute(ctx, client, ec, plan)
 	case OpRemoveAttribute:

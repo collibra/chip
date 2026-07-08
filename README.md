@@ -38,7 +38,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`create_dq_rule`](pkg/tools/create_dq_rule/) - Create a data quality rule (monitor) on an existing DQ job. `monitorType` is `FREEFORM_SQL` (full SQL query) or `SIMPLE_SQL` (single-column check); defaults to active and not suppressed. Uses the DQ monitoring API and requires permission to create rules on the target job
 - [`run_dq_job`](pkg/tools/run_dq_job/) - Trigger a run of an existing DQ job, executing its configured rules. Optional `runDate`/`runDateEnd` (with `dateKind` of `DATE` or `TIMESTAMP`) and `backrun` backfill; defaults to the current date/time. Returns the `jobRunId`. Requires permission to run the target job
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
-    - `update_attribute`, `add_attribute`, `remove_attribute` - change, append, or clear an attribute value (e.g. `Definition`, `Note`)
+    - `set_attribute`, `add_attribute`, `remove_attribute` - set an attribute value (creates if empty, updates if present), append an extra value to a multi-valued attribute, or clear one (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
     - `add_relation`, `remove_relation` - link or unlink the asset to another asset by relation role (e.g. `is synonym of`)
     - `add_tag` - append a free-text tag without replacing existing tags
@@ -212,6 +212,8 @@ At present, enabling and disabling at the same time is not supported.
 Some functionality ships behind an opt-in `experimental` flag. These features are off by default and may change or be removed without a deprecation cycle. Enable them via `--experimental=<name>`, the `COLLIBRA_MCP_EXPERIMENTAL` environment variable, or the `mcp.experimental` field in `mcp.yaml`. Unknown names log a warning but do not fail startup, so stale configs survive a feature being retired or renamed.
 
 ### Known experimental features
+
+- `context-specifications` — Context specification tools: `list_context_specifications`, `get_context_specification`, and the `contextSpecificationId` parameter on `get_asset_details`. These tools generate structured YAML context for assets using the Semantic Blueprint API.
 
 - `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
 

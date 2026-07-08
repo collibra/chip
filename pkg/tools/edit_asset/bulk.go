@@ -19,17 +19,24 @@ const bulkThreshold = 2
 // execution via executePlan. Order of results is preserved via in-place
 // updates to plans.
 func executeValidPlans(ctx context.Context, client *http.Client, ec *editContext, plans []opPlan) {
-	// Collect indices of valid plans grouped by bulk-eligible op type.
-	var addAttrIdx, updAttrIdx, addRelIdx []int
+	// Group valid plans by the write they actually perform, not the op name:
+	// a set_attribute resolves to a create or a patch during validation, and
+	// add_attribute is always a create (append). Grouping by resolved action
+	// keeps the create/patch bulk endpoints correct regardless of tool choice.
+	var createAttrIdx, patchAttrIdx, addRelIdx []int
 	for i, p := range plans {
 		if p.result.Status == "error" {
 			continue
 		}
 		switch p.op.Type {
 		case OpAddAttribute:
-			addAttrIdx = append(addAttrIdx, i)
-		case OpUpdateAttribute:
-			updAttrIdx = append(updAttrIdx, i)
+			createAttrIdx = append(createAttrIdx, i)
+		case OpSetAttribute, OpUpdateAttribute:
+			if p.attrCreate {
+				createAttrIdx = append(createAttrIdx, i)
+			} else {
+				patchAttrIdx = append(patchAttrIdx, i)
+			}
 		case OpAddRelation:
 			addRelIdx = append(addRelIdx, i)
 		}
@@ -37,15 +44,15 @@ func executeValidPlans(ctx context.Context, client *http.Client, ec *editContext
 
 	// Bulk-eligible groups: dispatch as bulk if at-or-above threshold.
 	bulked := map[int]bool{}
-	if len(addAttrIdx) >= bulkThreshold {
-		executeBulkAddAttributes(ctx, client, ec, plans, addAttrIdx)
-		for _, i := range addAttrIdx {
+	if len(createAttrIdx) >= bulkThreshold {
+		executeBulkAddAttributes(ctx, client, ec, plans, createAttrIdx)
+		for _, i := range createAttrIdx {
 			bulked[i] = true
 		}
 	}
-	if len(updAttrIdx) >= bulkThreshold {
-		executeBulkUpdateAttributes(ctx, client, plans, updAttrIdx)
-		for _, i := range updAttrIdx {
+	if len(patchAttrIdx) >= bulkThreshold {
+		executeBulkUpdateAttributes(ctx, client, plans, patchAttrIdx)
+		for _, i := range patchAttrIdx {
 			bulked[i] = true
 		}
 	}

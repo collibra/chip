@@ -19,6 +19,7 @@ type Input struct {
 	AssetID                 string `json:"assetId" jsonschema:"the UUID of the asset to retrieve details for"`
 	OutgoingRelationsCursor string `json:"outgoingRelationsCursor,omitempty" jsonschema:"Optional. Cursor (asset ID) to fetch the next page of outgoing relations. Use the last relation's target ID from the previous response."`
 	IncomingRelationsCursor string `json:"incomingRelationsCursor,omitempty" jsonschema:"Optional. Cursor (asset ID) to fetch the next page of incoming relations. Use the last relation's source ID from the previous response."`
+	ContextSpecificationId  string `json:"contextSpecificationId,omitempty" jsonschema:"Optional. Experimental. UUID of a Context Specification to execute against this asset; the generated YAML context is included in the response. Requires the context-specifications experimental feature to be enabled. Use list_context_specifications to discover available specifications."`
 }
 
 type Output struct {
@@ -26,6 +27,8 @@ type Output struct {
 	AssignableAttributes   []AssignableAttribute `json:"assignableAttributes,omitempty" jsonschema:"every attribute type this asset can hold per its assignment, including ones that are currently empty. Use this to know which attributes (e.g. Definition) can be set via edit_asset, since the asset's attributes list only shows attributes that already have a value"`
 	Responsibilities       []AssetResponsibility `json:"responsibilities,omitempty" jsonschema:"the responsibilities assigned to this asset, including inherited ones"`
 	ResponsibilitiesStatus string                `json:"responsibilitiesStatus,omitempty" jsonschema:"status message for responsibilities, e.g. No responsibilities assigned"`
+	AssetContext           string                `json:"assetContext,omitempty" jsonschema:"the generated YAML context from the executed Context Specification. Only present when contextSpecificationId was provided and context generation succeeded."`
+	AssetContextError      string                `json:"assetContextError,omitempty" jsonschema:"error if context generation failed; main asset details are still returned."`
 	Link                   string                `json:"link,omitempty" jsonschema:"the link you can navigate to in Collibra to view the asset"`
 	Error                  string                `json:"error,omitempty" jsonschema:"error message if asset not found or other error occurred"`
 	Found                  bool                  `json:"found" jsonschema:"whether the asset was found"`
@@ -48,18 +51,18 @@ type AssetResponsibility struct {
 	Inherited bool   `json:"inherited" jsonschema:"true if the responsibility is inherited from a parent resource (domain or community), false if directly assigned to this asset"`
 }
 
-func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
+func NewTool(collibraClient *http.Client, contextSpecsEnabled bool) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_asset_details",
 		Title:       "Get Asset Details",
-		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Also returns assignableAttributes: every attribute type the asset can hold, with required and isSet flags — use this to tell an empty-but-settable attribute (e.g. an unset Definition) apart from one that isn't valid for the asset. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page).",
-		Handler:     handler(collibraClient),
+		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Also returns assignableAttributes: every attribute type the asset can hold, with required and isSet flags — use this to tell an empty-but-settable attribute (e.g. an unset Definition) apart from one that isn't valid for the asset. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page). Optionally executes a Context Specification against the asset and returns the generated YAML context (requires the context-specifications experimental feature).",
+		Handler:     handler(collibraClient, contextSpecsEnabled),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}
 }
 
-func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
+func handler(collibraClient *http.Client, contextSpecsEnabled bool) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
 		if err := validation.UUID("assetId", input.AssetID); err != nil {
 			return Output{}, err
@@ -94,14 +97,31 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		// Best-effort: surface the full assignable-attribute schema (incl. empty ones).
 		assignable := resolveAssignableAttributes(ctx, collibraClient, assetUUID.String(), &assets[0])
 
-		return Output{
+		output := Output{
 			Asset:                  &assets[0],
 			AssignableAttributes:   assignable,
 			Responsibilities:       mappedResponsibilities,
 			ResponsibilitiesStatus: responsibilitiesStatus,
 			Found:                  true,
 			Link:                   fmt.Sprintf("%s/asset/%s", strings.TrimSuffix(collibraHost, "/"), assetUUID),
-		}, nil
+		}
+
+		if input.ContextSpecificationId != "" {
+			if !contextSpecsEnabled {
+				output.AssetContextError = "contextSpecificationId requires the context-specifications experimental feature to be enabled"
+			} else if err := validation.UUID("contextSpecificationId", input.ContextSpecificationId); err != nil {
+				return Output{}, err
+			} else {
+				result, err := clients.GenerateContext(ctx, collibraClient, input.AssetID, input.ContextSpecificationId, false)
+				if err != nil {
+					output.AssetContextError = fmt.Sprintf("Failed to generate context: %s", err.Error())
+				} else {
+					output.AssetContext = result.Content
+				}
+			}
+		}
+
+		return output, nil
 	}
 }
 
