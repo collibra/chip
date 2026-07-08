@@ -22,7 +22,7 @@ Extracts metadata from a ThoughtSpot cloud tenant — Tenant, Orgs, Connections,
 - `sourceId` (required) — stable string identifier used to construct the lin-sdk source name (`ThoughtSpot-<sourceId>-<dgcHost>`). Changing this across runs creates a new parallel lineage source instead of updating the existing one.
 - `orgs` (optional) — same org-filter semantics as the sync tab; should be aligned with the sync configuration to avoid partial graphs.
 
-The lineage capability also requires these **install-time** run-parameters (not in the generic config): `targetDgc` (DGC URL), `username` and `password` (Collibra DGC credentials for lin-sdk — distinct from the ThoughtSpot connection credentials). Optionally `customParameters.techlinHost` + `customParameters.techlinKey` if bypassing DGC-routed lineage submission.
+The lineage capability also requires these **install-time** run-parameters (not in the generic config): `targetDgc` (DGC URL), `username` and `password` (Collibra DGC credentials for lin-sdk — distinct from the ThoughtSpot connection credentials). Optionally `customParameters.techlinHost` + `customParameters.techlinKey` if bypassing DGC-routed lineage submission and pushing to the Techlin server directly.
 
 ## Gotchas
 
