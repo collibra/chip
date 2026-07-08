@@ -122,6 +122,27 @@ func RegisterDatabase(ctx context.Context, client *http.Client, request AddDatab
 	return &database, nil
 }
 
+// GetDatabase fetches a registered Database asset via GET /databases/{databaseId}.
+func GetDatabase(ctx context.Context, client *http.Client, databaseID string) (*Database, error) {
+	endpoint := catalogDatabaseBasePath + "/databases/" + databaseID
+	var database Database
+	if err := doCatalogDatabaseGet(ctx, client, endpoint, &database); err != nil {
+		return nil, err
+	}
+	return &database, nil
+}
+
+// GetDatabaseConnection fetches a database connection via
+// GET /databaseConnections/{databaseConnectionId}.
+func GetDatabaseConnection(ctx context.Context, client *http.Client, databaseConnectionID string) (*DatabaseConnection, error) {
+	endpoint := catalogDatabaseBasePath + "/databaseConnections/" + databaseConnectionID
+	var connection DatabaseConnection
+	if err := doCatalogDatabaseGet(ctx, client, endpoint, &connection); err != nil {
+		return nil, err
+	}
+	return &connection, nil
+}
+
 // RefreshSchemaConnections asynchronously refreshes the schema connections known for a
 // database connection via POST /schemaConnections/refresh?databaseConnectionId=...
 func RefreshSchemaConnections(ctx context.Context, client *http.Client, databaseConnectionID string) error {

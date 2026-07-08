@@ -28,7 +28,7 @@ type Output struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "edge_run_capability",
-		Description: "Runs an Edge capability immediately. Returns the job UUID that can be used to track execution via edge_get_job_status.",
+		Description: "Runs an Edge capability immediately. Returns the job UUID that can be used to track execution via edge_get_job_status. Do not use this for jdbc-ingestion (use start_ingestion) or technical lineage (use start_technical_lineage) — those flows have dedicated DGC triggers that a raw capability run would bypass.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},

@@ -1,6 +1,6 @@
 ---
 description: Set up, configure, schedule, and run Edge ETL integrations (metadata sync capabilities like Dataplex, Databricks Unity Catalog, Purview, Sigma) end to end.
-related: collibra/jdbc-ingestion, collibra/discovery
+related: collibra/jdbc-ingestion, collibra/discovery, collibra/tech-lineage
 ---
 
 # ETL integrations — connect, configure, schedule, run

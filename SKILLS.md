@@ -14,11 +14,12 @@ those tools. Skill content lives in [`pkg/skills/files/collibra/`](pkg/skills/fi
 |---|---|
 | `collibra/index` | Navigator — start here when unsure which skill applies |
 | `collibra/discovery` | Semantic vs keyword search; resolving names to UUIDs |
-| `collibra/lineage` | Technical lineage; DGC UUID ↔ lineage entity ID bridge; column-level workaround |
+| `collibra/lineage` | Querying existing technical lineage; DGC UUID ↔ lineage entity ID bridge; column-level workaround |
 | `collibra/asset-create` | `create_asset` workflow; RICH_TEXT Markdown handling; duplicate gating |
 | `collibra/asset-edit` | `edit_asset` operation types |
 | `collibra/jdbc-ingestion` | End-to-end jdbc-ingestion setup: Edge connection/capability, database registration, running and polling a sync |
 | `collibra/etl-integration` | End-to-end ETL sync integrations (Dataplex, Databricks UC, Purview, Sigma, …): connection, capability, generic config (fetched live), schedule/run; per-integration references |
+| `collibra/tech-lineage` | Technical lineage harvesting setup: prerequisites (Database asset + jdbc-ingestion), Technical Lineage capability, `start_technical_lineage` trigger; per-source references (Snowflake) |
 
 Each skill is one `SKILL.md` per directory, with frontmatter (`description`, `related`) and an
 optional `references/` directory for bundled reference documents.
