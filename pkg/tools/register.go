@@ -18,7 +18,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/catalog_etl_save_generic_config"
 	"github.com/collibra/chip/pkg/tools/catalog_etl_start_job"
 	"github.com/collibra/chip/pkg/tools/catalog_etl_update_schedule"
-	"github.com/collibra/chip/pkg/tools/configure_database"
+	"github.com/collibra/chip/pkg/tools/configure_database_schemas"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_community"
 	"github.com/collibra/chip/pkg/tools/create_domain"
@@ -45,11 +45,11 @@ import (
 	"github.com/collibra/chip/pkg/tools/find_users"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
-	"github.com/collibra/chip/pkg/tools/get_job_status"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
 	"github.com/collibra/chip/pkg/tools/get_context_specification"
 	"github.com/collibra/chip/pkg/tools/get_data_source_setup_guide"
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
+	"github.com/collibra/chip/pkg/tools/get_job_status"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
@@ -65,6 +65,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
+	"github.com/collibra/chip/pkg/tools/register_database"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
@@ -137,7 +138,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, test_connection.NewTool(client))
 	toolRegister(server, toolConfig, edge_get_job_status.NewTool(client))
 	toolRegister(server, toolConfig, get_job_status.NewTool(client))
-	toolRegister(server, toolConfig, configure_database.NewTool(client))
+	toolRegister(server, toolConfig, register_database.NewTool(client))
+	toolRegister(server, toolConfig, configure_database_schemas.NewTool(client))
 	toolRegister(server, toolConfig, start_ingestion.NewTool(client))
 
 	// Edge Management tools — read/delete/run operations with no counterpart among the

@@ -43,7 +43,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 ### Write Tools
 
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
-- [`configure_database`](pkg/tools/configure_database/) - Register a database and configure its schema synchronization rules for jdbc-ingestion
+- [`configure_database_schemas`](pkg/tools/configure_database_schemas/) - Discover and configure schema/table synchronization rules for a database registered via register_database, for jdbc-ingestion
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
 - [`edge_create_capability`](pkg/tools/edge_create_capability/) - Create or update an Edge capability (e.g. jdbc-ingestion). **Requires:** `dgc.edge-integration-capability-manage`
 - [`create_community`](pkg/tools/create_community/) - Create a DGC community
@@ -58,6 +58,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
     - `remove_responsibility` - unassign a user or group from a resource role (only directly-assigned responsibilities, not inherited ones)
 - [`init_data_contract`](pkg/tools/init_data_contract/) - Initialize a new data contract asset governing a Data Product Port, with an optional initial manifest. **Requires:** `dgc.data-contract`
 - [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract. **Requires:** `dgc.data-contract`
+- [`register_database`](pkg/tools/register_database/) - Discover a database through an Edge connection and register it as a Database asset, for jdbc-ingestion
 - [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match. **Requires:** `dgc.classify`, `dgc.catalog`, `dgc.data-classes-edit`
 - [`start_ingestion`](pkg/tools/start_ingestion/) - Trigger a jdbc-ingestion capability run for a registered database
 - [`upload_file`](pkg/tools/upload_file/) - Upload a file (JDBC driver, TLS certificate, private key, keytab, …) to an Edge site. **Requires:** `dgc.edge-integration-capability-manage`

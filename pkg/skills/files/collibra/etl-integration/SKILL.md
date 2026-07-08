@@ -136,8 +136,9 @@ replace,** the live schema from `catalog_etl_get_schema`.
 ## Distinct from jdbc-ingestion
 
 `collibra/jdbc-ingestion` is a specialized flow: it registers a Database asset via
-`configure_database` and runs via `start_ingestion` (DGC's `synchronizeMetadata`), **not**
-`catalog_etl_start_job`. Use that skill for JDBC database ingestion; use **this** skill for
+`register_database`, configures schemas via `configure_database_schemas`, and runs via
+`start_ingestion` (DGC's `synchronizeMetadata`), **not** `catalog_etl_start_job`. Use
+that skill for JDBC database ingestion; use **this** skill for
 the generic/ETL sync capabilities (Dataplex, Databricks Unity Catalog, Purview, Sigma,
 ThoughtSpot, …).
 

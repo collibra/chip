@@ -17,7 +17,7 @@ import (
 // the help text, example YAML, and validation warning all read from this
 // map so no other code needs to change.
 var knownExperimentalFeatures = map[string]string{
-	skills.FeatureName:                    "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
+	skills.FeatureName:                 "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
 	tools.ContextSpecificationsFeature: "Context specification tools: list_context_specifications, get_context_specification, and contextSpecificationId parameter on get_asset_details.",
 }
 

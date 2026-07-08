@@ -1,5 +1,5 @@
 // Package find_users implements the find_users MCP tool: resolves a user's name
-// (or partial name) to their UUID, e.g. to fill in configure_database's ownerIds
+// (or partial name) to their UUID, e.g. to fill in register_database's ownerIds
 // without the caller needing to already know the id.
 package find_users
 
@@ -39,7 +39,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "find_users",
 		Title:       "Find Users",
-		Description: "Finds DGC users by name (substring, case-insensitive), returning their UUIDs. Use this to resolve a name to an id for configure_database's ownerIds or similar owner/assignee fields, instead of needing to already know the UUID.",
+		Description: "Finds DGC users by name (substring, case-insensitive), returning their UUIDs. Use this to resolve a name to an id for register_database's ownerIds or similar owner/assignee fields, instead of needing to already know the UUID.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

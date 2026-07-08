@@ -1,6 +1,6 @@
 // Package create_community implements the create_community MCP tool: creates a DGC
 // community, the top-level catalog scaffolding required before creating domains and
-// registering databases via configure_database.
+// registering databases via register_database.
 package create_community
 
 import (
@@ -28,7 +28,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "create_community",
 		Title:       "Create Community",
-		Description: "Creates a DGC community. A community is required before creating a domain (create_domain) and registering a database (configure_database).",
+		Description: "Creates a DGC community. A community is required before creating a domain (create_domain) and registering a database (register_database).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},

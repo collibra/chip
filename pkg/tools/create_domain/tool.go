@@ -1,6 +1,6 @@
 // Package create_domain implements the create_domain MCP tool: creates a DGC domain
 // within a community, e.g. a "Physical Data Dictionary" domain required before
-// registering a database via configure_database.
+// registering a database via register_database.
 package create_domain
 
 import (
@@ -32,7 +32,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "create_domain",
 		Title:       "Create Domain",
-		Description: "Creates a DGC domain within a community, e.g. a Physical Data Dictionary domain required before registering a database via configure_database.",
+		Description: "Creates a DGC domain within a community, e.g. a Physical Data Dictionary domain required before registering a database via register_database.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},

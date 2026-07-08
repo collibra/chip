@@ -49,9 +49,10 @@
 // catalog-backed driver API (POST /rest/edge/v1/drivers/jars), which has no UI in
 // front of it at all, and the frontend's only file-upload path is the legacy one
 // embedded inside the connection-creation form's own FILE-type field. Once the user
-// confirms the connection is saved, use edge_find_connections (by name) to pick up its id
-// and proceed with edge_create_capability/configure_database/start_ingestion against it —
-// skip edge_create_connection entirely for that connection, since it already exists.
+// confirms the connection is saved, use edge_find_connections (by name) to pick up its
+// id and proceed with edge_create_capability/register_database/
+// configure_database_schemas/start_ingestion against it — skip edge_create_connection
+// entirely for that connection, since it already exists.
 package upload_file
 
 import (

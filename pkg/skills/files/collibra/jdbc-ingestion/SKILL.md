@@ -35,12 +35,12 @@ which ingestion type it should be** — don't assume JDBC just because this skil
    string format, the Marketplace URL for the driver jar, and per-auth-method
    properties. Treat a failed/empty lookup as "ask the user for the connection
    properties directly," not as a bug to retry.
-3. **`upload_file`** — upload the JDBC driver jar. **Driver files must come from
-   Collibra Marketplace only** (the URL from step 2) — never fetch one from Maven
-   Central or another host, and never invent one. If the file is too large for
-   `contentBase64` (most JDBC drivers are tens of MB) and this chip instance doesn't
-   have `filePath` enabled, stop and guide the user to create the connection manually
-   in the Edge UI instead — see "Large driver files" below.
+3. **`upload_file`** — upload the JDBC driver jar. **Only use a file the user actually
+   provides, sourced from the Collibra Marketplace listing from step 2** — never fetch
+   a driver yourself from anywhere else, and never invent one. If the file is too large
+   for `contentBase64` (most JDBC drivers are tens of MB) and this chip instance
+   doesn't have `filePath` enabled, stop and guide the user to create the connection
+   manually in the Edge UI instead — see "Large driver files" below.
 4. **`edge_create_connection`** — `typeId: "Generic"` (not a vendor-specific connection
    type — jdbc-ingestion requires the Generic JDBC connection type). Fixed manifest
    parameters (`driver-class`, `connection-string`, `driver-jar` as the `upload_file`
@@ -55,17 +55,23 @@ which ingestion type it should be** — don't assume JDBC just because this skil
    **`find_domain_types`** (look up e.g. "Physical Data Dictionary") →
    **`create_domain`**. **`find_users`** to resolve owner names to UUIDs for the next
    step.
-8. **`configure_database`** — one call does the full refresh-connection →
-   register-database → refresh-schema → set-sync-rules flow. Needs `communityId`,
-   `parentSystemId` (an existing System asset), and `ownerIds` (from step 7). **Never
-   default to "sync everything" — always confirm which database, which schemas, and
-   which tables with the user first.** See "Confirm scope before configuring the
-   database" below; the tool itself refuses to guess when there's more than one
-   database or schema. If it returns a retryable-looking error, it usually means the
-   underlying async refresh hasn't completed yet (cold-start data source connections
-   can take 30–60s) — just call it again; it's idempotent.
-9. **`start_ingestion`** — triggers the actual sync using the database id from step 8.
-10. **`get_job_status`** — poll the job id `start_ingestion` returned. A
+8. **`register_database`** — discovers the database through the Edge connection and
+   registers it as a Database asset. Needs `communityId`, `parentSystemId` (an existing
+   System asset), and `ownerIds` (from step 7). **Never default to registering
+   whichever database is discovered first if more than one exists — always confirm
+   which one with the user.** The tool refuses to guess when there's more than one
+   database (see "Confirm scope" below). If it returns a retryable-looking error, it
+   usually means the underlying async refresh hasn't completed yet (cold-start data
+   source connections can take 30–60s) — just call it again; it's idempotent.
+9. **`configure_database_schemas`** — takes the `databaseConnectionId` from step 8's output,
+   discovers its schemas, and sets which schemas/tables get synchronized. **Never
+   default to "sync everything" — always confirm which schemas and which tables with
+   the user first.** The tool refuses to guess when there's more than one schema. This
+   is a separate call from step 8 specifically so that a schema-ambiguity error here
+   never risks colliding with the database step 8 already registered — safe to call
+   again later to change what's synced.
+10. **`start_ingestion`** — triggers the actual sync using the database id from step 8.
+11. **`get_job_status`** — poll the job id `start_ingestion` returned. A
     202/success from `start_ingestion` only means the job was accepted, not that
     ingestion finished — always poll to confirm completion.
 
@@ -88,30 +94,32 @@ catalog database-registration bookkeeping (linking the job back to the Database 
 updating sync state) that a raw capability run skips entirely — a direct run would
 appear to succeed on the Edge side while leaving the catalog side out of sync.
 
-## Confirm scope before configuring the database
+## Confirm scope before registering and configuring the database
 
-`configure_database` will not silently register the wrong database or sync every table
-in every schema — it's built to refuse ambiguity rather than guess:
+`register_database` and `configure_database_schemas` will not silently register the wrong
+database or sync every table in every schema — both refuse ambiguity rather than guess,
+and neither has a side effect until its own ambiguity is resolved:
 
-- **`databaseName`** is required if the data source exposes more than one
-  database/catalog through the connection. The tool errors and names the discovered
-  candidates if you omit it while more than one exists.
-- **`schemaNames`** is required if the database has more than one schema. Same
-  behavior: omit it with multiple schemas discovered and the tool errors, listing them.
-  Pass the literal `["*"]` to configure every schema — only do this after the user has
-  actually said they want everything, not as a shortcut when you don't know yet.
-- **`include`** has no default. You must always pass a table pattern (`"*"` for all
-  tables, or a specific comma-separated pattern) — there is no silent "sync
-  everything" fallback.
+- **`register_database`'s `databaseName`** is required if the data source exposes more
+  than one database/catalog through the connection. The tool errors and names the
+  discovered candidates if you omit it while more than one exists — no Database asset
+  is registered until this is resolved.
+- **`configure_database_schemas`'s `schemaNames`** is required if the database has more than
+  one schema. Same behavior: omit it with multiple schemas discovered and the tool
+  errors, listing them. Pass the literal `["*"]` to configure every schema — only do
+  this after the user has actually said they want everything, not as a shortcut when
+  you don't know yet.
+- **`configure_database_schemas`'s `include`** has no default. You must always pass a table
+  pattern (`"*"` for all tables, or a specific comma-separated pattern) — there is no
+  silent "sync everything" fallback.
 
-The practical flow: call `configure_database` once with just the required identifiers
-and let it fail on ambiguity to discover the candidate databases/schemas, **or** if you
-already know multiple exist, ask the user up front which database, which schemas, and
-which tables (or "all") they want before calling at all. Either way, do not pass `"*"`
-for `schemaNames` or `include` on your own initiative — confirm with the user first.
-The one exception: if discovery finds exactly one database and one schema, the tool
-auto-selects them — no ambiguity to resolve, so no need to ask about *which* database
-or schema, though you should still confirm the table pattern (`include`/`exclude`).
+The practical flow for each tool: call it once with just the required identifiers and
+let it fail on ambiguity to discover the candidates, **or** if you already know
+multiple exist, ask the user up front before calling at all. Either way, do not pass
+`"*"` for `schemaNames` or `include` on your own initiative — confirm with the user
+first. The one exception: if discovery finds exactly one database (or one schema), the
+respective tool auto-selects it — no ambiguity to resolve, so no need to ask about
+*which* one, though you should still confirm the table pattern (`include`/`exclude`).
 
 ## Picking up an existing connection instead of duplicating one
 
@@ -135,14 +143,14 @@ need to pick the file and click through. Once they confirm it's saved, use
 
 ## Hard rules
 
-1. **Never source a JDBC driver from anywhere but Collibra Marketplace.** Not Maven
-   Central, not a GitHub release, not a URL the user pastes that isn't the Marketplace
-   listing. If in doubt, ask the user to download the jar from the URL
-   `get_data_source_setup_guide` returns and hand you the file.
+1. **Never source a JDBC driver from anywhere but Collibra Marketplace.** If in doubt,
+   ask the user to download the jar from the URL `get_data_source_setup_guide` returns
+   and hand you the file — don't fetch or substitute one yourself.
 2. **`edge_create_connection`'s `typeId` for jdbc-ingestion is `"Generic"`,** never a
    vendor-specific connection type — jdbc-ingestion cannot use those.
 3. **Always poll after `start_ingestion`.** A successful call only means the job was
    accepted.
 4. **Never pick a database, schema set, or table scope for the user.** When more than
-   one is possible, ask; when `configure_database` reports ambiguity, relay the
-   candidates and ask rather than picking one yourself or retrying with `"*"`.
+   one is possible, ask; when `register_database` or `configure_database_schemas` reports
+   ambiguity, relay the candidates and ask rather than picking one yourself or
+   retrying with `"*"`.

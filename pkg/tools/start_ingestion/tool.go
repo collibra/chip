@@ -14,8 +14,8 @@ import (
 )
 
 type Input struct {
-	DatabaseID          string   `json:"databaseId" jsonschema:"UUID of the Database asset to synchronize (as registered by configure_database)."`
-	SchemaConnectionIDs []string `json:"schemaConnectionIds,omitempty" jsonschema:"Optional. UUIDs of specific schema connections to synchronize. If omitted, all schemas that already have synchronization rules configured (via configure_database) are synchronized."`
+	DatabaseID          string   `json:"databaseId" jsonschema:"UUID of the Database asset to synchronize (as registered by register_database)."`
+	SchemaConnectionIDs []string `json:"schemaConnectionIds,omitempty" jsonschema:"Optional. UUIDs of specific schema connections to synchronize. If omitted, all schemas that already have synchronization rules configured (via configure_database_schemas) are synchronized."`
 }
 
 type Output struct {
@@ -28,7 +28,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "start_ingestion",
 		Title:       "Start Database Ingestion",
-		Description: "Triggers the jdbc-ingestion capability run for a registered Database asset, synchronizing its configured schemas/tables into the catalog. The database must already be registered and configured via configure_database. Poll the returned job's id with get_job_status to confirm it actually completed — a 202/success response here only means the job was accepted, not that ingestion finished.",
+		Description: "Triggers the jdbc-ingestion capability run for a registered Database asset, synchronizing its configured schemas/tables into the catalog. The database must already be registered (register_database) and have its schemas configured (configure_database_schemas). Poll the returned job's id with get_job_status to confirm it actually completed — a 202/success response here only means the job was accepted, not that ingestion finished.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
