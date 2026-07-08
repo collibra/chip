@@ -130,7 +130,7 @@ func GetDataSourceInfo(ctx context.Context, client *http.Client, slug string) (*
 // source, grouped by authentication method (e.g. a Snowflake connection documents
 // separate property sets for "Username and password", "Key pair (unencrypted)",
 // "OAuth", etc.). Use this to know exactly which named properties to pass as
-// create_connection's additionalProperties for a given auth method.
+// edge_create_connection's additionalProperties for a given auth method.
 func GetConnectionProperties(ctx context.Context, client *http.Client, slug string) ([]AuthMethodProperties, error) {
 	doc, err := fetchAndParseHTML(ctx, client, catalogConnectorsBaseURL+"/"+slug+"/minimum-connection-properties-edge.htm")
 	if err != nil {

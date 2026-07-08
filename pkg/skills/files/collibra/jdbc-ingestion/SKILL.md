@@ -10,9 +10,26 @@ Setting up jdbc-ingestion is a fixed sequence across two separate systems: Edge
 No single tool does the whole thing — skipping a step or calling tools out of order is
 the most common way this goes wrong.
 
+## First: confirm this is the right ingestion path
+
+Many data sources support **more than one** ingestion path — most commonly a native
+**ETL integration** (`collibra/etl-integration`, e.g. Databricks Unity Catalog, Dataplex,
+Purview, Sigma) *and* generic **JDBC** (this skill). The native path is usually richer
+(lineage, finer metadata) and preferred where it exists.
+
+**Whenever the user asks to create an integration, before doing anything else, determine
+which ingestion type it should be** — don't assume JDBC just because this skill is loaded:
+
+1. Identify the data source.
+2. Check whether more than one path supports it (consult `collibra/etl-integration`'s
+   `references/index.md` for the native-ETL data sources).
+3. **If more than one path is possible, ask the user which they want** before starting.
+   Only proceed with this JDBC skill once the user has chosen JDBC (or JDBC is the only
+   supported path).
+
 ## The full sequence
 
-1. **`list_edge_sites`** — get the `edgeSiteId` you'll use everywhere below.
+1. **`edge_list_sites`** — get the `edgeSiteId` you'll use everywhere below.
 2. **`get_data_source_setup_guide`** (pass the data source name, e.g. `"Snowflake"`) —
    before guessing any connection parameter. Returns the driver class, connection
    string format, the Marketplace URL for the driver jar, and per-auth-method
@@ -24,15 +41,15 @@ the most common way this goes wrong.
    `contentBase64` (most JDBC drivers are tens of MB) and this chip instance doesn't
    have `filePath` enabled, stop and guide the user to create the connection manually
    in the Edge UI instead — see "Large driver files" below.
-4. **`create_connection`** — `typeId: "Generic"` (not a vendor-specific connection
+4. **`edge_create_connection`** — `typeId: "Generic"` (not a vendor-specific connection
    type — jdbc-ingestion requires the Generic JDBC connection type). Fixed manifest
    parameters (`driver-class`, `connection-string`, `driver-jar` as the `upload_file`
    URI) go in `parameters`; open-ended vendor properties (Snowflake's Role, Warehouse,
    User, private key file, etc.) go in `additionalProperties`, not `parameters`.
 5. **`test_connection`** — verify it actually connects before building on top of it.
    Pass `timeoutSec` for a synchronous result, or poll the returned `jobId` with
-   `get_job_status`.
-6. **`create_capability`** — `typeId: "jdbc-ingestion"`, `parameters.connection` set to
+   `edge_get_job_status`.
+6. **`edge_create_capability`** — `typeId: "jdbc-ingestion"`, `parameters.connection` set to
    the connection id from step 4.
 7. Catalog scaffolding, only if it doesn't already exist: **`create_community`** →
    **`find_domain_types`** (look up e.g. "Physical Data Dictionary") →
@@ -48,18 +65,18 @@ the most common way this goes wrong.
    underlying async refresh hasn't completed yet (cold-start data source connections
    can take 30–60s) — just call it again; it's idempotent.
 9. **`start_ingestion`** — triggers the actual sync using the database id from step 8.
-10. **`get_catalog_job_status`** — poll the job id `start_ingestion` returned. A
+10. **`get_job_status`** — poll the job id `start_ingestion` returned. A
     202/success from `start_ingestion` only means the job was accepted, not that
     ingestion finished — always poll to confirm completion.
 
 ## Two job-id spaces — do not cross them
 
-- **Edge-site jobs** (from `test_connection`) → poll with **`get_job_status`**.
-- **DGC catalog jobs** (from `start_ingestion`) → poll with **`get_catalog_job_status`**.
+- **Edge-site jobs** (from `test_connection`) → poll with **`edge_get_job_status`**.
+- **DGC jobs** (from `start_ingestion`) → poll with **`get_job_status`**.
 
 Passing one tool's job id to the other will fail or silently poll the wrong resource.
 `start_ingestion`'s own `Job.id` is a catalog job id — never poll it with
-`get_job_status`.
+`edge_get_job_status`.
 
 ## Do not use a raw "run capability" tool for this
 
@@ -100,8 +117,8 @@ or schema, though you should still confirm the table pattern (`include`/`exclude
 
 If a connection with the driver already exists (most commonly because the driver file
 was too large to upload and the user created it manually via the Edge UI), use
-**`find_connections`** (by name, optionally scoped to `edgeSiteId`) to get its id and
-skip straight to step 6 — do not call `create_connection` again for it.
+**`edge_find_connections`** (by name, optionally scoped to `edgeSiteId`) to get its id and
+skip straight to step 6 — do not call `edge_create_connection` again for it.
 
 ## Large driver files
 
@@ -114,7 +131,7 @@ file is available: guide the user to create the whole connection manually via th
 UI (Settings > Edge > site > Connections > New), giving them the exact field values
 (driver class, connection string — from `get_data_source_setup_guide`) so they only
 need to pick the file and click through. Once they confirm it's saved, use
-`find_connections` to pick it up and continue from step 6.
+`edge_find_connections` to pick it up and continue from step 6.
 
 ## Hard rules
 
@@ -122,7 +139,7 @@ need to pick the file and click through. Once they confirm it's saved, use
    Central, not a GitHub release, not a URL the user pastes that isn't the Marketplace
    listing. If in doubt, ask the user to download the jar from the URL
    `get_data_source_setup_guide` returns and hand you the file.
-2. **`create_connection`'s `typeId` for jdbc-ingestion is `"Generic"`,** never a
+2. **`edge_create_connection`'s `typeId` for jdbc-ingestion is `"Generic"`,** never a
    vendor-specific connection type — jdbc-ingestion cannot use those.
 3. **Always poll after `start_ingestion`.** A successful call only means the job was
    accepted.

@@ -85,9 +85,9 @@ func TestListIntegrationsScheduleEnrichment(t *testing.T) {
 	}))
 	handler.Handle("/rest/catalog/1.0/genericIntegration/00000000-0000-0000-0000-000000000001/schedule", testutil.JsonHandlerOut(func(r *http.Request) (int, clients.GenericSchedule) {
 		return http.StatusOK, clients.GenericSchedule{
-			CronExpression:      "0 2 * * *",
-			CronTimeZone:        "UTC",
-			LastRunTimeStamp:    1000,
+			CronExpression:       "0 2 * * *",
+			CronTimeZone:         "UTC",
+			LastRunTimeStamp:     1000,
 			NextRunDateLongValue: 9999999999000,
 		}
 	}))

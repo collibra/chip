@@ -18,8 +18,8 @@ type Input struct {
 
 type Output struct {
 	Capabilities []clients.EdgeCapability `json:"capabilities" jsonschema:"list of Edge capabilities"`
-	Count        int                  `json:"count" jsonschema:"number of capabilities returned"`
-	Error        string               `json:"error,omitempty" jsonschema:"error message if the request failed"`
+	Count        int                      `json:"count" jsonschema:"number of capabilities returned"`
+	Error        string                   `json:"error,omitempty" jsonschema:"error message if the request failed"`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {

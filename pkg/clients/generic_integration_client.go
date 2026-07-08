@@ -13,9 +13,9 @@ const genericIntegrationBasePath = "/rest/catalog/1.0/genericIntegration"
 // --- Types ---
 
 type GenericConfiguration struct {
-	Id          string `json:"id,omitempty"`
+	Id           string `json:"id,omitempty"`
 	IngestibleId string `json:"ingestibleId,omitempty"`
-	Value       string `json:"value,omitempty"`
+	Value        string `json:"value,omitempty"`
 }
 
 type SaveGenericConfigRequest struct {
@@ -23,13 +23,13 @@ type SaveGenericConfigRequest struct {
 }
 
 type GenericSchedule struct {
-	Id                 int64  `json:"id,omitempty"`
-	CronExpression     string `json:"cronExpression,omitempty"`
-	CronTimeZone       string `json:"cronTimeZone,omitempty"`
-	LastRunTimeStamp   int64  `json:"lastRunTimeStamp,omitempty"`
-	NextRunDateLongValue int64 `json:"nextRunDateLongValue,omitempty"`
-	CronJson           string `json:"cronJson,omitempty"`
-	Workflow           string `json:"workflow,omitempty"`
+	Id                   int64  `json:"id,omitempty"`
+	CronExpression       string `json:"cronExpression,omitempty"`
+	CronTimeZone         string `json:"cronTimeZone,omitempty"`
+	LastRunTimeStamp     int64  `json:"lastRunTimeStamp,omitempty"`
+	NextRunDateLongValue int64  `json:"nextRunDateLongValue,omitempty"`
+	CronJson             string `json:"cronJson,omitempty"`
+	Workflow             string `json:"workflow,omitempty"`
 }
 
 type AddGenericScheduleRequest struct {
@@ -45,19 +45,19 @@ type ChangeGenericScheduleRequest struct {
 }
 
 type GenericJob struct {
-	Id                string  `json:"id,omitempty"`
-	Name              string  `json:"name,omitempty"`
-	Type              string  `json:"type,omitempty"`
-	State             string  `json:"state,omitempty"`
-	Result            string  `json:"result,omitempty"`
-	Message           string  `json:"message,omitempty"`
+	Id                 string  `json:"id,omitempty"`
+	Name               string  `json:"name,omitempty"`
+	Type               string  `json:"type,omitempty"`
+	State              string  `json:"state,omitempty"`
+	Result             string  `json:"result,omitempty"`
+	Message            string  `json:"message,omitempty"`
 	ProgressPercentage float64 `json:"progressPercentage,omitempty"`
-	Cancelable        bool    `json:"cancelable,omitempty"`
-	StartDate         int64   `json:"startDate,omitempty"`
-	EndDate           int64   `json:"endDate,omitempty"`
-	CreatedBy         string  `json:"createdBy,omitempty"`
-	CreatedOn         int64   `json:"createdOn,omitempty"`
-	UserId            string  `json:"userId,omitempty"`
+	Cancelable         bool    `json:"cancelable,omitempty"`
+	StartDate          int64   `json:"startDate,omitempty"`
+	EndDate            int64   `json:"endDate,omitempty"`
+	CreatedBy          string  `json:"createdBy,omitempty"`
+	CreatedOn          int64   `json:"createdOn,omitempty"`
+	UserId             string  `json:"userId,omitempty"`
 }
 
 type genericScheduleParams struct {

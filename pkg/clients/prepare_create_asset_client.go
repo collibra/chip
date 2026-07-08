@@ -61,17 +61,16 @@ type PrepareCreateDomainListResponse struct {
 	Total   int                   `json:"total"`
 }
 
-
 // PrepareCreateAttributeType represents an attribute type with full schema.
 type PrepareCreateAttributeType struct {
-	ID             string                          `json:"id"`
-	Name           string                          `json:"name"`
-	Kind           string                          `json:"kind"`
-	Required       bool                            `json:"required"`
-	Constraints    *PrepareCreateConstraints       `json:"constraints,omitempty"`
-	AllowedValues  []string                        `json:"allowedValues,omitempty"`
-	Direction      string                          `json:"direction,omitempty"`
-	TargetAssetType *PrepareCreateAssetType        `json:"targetAssetType,omitempty"`
+	ID              string                    `json:"id"`
+	Name            string                    `json:"name"`
+	Kind            string                    `json:"kind"`
+	Required        bool                      `json:"required"`
+	Constraints     *PrepareCreateConstraints `json:"constraints,omitempty"`
+	AllowedValues   []string                  `json:"allowedValues,omitempty"`
+	Direction       string                    `json:"direction,omitempty"`
+	TargetAssetType *PrepareCreateAssetType   `json:"targetAssetType,omitempty"`
 }
 
 // PrepareCreateConstraints represents attribute validation constraints.

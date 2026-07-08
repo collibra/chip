@@ -1,7 +1,7 @@
 // Package find_domain_types implements the find_domain_types MCP tool: resolves a
 // domain type's name (e.g. "Physical Data Dictionary") to its UUID, for
 // create_domain's typeId — there is no other discovery path for this, since domain
-// types are not returned by list_capability_types or any Edge API.
+// types are not returned by edge_list_capability_types or any Edge API.
 package find_domain_types
 
 import (

@@ -1,6 +1,6 @@
 ---
 description: Navigator for chip's Collibra skills. Start here when unsure which skill applies.
-related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context, collibra/jdbc-ingestion
+related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context, collibra/jdbc-ingestion, collibra/etl-integration
 ---
 
 # Collibra skills — navigator
@@ -20,6 +20,7 @@ must be bridged to another, and which permissions are required.
 | Register a table (and its dimension tables) as a Collibra Data Product with ports | `collibra/data-product-create` |
 | Generate governed YAML context (semantic blueprints, metric definitions) for an asset | `collibra/context` |
 | Set up an Edge JDBC connection/capability and run jdbc-ingestion | `collibra/jdbc-ingestion` |
+| Set up any metadata-sync ETL integration (Dataplex, Databricks UC, Purview, Sigma, …) — connection, capability, generic config, schedule/run | `collibra/etl-integration` |
 
 If a task is a single tool call with no chaining (e.g. `get_asset_details` by UUID,
 `list_asset_types`, `pull_data_contract_manifest`), no skill is needed — the tool's own

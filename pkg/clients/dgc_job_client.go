@@ -12,7 +12,7 @@ import (
 // This is the DGC-wide job resource you poll for status (e.g. after triggering a
 // catalog database sync, whose CatalogJob response carries the id to poll here). It is
 // distinct from edge-management's per-Edge-site jobs (see GetJobStatusLog /
-// get_job_status), which track Edge capability runs and connection tests instead.
+// edge_get_job_status), which track Edge capability runs and connection tests instead.
 type Job struct {
 	ID                 string `json:"id"`
 	Name               string `json:"name,omitempty"`
