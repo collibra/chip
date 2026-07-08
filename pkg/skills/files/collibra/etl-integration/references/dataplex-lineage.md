@@ -16,6 +16,13 @@ Extracts technical lineage from Google Dataplex (Data Lineage API) plus BigQuery
 - **Table lineage** (`lineageType` default) — table-level lineage; supports `includeFilters` / `excludeFilters`.
 - **Column lineage** — column-level lineage; requires `gcsBucket` and the (preview) Export Metadata API. Note: stitching is not supported at table level, only column level.
 
+## Capability parameters (set on `edge_create_capability`)
+- `active` — set `false` for a `sourceId` to remove that source's lineage from Techlin (there is no outbound flow).
+- `useCollibrasystemName` — see gotchas; enable when identical paths exist across environments.
+- **`customParameters` (mandatory)** — a user-defined list that must include the Techlin server coordinates:
+  - `techlinHost` — the Techlin/Data Lineage server host URL for this environment (e.g. `https://techlin-<env>.cp.collibra-ops.com`).
+  - `techlinKey` — the Techlin API key.
+
 ## Notable generic-config choices (fetch exact schema via `catalog_etl_get_schema`)
 - `system` (required) — target System asset the ingested objects are stitched to.
 - `projects` — GCP project IDs where Dataplex lineage is enabled (required for WIF; else derived from the SA key).
@@ -30,3 +37,4 @@ Extracts technical lineage from Google Dataplex (Data Lineage API) plus BigQuery
 - Enable `useCollibrasystemName` (capability param) when identical paths exist across environments (PROD/DEV) — otherwise stitching is non-deterministic. Changing it requires re-analyzing all sources.
 - Dataplex retains lineage for only 30 days; older lineage is permanently gone, so runs must be scheduled recurringly.
 - Column lineage depends on the preview `exportMetadata` API, which must be enabled by Google on request.
+- **`techlinHost`/`techlinKey` custom parameters are mandatory** — set them before the first run. See the `customParameters` entry under "Capability parameters".

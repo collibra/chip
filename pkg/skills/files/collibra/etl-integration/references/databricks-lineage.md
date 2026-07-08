@@ -17,7 +17,9 @@ Extracts data lineage from the Databricks Unity Catalog lineage system tables an
 - `sourceId` (required) — unique lineage source id; also the key for the exclusion flow.
 - `processingLevel` — `Analyze` (load + analyze) or `Sync` (also synchronize to DGC).
 - `timeFrame` — lookback window in days (default 365).
-
+- **`customParameters` (mandatory)** — a user-defined list that must include the Techlin server coordinates:
+  - `techlinHost` — the Techlin/Data Lineage server host URL for this environment (e.g. `https://techlin-<env>.cp.collibra-ops.com`).
+  - `techlinKey` — the Techlin API key.
 ## Notable generic-config choices (fetch exact schema via `catalog_etl_get_schema`)
 - `system` (required) — target System asset the ingested objects are stitched to.
 - `includeFilters` / `excludeFilters` — scope by `Workspace > Catalog > Schema` (wildcards `*`/`?`; exclude wins).
@@ -30,3 +32,4 @@ Extracts data lineage from the Databricks Unity Catalog lineage system tables an
 - Set `useCollibrasystemName` when the same paths exist across environments (e.g. PROD/DEV), otherwise stitching is non-deterministic; changing it requires re-analyzing all sources.
 - Requires read permissions on the Unity Catalog lineage system tables (`system.access.column_lineage`, `system.access.table_lineage`, `system.query.history`) plus compute attach rights.
 - Lineage retention is fixed at 365 days by Databricks; large datasets rely on the default `scalable` query strategy (tune via `jvm-args`).
+- **`techlinHost`/`techlinKey` custom parameters are mandatory** — set them before the first run. See the `customParameters` entry under "Capability parameters".
