@@ -17,8 +17,8 @@ type Input struct {
 
 type Output struct {
 	Connection *clients.EdgeConnection `json:"connection,omitempty" jsonschema:"the connection details"`
-	Found      bool                `json:"found" jsonschema:"whether the connection was found"`
-	Error      string              `json:"error,omitempty" jsonschema:"error message if retrieval failed"`
+	Found      bool                    `json:"found" jsonschema:"whether the connection was found"`
+	Error      string                  `json:"error,omitempty" jsonschema:"error message if retrieval failed"`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {

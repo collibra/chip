@@ -25,9 +25,9 @@ type Input struct {
 
 type Output struct {
 	Jobs       []clients.Job `json:"jobs,omitempty" jsonschema:"list of matching jobs"`
-	Count      int             `json:"count" jsonschema:"number of jobs returned"`
-	NextCursor string          `json:"nextCursor,omitempty" jsonschema:"cursor for the next page of results"`
-	Error      string          `json:"error,omitempty" jsonschema:"error message if retrieval failed"`
+	Count      int           `json:"count" jsonschema:"number of jobs returned"`
+	NextCursor string        `json:"nextCursor,omitempty" jsonschema:"cursor for the next page of results"`
+	Error      string        `json:"error,omitempty" jsonschema:"error message if retrieval failed"`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {

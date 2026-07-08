@@ -17,8 +17,8 @@ type Input struct {
 
 type Output struct {
 	History []clients.JobStatusLog `json:"history" jsonschema:"all job status updates in LIFO order (most recent first)"`
-	Count   int                        `json:"count" jsonschema:"number of status entries returned"`
-	Error   string                     `json:"error,omitempty" jsonschema:"error message if retrieval failed"`
+	Count   int                    `json:"count" jsonschema:"number of status entries returned"`
+	Error   string                 `json:"error,omitempty" jsonschema:"error message if retrieval failed"`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {

@@ -49,9 +49,9 @@
 // catalog-backed driver API (POST /rest/edge/v1/drivers/jars), which has no UI in
 // front of it at all, and the frontend's only file-upload path is the legacy one
 // embedded inside the connection-creation form's own FILE-type field. Once the user
-// confirms the connection is saved, use find_connections (by name) to pick up its id
-// and proceed with create_capability/configure_database/start_ingestion against it —
-// skip create_connection entirely for that connection, since it already exists.
+// confirms the connection is saved, use edge_find_connections (by name) to pick up its id
+// and proceed with edge_create_capability/configure_database/start_ingestion against it —
+// skip edge_create_connection entirely for that connection, since it already exists.
 package upload_file
 
 import (
@@ -70,7 +70,7 @@ import (
 // case for chip-service) — content must be supplied inline as base64.
 type Input struct {
 	Filename      string `json:"filename" jsonschema:"The filename to upload as (e.g. 'client-cert.pem', 'snowflake-jdbc-3.23.2.jar'). Determines the file extension DGC uses to infer the artifact type."`
-	ContentBase64 string `json:"contentBase64" jsonschema:"The file's content, base64-encoded. For a JDBC driver, this must come from a file the user downloaded from Collibra Marketplace (see get_data_source_setup_guide's marketplaceUrl) — never fetch a driver from an arbitrary URL like Maven Central; ask the user for the file instead. Large files (tens of MB, as most JDBC drivers are) will not fit here — if the content would be too large to include, ask the user to create the connection manually via the Collibra Edge UI instead and pick it up afterward with find_connections."`
+	ContentBase64 string `json:"contentBase64" jsonschema:"The file's content, base64-encoded. For a JDBC driver, this must come from a file the user downloaded from Collibra Marketplace (see get_data_source_setup_guide's marketplaceUrl) — never fetch a driver from an arbitrary URL like Maven Central; ask the user for the file instead. Large files (tens of MB, as most JDBC drivers are) will not fit here — if the content would be too large to include, ask the user to create the connection manually via the Collibra Edge UI instead and pick it up afterward with edge_find_connections."`
 }
 
 // InputWithFilePath is used when AllowLocalFileUpload is true (only ever set by the
@@ -94,7 +94,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "upload_file",
 		Title:       "Upload File to Edge Site",
-		Description: "Uploads a file (JDBC driver, TLS certificate, private key, keytab, etc.) to an edge site and returns an artifact URI usable as the value of any FILE-type connection or capability parameter. Takes file content directly (base64) — does not fetch from a URL. Only suitable for small files (contentBase64 has to fit in a tool call); for a large file (e.g. most JDBC drivers), guide the user to create the connection manually via the Collibra Edge UI and pick it up with find_connections. For JDBC drivers, only use content downloaded from Collibra Marketplace (verified/supported), never an arbitrary host; get the Marketplace listing URL from get_data_source_setup_guide.",
+		Description: "Uploads a file (JDBC driver, TLS certificate, private key, keytab, etc.) to an edge site and returns an artifact URI usable as the value of any FILE-type connection or capability parameter. Takes file content directly (base64) — does not fetch from a URL. Only suitable for small files (contentBase64 has to fit in a tool call); for a large file (e.g. most JDBC drivers), guide the user to create the connection manually via the Collibra Edge UI and pick it up with edge_find_connections. For JDBC drivers, only use content downloaded from Collibra Marketplace (verified/supported), never an arbitrary host; get the Marketplace listing URL from get_data_source_setup_guide.",
 		Handler: func(ctx context.Context, input Input) (Output, error) {
 			return upload(ctx, collibraClient, input.Filename, input.ContentBase64, "")
 		},

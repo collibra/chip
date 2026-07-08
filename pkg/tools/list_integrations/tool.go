@@ -19,18 +19,18 @@ type Input struct {
 }
 
 type Integration struct {
-	IngestibleId        string `json:"ingestibleId" jsonschema:"UUID of the integration instance, use this for all subsequent calls"`
-	Name                string `json:"name" jsonschema:"capability name"`
-	TypeId              string `json:"typeId" jsonschema:"capability type, e.g. databricks-edge-capability"`
-	EdgeSiteId          string `json:"edgeSiteId" jsonschema:"Edge site this capability runs on"`
-	HasSchedule         bool   `json:"hasSchedule" jsonschema:"whether a sync schedule is configured"`
-	CronExpression      string `json:"cronExpression,omitempty" jsonschema:"cron expression for the schedule"`
-	CronTimeZone        string `json:"cronTimeZone,omitempty" jsonschema:"timezone for the cron schedule"`
-	LastRun             string `json:"lastRun,omitempty" jsonschema:"relative time of last sync run, e.g. 6h ago"`
-	LastRunAt           string `json:"lastRunAt,omitempty" jsonschema:"ISO 8601 timestamp of last sync run, use this for precise time comparisons e.g. ran in last 24h"`
-	LastRunState        string `json:"lastRunState,omitempty" jsonschema:"state of last job: COMPLETED, FAILED, RUNNING, etc."`
-	LastRunResult       string `json:"lastRunResult,omitempty" jsonschema:"result of last job: SUCCESS, FAILURE, COMPLETED_WITH_ERROR, etc."`
-	NextRun             string `json:"nextRun,omitempty" jsonschema:"relative time of next scheduled run, e.g. in 18h"`
+	IngestibleId   string `json:"ingestibleId" jsonschema:"UUID of the integration instance, use this for all subsequent calls"`
+	Name           string `json:"name" jsonschema:"capability name"`
+	TypeId         string `json:"typeId" jsonschema:"capability type, e.g. databricks-edge-capability"`
+	EdgeSiteId     string `json:"edgeSiteId" jsonschema:"Edge site this capability runs on"`
+	HasSchedule    bool   `json:"hasSchedule" jsonschema:"whether a sync schedule is configured"`
+	CronExpression string `json:"cronExpression,omitempty" jsonschema:"cron expression for the schedule"`
+	CronTimeZone   string `json:"cronTimeZone,omitempty" jsonschema:"timezone for the cron schedule"`
+	LastRun        string `json:"lastRun,omitempty" jsonschema:"relative time of last sync run, e.g. 6h ago"`
+	LastRunAt      string `json:"lastRunAt,omitempty" jsonschema:"ISO 8601 timestamp of last sync run, use this for precise time comparisons e.g. ran in last 24h"`
+	LastRunState   string `json:"lastRunState,omitempty" jsonschema:"state of last job: COMPLETED, FAILED, RUNNING, etc."`
+	LastRunResult  string `json:"lastRunResult,omitempty" jsonschema:"result of last job: SUCCESS, FAILURE, COMPLETED_WITH_ERROR, etc."`
+	NextRun        string `json:"nextRun,omitempty" jsonschema:"relative time of next scheduled run, e.g. in 18h"`
 }
 
 type Output struct {
@@ -44,7 +44,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name: "list_integrations",
 		Description: `Lists all integration capabilities with their sync schedule and last/next run times.
 Use this as the entry point for any integration question: "show me all integrations", "show Databricks integrations", "what's scheduled for the Finance integration?".
-Optionally filter by platform substring (e.g. "databricks", "dataplex") and/or name. Returns ingestibleId for each — pass it to catalog_generic_get_schedule, catalog_generic_start_job, or catalog_generic_cancel_job.
+Optionally filter by platform substring (e.g. "databricks", "dataplex") and/or name. Returns ingestibleId for each — pass it to catalog_etl_get_schedule, catalog_etl_start_job, or catalog_etl_cancel_job.
 For time-based queries like "which integrations ran in the last 24h", use jobs_find sorted by startDate to get recent jobs, then cross-reference with integration names from this tool.`,
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

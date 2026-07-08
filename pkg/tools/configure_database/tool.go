@@ -42,7 +42,7 @@ const (
 )
 
 type Input struct {
-	EdgeConnectionID string   `json:"edgeConnectionId" jsonschema:"UUID of the Edge connection (created via create_connection) to discover a database on."`
+	EdgeConnectionID string   `json:"edgeConnectionId" jsonschema:"UUID of the Edge connection (created via edge_create_connection) to discover a database on."`
 	DatabaseName     string   `json:"databaseName,omitempty" jsonschema:"Optional. Exact name of the database (catalog) to register, as it appears at the data source. Required if the data source exposes more than one database/catalog through this connection; if there is exactly one, it is selected automatically."`
 	CommunityID      string   `json:"communityId" jsonschema:"UUID of the community the Database asset (and its automatically created domain) will be created in."`
 	ParentSystemID   string   `json:"parentSystemId" jsonschema:"UUID of the parent System asset the Database asset will be linked to."`
@@ -71,7 +71,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "configure_database",
 		Title:       "Configure Database for Ingestion",
-		Description: "Discovers a database through an Edge connection, registers it as a Database asset, and configures which schemas/tables get synchronized. Prerequisite for start_ingestion. Assumes the target community and parent System asset already exist (create_community/create_domain/create_asset), and that a jdbc-ingestion capability referencing this connection has already been created via create_capability — the discovery/refresh steps here only find data because that capability actually performs the crawl; without one, this fails with a discovery-timeout-shaped error even though the real cause is the missing capability. If more than one database or schema is discovered, or include isn't provided, this returns an error naming the candidates instead of guessing — confirm the database, schemas, and table pattern with the user, do not default to configuring everything.",
+		Description: "Discovers a database through an Edge connection, registers it as a Database asset, and configures which schemas/tables get synchronized. Prerequisite for start_ingestion. Assumes the target community and parent System asset already exist (create_community/create_domain/create_asset), and that a jdbc-ingestion capability referencing this connection has already been created via edge_create_capability — the discovery/refresh steps here only find data because that capability actually performs the crawl; without one, this fails with a discovery-timeout-shaped error even though the real cause is the missing capability. If more than one database or schema is discovered, or include isn't provided, this returns an error naming the candidates instead of guessing — confirm the database, schemas, and table pattern with the user, do not default to configuring everything.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
@@ -179,7 +179,7 @@ func discoverDatabaseConnection(ctx context.Context, client *http.Client, edgeCo
 	}
 
 	if len(connections) == 0 {
-		return nil, fmt.Errorf("no database connections were discovered for edge connection %s after %d attempts. Either the refresh is still in progress (retry this tool call), or — more commonly — no capability referencing this connection exists yet: the discovery/refresh only finds data because a jdbc-ingestion capability actually performs the crawl. Verify a capability exists for this connection (create_capability) before retrying", edgeConnectionID, pollAttempts)
+		return nil, fmt.Errorf("no database connections were discovered for edge connection %s after %d attempts. Either the refresh is still in progress (retry this tool call), or — more commonly — no capability referencing this connection exists yet: the discovery/refresh only finds data because a jdbc-ingestion capability actually performs the crawl. Verify a capability exists for this connection (edge_create_capability) before retrying", edgeConnectionID, pollAttempts)
 	}
 
 	if databaseName != "" {
@@ -218,7 +218,7 @@ func discoverSchemaConnections(ctx context.Context, client *http.Client, databas
 		}
 	}
 
-	return nil, fmt.Errorf("no schemas were discovered for database connection %s after %d attempts. Either the refresh is still in progress (retry this tool call), or no capability referencing this connection exists yet — verify with create_capability", databaseConnectionID, pollAttempts)
+	return nil, fmt.Errorf("no schemas were discovered for database connection %s after %d attempts. Either the refresh is still in progress (retry this tool call), or no capability referencing this connection exists yet — verify with edge_create_capability", databaseConnectionID, pollAttempts)
 }
 
 // selectSchemaConnections narrows discovered to the schemas named in schemaNames. An

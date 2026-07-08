@@ -17,8 +17,8 @@ type Input struct {
 
 type Output struct {
 	Capability *clients.EdgeCapability `json:"capability,omitempty" jsonschema:"the capability details"`
-	Found      bool                `json:"found" jsonschema:"whether the capability was found"`
-	Error      string              `json:"error,omitempty" jsonschema:"error message if retrieval failed"`
+	Found      bool                    `json:"found" jsonschema:"whether the capability was found"`
+	Error      string                  `json:"error,omitempty" jsonschema:"error message if retrieval failed"`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {

@@ -1,7 +1,7 @@
 // Package get_data_source_setup_guide implements the get_data_source_setup_guide MCP
 // tool: looks up driver class, JDBC connection string format, and per-auth-method
 // connection properties for any of Collibra's ~68 supported data sources, so
-// create_connection can be filled in correctly without the agent (or the user)
+// edge_create_connection can be filled in correctly without the agent (or the user)
 // needing to already know a given vendor's JDBC driver properties.
 //
 // This is a documented gap, not a guaranteed integration: the underlying data comes
@@ -30,11 +30,11 @@ type Input struct {
 type Output struct {
 	DataSourceID           string                         `json:"dataSourceId,omitempty" jsonschema:"The matched data source's internal id (slug)."`
 	DataSourceName         string                         `json:"dataSourceName,omitempty" jsonschema:"The matched data source's display name."`
-	DriverClassName        string                         `json:"driverClassName,omitempty" jsonschema:"The JDBC driver class name for create_connection's 'driver-class' parameter."`
-	ConnectionStringFormat string                         `json:"connectionStringFormat,omitempty" jsonschema:"The JDBC connection string format for create_connection's 'connection-string' parameter, with placeholders (e.g. 'jdbc:snowflake://<accountname>.snowflakecomputing.com')."`
-	MarketplaceURL         string                         `json:"marketplaceUrl,omitempty" jsonschema:"Collibra Marketplace listing URL for this data source's JDBC driver, if the driver needs to be downloaded before uploading via create_connection's driverJarUrl/driverJarFilename or the upload_file tool."`
+	DriverClassName        string                         `json:"driverClassName,omitempty" jsonschema:"The JDBC driver class name for edge_create_connection's 'driver-class' parameter."`
+	ConnectionStringFormat string                         `json:"connectionStringFormat,omitempty" jsonschema:"The JDBC connection string format for edge_create_connection's 'connection-string' parameter, with placeholders (e.g. 'jdbc:snowflake://<accountname>.snowflakecomputing.com')."`
+	MarketplaceURL         string                         `json:"marketplaceUrl,omitempty" jsonschema:"Collibra Marketplace listing URL for this data source's JDBC driver, if the driver needs to be downloaded before uploading via edge_create_connection's driverJarUrl/driverJarFilename or the upload_file tool."`
 	Prerequisites          string                         `json:"prerequisites,omitempty" jsonschema:"Documented prerequisites before creating this connection."`
-	AuthMethods            []clients.AuthMethodProperties `json:"authMethods,omitempty" jsonschema:"Documented connection properties, grouped by supported authentication method. Pick the method matching what credentials the user has, then pass its properties as create_connection's additionalProperties (name/type/value/secret per entry — secret=true when the property's Value Type here is 'Secret'). A 'File' type property's value must first be uploaded via upload_file or create_connection's driverJarUrl, then referenced by the returned artifact URI."`
+	AuthMethods            []clients.AuthMethodProperties `json:"authMethods,omitempty" jsonschema:"Documented connection properties, grouped by supported authentication method. Pick the method matching what credentials the user has, then pass its properties as edge_create_connection's additionalProperties (name/type/value/secret per entry — secret=true when the property's Value Type here is 'Secret'). A 'File' type property's value must first be uploaded via upload_file or edge_create_connection's driverJarUrl, then referenced by the returned artifact URI."`
 	Matches                []clients.DataSourceSlug       `json:"matches,omitempty" jsonschema:"Candidate data sources when the lookup was ambiguous or not found. Retry with one of these exact ids."`
 	Success                bool                           `json:"success" jsonschema:"Whether at least some setup information was found."`
 	Error                  string                         `json:"error,omitempty" jsonschema:"Details if part or all of the lookup failed. A failure here does not mean the data source is unsupported by Edge — it means this best-effort documentation lookup didn't find it; ask the user for the connection properties directly."`
@@ -44,7 +44,7 @@ func NewTool(_ *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_data_source_setup_guide",
 		Title:       "Get Data Source Connection Setup Guide",
-		Description: "Looks up driver class, JDBC connection string format, and per-auth-method connection properties for a data source, from Collibra's public documentation (best-effort scrape, not a stable API — see tool source for details). Use before create_connection when the required parameters for a data source (e.g. Snowflake's Role/Warehouse/private key) aren't already known.",
+		Description: "Looks up driver class, JDBC connection string format, and per-auth-method connection properties for a data source, from Collibra's public documentation (best-effort scrape, not a stable API — see tool source for details). Use before edge_create_connection when the required parameters for a data source (e.g. Snowflake's Role/Warehouse/private key) aren't already known.",
 		Handler:     handler(),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

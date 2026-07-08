@@ -12,15 +12,15 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 - [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
 - [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
-- [`find_connections`](pkg/tools/find_connections/) - Find existing Edge connections by name, to reuse instead of duplicating. **Requires:** `dgc.edge-view-connections-and-capabilities`
+- [`edge_find_connections`](pkg/tools/edge_find_connections/) - Find existing Edge connections by name, to reuse instead of duplicating. **Requires:** `dgc.edge-view-connections-and-capabilities`
 - [`find_domain_types`](pkg/tools/find_domain_types/) - Resolve a domain type name (e.g. "Physical Data Dictionary") to its UUID
 - [`find_users`](pkg/tools/find_users/) - Resolve a user name to their UUID, e.g. for a database asset's owners
 - [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID, including the asset's assignable attribute schema (every attribute it can hold, including empty ones)
 - [`get_business_term_data`](pkg/tools/get_business_term_data/) - Trace a business term back to its connected physical data assets
-- [`get_catalog_job_status`](pkg/tools/get_catalog_job_status/) - Poll the status of a DGC catalog job, e.g. a jdbc-ingestion sync started by `start_ingestion`
+- [`get_job_status`](pkg/tools/get_job_status/) - Poll the status of a DGC job, e.g. a jdbc-ingestion sync started by `start_ingestion`
 - [`get_column_semantics`](pkg/tools/get_column_semantics/) - Retrieve data attributes, measures, and business assets connected to a column
 - [`get_data_source_setup_guide`](pkg/tools/get_data_source_setup_guide/) - Look up JDBC driver class, connection string format, and connection properties for a data source from Collibra's documentation
-- [`get_job_status`](pkg/tools/get_job_status/) - Poll the status of an Edge job, e.g. a connection test or capability run
+- [`edge_get_job_status`](pkg/tools/edge_get_job_status/) - Poll the status of an Edge job, e.g. a connection test or capability run
 - [`get_lineage_downstream`](pkg/tools/get_lineage_downstream/) - Get downstream technical lineage (consumers) for a data entity
 - [`get_lineage_entity`](pkg/tools/get_lineage_entity/) - Get metadata about a specific entity in the technical lineage graph
 - [`get_lineage_transformation`](pkg/tools/get_lineage_transformation/) - Get details and logic of a specific data transformation
@@ -28,9 +28,9 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`get_measure_data`](pkg/tools/get_measure_data/) - Trace a measure back to its underlying physical columns and tables
 - [`get_table_semantics`](pkg/tools/get_table_semantics/) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
 - [`list_asset_types`](pkg/tools/list_asset_types/) - List available asset types
-- [`list_capability_types`](pkg/tools/list_capability_types/) - List capability and connection types available on an Edge site, with their manifests. **Requires:** `dgc.edge-view-connections-and-capabilities`
+- [`edge_list_capability_types`](pkg/tools/edge_list_capability_types/) - List capability and connection types available on an Edge site, with their manifests. **Requires:** `dgc.edge-view-connections-and-capabilities`
 - [`list_data_contract`](pkg/tools/list_data_contracts/) - List data contracts with pagination
-- [`list_edge_sites`](pkg/tools/list_edge_sites/) - List available Edge sites. **Requires:** `dgc.edge-view-connections-and-capabilities`
+- [`edge_list_sites`](pkg/tools/edge_list_sites/) - List available Edge sites. **Requires:** `dgc.edge-view-connections-and-capabilities`
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
 - [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets; filters (status, community, domain, domain type, asset type, created-by) accept names or UUIDs
@@ -45,9 +45,9 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`configure_database`](pkg/tools/configure_database/) - Register a database and configure its schema synchronization rules for jdbc-ingestion
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
-- [`create_capability`](pkg/tools/create_capability/) - Create or update an Edge capability (e.g. jdbc-ingestion). **Requires:** `dgc.edge-integration-capability-manage`
+- [`edge_create_capability`](pkg/tools/edge_create_capability/) - Create or update an Edge capability (e.g. jdbc-ingestion). **Requires:** `dgc.edge-integration-capability-manage`
 - [`create_community`](pkg/tools/create_community/) - Create a DGC community
-- [`create_connection`](pkg/tools/create_connection/) - Create or update an Edge connection (e.g. a JDBC connection). **Requires:** `dgc.edge-integration-capability-manage`
+- [`edge_create_connection`](pkg/tools/edge_create_connection/) - Create or update an Edge connection (e.g. a JDBC connection). **Requires:** `dgc.edge-integration-capability-manage`
 - [`create_domain`](pkg/tools/create_domain/) - Create a DGC domain within a community
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `update_attribute`, `add_attribute`, `remove_attribute` - change, append, or clear an attribute value (e.g. `Definition`, `Note`)

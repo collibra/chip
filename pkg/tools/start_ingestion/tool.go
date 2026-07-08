@@ -19,16 +19,16 @@ type Input struct {
 }
 
 type Output struct {
-	Job     *clients.CatalogJob `json:"job,omitempty" jsonschema:"The started synchronization job. Poll its id with get_catalog_job_status (NOT get_job_status, which is for Edge-site jobs) to see when it completes."`
-	Success bool         `json:"success" jsonschema:"Whether the ingestion job was started."`
-	Error   string       `json:"error,omitempty" jsonschema:"Error message if starting the job failed."`
+	Job     *clients.CatalogJob `json:"job,omitempty" jsonschema:"The started synchronization job. Poll its id with get_job_status (NOT edge_get_job_status, which is for Edge-site jobs) to see when it completes."`
+	Success bool                `json:"success" jsonschema:"Whether the ingestion job was started."`
+	Error   string              `json:"error,omitempty" jsonschema:"Error message if starting the job failed."`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "start_ingestion",
 		Title:       "Start Database Ingestion",
-		Description: "Triggers the jdbc-ingestion capability run for a registered Database asset, synchronizing its configured schemas/tables into the catalog. The database must already be registered and configured via configure_database. Poll the returned job's id with get_catalog_job_status to confirm it actually completed — a 202/success response here only means the job was accepted, not that ingestion finished.",
+		Description: "Triggers the jdbc-ingestion capability run for a registered Database asset, synchronizing its configured schemas/tables into the catalog. The database must already be registered and configured via configure_database. Poll the returned job's id with get_job_status to confirm it actually completed — a 202/success response here only means the job was accepted, not that ingestion finished.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},

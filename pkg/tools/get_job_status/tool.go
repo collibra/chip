@@ -1,5 +1,7 @@
-// Package get_job_status implements the get_job_status MCP tool: polls the status of
-// an Edge job, e.g. one started by test_connection or start_ingestion.
+// Package get_job_status implements the get_job_status MCP tool:
+// polls the status of a DGC job, e.g. the one returned by start_ingestion.
+// This is distinct from edge_get_job_status, which polls Edge-site jobs (capability runs,
+// connection tests) — the two job id spaces are not interchangeable.
 package get_job_status
 
 import (
@@ -13,20 +15,25 @@ import (
 )
 
 type Input struct {
-	JobID string `json:"jobId" jsonschema:"UUID of the job to check, as returned by test_connection or start_ingestion."`
+	JobID string `json:"jobId" jsonschema:"UUID of the DGC job to check, as returned by start_ingestion. Do not pass an Edge job id here (e.g. from test_connection) — use edge_get_job_status for those instead."`
 }
 
 type Output struct {
-	Status              string `json:"status,omitempty" jsonschema:"The job's current status: UNKNOWN, SUBMITTED, DOWNLOADING, SCHEDULED, RUNNING, SUCCEEDED, FAILED, CANCELLED, CANCELLING, CAPABILITY_PROGRESS, CAPABILITY_SUCCEEDED, or CAPABILITY_FAILED. SUCCEEDED/FAILED/CANCELLED/CAPABILITY_SUCCEEDED/CAPABILITY_FAILED are terminal."`
-	Message             string `json:"message,omitempty" jsonschema:"Status message from the job."`
-	LastUpdatedDateTime string `json:"lastUpdatedDateTime,omitempty" jsonschema:"When the status was last updated."`
+	Name               string `json:"name,omitempty" jsonschema:"The job's name."`
+	Type               string `json:"type,omitempty" jsonschema:"The job's type (e.g. 'DELTA_INGESTION')."`
+	State              string `json:"state,omitempty" jsonschema:"The job's current state: WAITING, RUNNING, CANCELING, COMPLETED, CANCELED, or ERROR."`
+	Result             string `json:"result,omitempty" jsonschema:"The job's result once finished: NOT_SET (not finished yet), SUCCESS, COMPLETED_WITH_ERROR, FAILURE, or ABORTED."`
+	Message            string `json:"message,omitempty" jsonschema:"Status message from the job."`
+	ProgressPercentage int    `json:"progressPercentage,omitempty" jsonschema:"Progress percentage, 0-100."`
+	StartDate          string `json:"startDate,omitempty"`
+	EndDate            string `json:"endDate,omitempty" jsonschema:"When the job finished, if it has."`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_job_status",
-		Title:       "Get Edge Job Status",
-		Description: "Gets the current status of an Edge job, e.g. one started by test_connection or start_ingestion.",
+		Title:       "Get Job Status",
+		Description: "Gets the current status of a DGC job, e.g. the ingestion job started by start_ingestion. For Edge-site jobs (test_connection, capability runs), use edge_get_job_status instead — the two job id spaces are separate and not interchangeable.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -39,11 +46,20 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{}, err
 		}
 
-		status, err := clients.GetJobStatusLog(ctx, collibraClient, input.JobID)
+		job, err := clients.GetJob(ctx, collibraClient, input.JobID)
 		if err != nil {
 			return Output{}, err
 		}
 
-		return Output{Status: status.Status, Message: status.Message, LastUpdatedDateTime: status.LastUpdatedDateTime}, nil
+		return Output{
+			Name:               job.Name,
+			Type:               job.Type,
+			State:              job.State,
+			Result:             job.Result,
+			Message:            job.Message,
+			ProgressPercentage: job.ProgressPercentage,
+			StartDate:          job.StartDate,
+			EndDate:            job.EndDate,
+		}, nil
 	}
 }
