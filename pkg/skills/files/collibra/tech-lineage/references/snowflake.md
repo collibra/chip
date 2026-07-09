@@ -61,13 +61,20 @@ Then the rest:
 - `extraDatabaseDefinitions` (list, `SQL-API` only) — databases to load metadata for
   without harvesting lineage from them (targets of cross-database references).
 
-## Queries group
+## Queries group — mode-dependent, ask after the mode is chosen
 
-One editable SQL parameter per query type (`columns`, `views`, `procedures`, and in
-`SQL-API` mode `object_dependencies`, `access_history`, …), pre-filled with the default
-`ACCOUNT_USAGE` queries. Leave the defaults unless the user explicitly needs to override
-them (e.g. custom filtering); placeholders like `##DBNAMES##`, `##SCHEMANAMES##`,
-`##DAYS##` are substituted at run time.
+Each query type is an editable SQL parameter pre-filled with the default
+`ACCOUNT_USAGE` query. Once `snowflakeMode` is settled, **ask whether the user wants to
+configure any of the harvest queries** (most should keep the defaults). If yes, offer
+**only the query types of the chosen mode**:
+
+- **`SQL` mode:** `columns`, `views`, `dynamic_tables`, `semantic_views`, `procedures`.
+- **`SQL-API` mode:** `external_stages`, `object_dependencies`, `columns_joined`.
+
+Never offer the other mode's query types. Placeholders like `##DBNAMES##`,
+`##SCHEMANAMES##`, `##DAYS##` are substituted at run time and must be preserved in any
+override; the live manifest remains authoritative for the exact query parameter names
+in the installed capability version.
 
 ## Custom Properties — suggest these proactively
 
