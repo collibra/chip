@@ -605,17 +605,20 @@ func TestCreateAsset_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *te
 	}
 }
 
-// Acronym → BusinessTerm subtype: Acronym's own assignment has empty
-// domainTypes (inherit-sentinel) and contributes one extra relation
-// ("has acronym"). Resolving Acronym + Glossary should walk the parent
-// chain, find Glossary in BusinessTerm's allowed types, and union the
-// characteristics. We mock both nodes here to mirror the live shape.
-func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
-	const (
-		acronymTypeID       = "00000000-0000-0000-0000-000000011003"
-		acronymTypeName     = "Acronym"
-		acronymTypePublicID = "Acronym"
-	)
+const (
+	acronymTypeID       = "00000000-0000-0000-0000-000000011003"
+	acronymTypeName     = "Acronym"
+	acronymTypePublicID = "Acronym"
+)
+
+// newAcronymSubtypeClient boots a mock DGC for the Acronym → BusinessTerm
+// subtype world: Acronym's own assignment has empty domainTypes
+// (inherit-sentinel), no attributes, and one extra relation ("has acronym");
+// the parent BusinessTerm assignment has the explicit Glossary domain type
+// and the required (min:1) Definition attribute. We mock both nodes to
+// mirror the live shape. Shared by the subtype-union and
+// parent-required-attribute tests.
+func newAcronymSubtypeClient(t *testing.T) *http.Client {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /rest/2.0/assetTypes/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/rest/2.0/assetTypes/")
@@ -751,7 +754,13 @@ func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	c := testutil.NewClient(srv)
+	return testutil.NewClient(srv)
+}
+
+// Resolving Acronym + Glossary should walk the parent chain, find Glossary
+// in BusinessTerm's allowed types, and union the characteristics.
+func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
+	c := newAcronymSubtypeClient(t)
 
 	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
 		Name:      "MRR",
@@ -769,6 +778,27 @@ func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 	}
 }
 
+// An attribute required only on a PARENT asset type's assignment must not
+// block the create: Definition is required (min:1) on
+// BusinessTerm, but Acronym's own assignment doesn't list it, so creating
+// an Acronym without it succeeds — matching the Core API and the UI.
+func TestCreateAsset_ParentRequiredAttribute_DoesNotBlockCreate(t *testing.T) {
+	c := newAcronymSubtypeClient(t)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:      "MRR",
+		AssetType: acronymTypeName,
+		Domain:    glossaryDomain,
+		// No attributes: the parent's required Definition is omitted.
+	})
+	if out.Status != create_asset.StatusSuccess {
+		t.Fatalf("parent-required attribute must not block create, got %q (%s)", out.Status, out.Message)
+	}
+}
+
+// Definition is required (min:1) on BusinessTerm's OWN assignment, so the
+// gate applies. Contrast with TestCreateAsset_ParentRequiredAttribute_
+// DoesNotBlockCreate, where the requirement lives on a parent type only.
 func TestCreateAsset_MissingRequiredAttribute_ReturnsValidationError(t *testing.T) {
 	c, _ := newClient(t, newMockDGC(t))
 	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{

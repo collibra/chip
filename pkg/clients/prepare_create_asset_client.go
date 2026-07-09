@@ -61,17 +61,16 @@ type PrepareCreateDomainListResponse struct {
 	Total   int                   `json:"total"`
 }
 
-
 // PrepareCreateAttributeType represents an attribute type with full schema.
 type PrepareCreateAttributeType struct {
-	ID             string                          `json:"id"`
-	Name           string                          `json:"name"`
-	Kind           string                          `json:"kind"`
-	Required       bool                            `json:"required"`
-	Constraints    *PrepareCreateConstraints       `json:"constraints,omitempty"`
-	AllowedValues  []string                        `json:"allowedValues,omitempty"`
-	Direction      string                          `json:"direction,omitempty"`
-	TargetAssetType *PrepareCreateAssetType        `json:"targetAssetType,omitempty"`
+	ID              string                    `json:"id"`
+	Name            string                    `json:"name"`
+	Kind            string                    `json:"kind"`
+	Required        bool                      `json:"required"`
+	Constraints     *PrepareCreateConstraints `json:"constraints,omitempty"`
+	AllowedValues   []string                  `json:"allowedValues,omitempty"`
+	Direction       string                    `json:"direction,omitempty"`
+	TargetAssetType *PrepareCreateAssetType   `json:"targetAssetType,omitempty"`
 }
 
 // PrepareCreateConstraints represents attribute validation constraints.
@@ -322,6 +321,12 @@ type PrepareCreateScopedAttribute struct {
 	Min                   int
 	// Max is nil when there is no upper bound (i.e. unbounded).
 	Max *int
+	// FromOwnAssignment is true when the slot comes from the asset type's
+	// own assignment (the first chain level), false when it was unioned in
+	// from a parent asset type. Required-ness is only enforced for the
+	// type's own assignment — parent-level Required flags are
+	// informational.
+	FromOwnAssignment bool
 }
 
 // PrepareCreateScopedRelation is one relation slot in a scoped assignment.
@@ -665,7 +670,7 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 	seenAttrIDs := make(map[string]struct{})
 	seenRelIDs := make(map[string]struct{})
 
-	for _, node := range chain {
+	for level, node := range chain {
 		for _, a := range node.raws {
 			applicable := len(a.DomainTypes) == 0 || containsDomainType(a.DomainTypes, domainTypeID)
 			if !applicable {
@@ -692,6 +697,10 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 						Required:              ref.MinimumOccurrences > 0,
 						Min:                   ref.MinimumOccurrences,
 						Max:                   ref.MaximumOccurrences,
+						// Child-first iteration + dedup means a slot present
+						// on both the type and a parent keeps the type's own
+						// (level 0) origin and flags.
+						FromOwnAssignment: level == 0,
 					})
 				case isRelationTypeDiscriminator(disc, rt):
 					if _, dup := seenRelIDs[ref.AssignedResourceReference.ID]; dup {
