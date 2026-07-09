@@ -61,17 +61,16 @@ type PrepareCreateDomainListResponse struct {
 	Total   int                   `json:"total"`
 }
 
-
 // PrepareCreateAttributeType represents an attribute type with full schema.
 type PrepareCreateAttributeType struct {
-	ID             string                          `json:"id"`
-	Name           string                          `json:"name"`
-	Kind           string                          `json:"kind"`
-	Required       bool                            `json:"required"`
-	Constraints    *PrepareCreateConstraints       `json:"constraints,omitempty"`
-	AllowedValues  []string                        `json:"allowedValues,omitempty"`
-	Direction      string                          `json:"direction,omitempty"`
-	TargetAssetType *PrepareCreateAssetType        `json:"targetAssetType,omitempty"`
+	ID              string                    `json:"id"`
+	Name            string                    `json:"name"`
+	Kind            string                    `json:"kind"`
+	Required        bool                      `json:"required"`
+	Constraints     *PrepareCreateConstraints `json:"constraints,omitempty"`
+	AllowedValues   []string                  `json:"allowedValues,omitempty"`
+	Direction       string                    `json:"direction,omitempty"`
+	TargetAssetType *PrepareCreateAssetType   `json:"targetAssetType,omitempty"`
 }
 
 // PrepareCreateConstraints represents attribute validation constraints.
@@ -325,7 +324,7 @@ type PrepareCreateScopedAttribute struct {
 	// FromOwnAssignment is true when the slot comes from the asset type's
 	// own assignment (the first chain level), false when it was unioned in
 	// from a parent asset type. Required-ness is only enforced for the
-	// type's own assignment (DEV-202031) — parent-level Required flags are
+	// type's own assignment — parent-level Required flags are
 	// informational.
 	FromOwnAssignment bool
 }

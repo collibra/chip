@@ -373,7 +373,7 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 // validateRequiredAttributes checks that every attribute slot required on the
 // asset type's OWN assignment has a corresponding entry in the resolved list.
 // Slots unioned in from a parent asset type's assignment are skipped even when
-// required there (DEV-202031): the parent's requirement is not part of this
+// required there: the parent's requirement is not part of this
 // type's assignment in the domain, and Collibra itself would accept the
 // create. Returns a validation error output if any required attribute is
 // missing.

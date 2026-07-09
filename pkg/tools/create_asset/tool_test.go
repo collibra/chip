@@ -779,7 +779,7 @@ func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 }
 
 // An attribute required only on a PARENT asset type's assignment must not
-// block the create (DEV-202031): Definition is required (min:1) on
+// block the create: Definition is required (min:1) on
 // BusinessTerm, but Acronym's own assignment doesn't list it, so creating
 // an Acronym without it succeeds — matching the Core API and the UI.
 func TestCreateAsset_ParentRequiredAttribute_DoesNotBlockCreate(t *testing.T) {
