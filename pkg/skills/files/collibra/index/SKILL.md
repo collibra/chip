@@ -1,6 +1,6 @@
 ---
 description: Navigator for chip's Collibra skills. Start here when unsure which skill applies.
-related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context, collibra/jdbc-ingestion, collibra/etl-integration, collibra/tech-lineage
+related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context, collibra/jdbc-ingestion, collibra/etl-integration, collibra/techlin
 ---
 
 # Collibra skills — navigator
@@ -21,12 +21,12 @@ must be bridged to another, and which permissions are required.
 | Generate governed YAML context (semantic blueprints, metric definitions) for an asset | `collibra/context` |
 | Set up an Edge JDBC connection/capability and run jdbc-ingestion | `collibra/jdbc-ingestion` |
 | Set up any metadata-sync ETL integration (Dataplex, Databricks UC, Purview, Sigma, …) — connection, capability, generic config, schedule/run | `collibra/etl-integration` |
-| **Create, set up, enable, or run technical lineage** for a registered database (Snowflake, …) | `collibra/tech-lineage` |
+| **Create, set up, enable, or run technical lineage** for a registered database (Snowflake, …) | `collibra/techlin` |
 
 **"Technical lineage" is ambiguous — route by verb, and don't ask the user which skill
 to use.** *Querying* what already exists (trace, upstream, downstream, impact, "where
 does this come from") → `collibra/lineage`. *Producing* it (create, set up, configure,
-enable, run, harvest, ingest lineage for a source) → `collibra/tech-lineage`. If the
+enable, run, harvest, ingest lineage for a source) → `collibra/techlin`. If the
 request genuinely doesn't say (e.g. just "technical lineage for Snowflake"), ask whether
 they want to explore existing lineage or set up harvesting — never present the skill
 names themselves as the choice.

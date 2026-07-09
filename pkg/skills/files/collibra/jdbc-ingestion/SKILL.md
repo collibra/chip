@@ -1,6 +1,6 @@
 ---
 description: Set up an Edge JDBC connection and capability, register a database, and run jdbc-ingestion end to end.
-related: collibra/discovery, collibra/tech-lineage
+related: collibra/discovery, collibra/techlin
 ---
 
 # JDBC ingestion — connect, register, and run
@@ -76,7 +76,7 @@ which ingestion type it should be** — don't assume JDBC just because this skil
     ingestion finished — always poll to confirm completion.
 
 Once ingestion has completed, **technical lineage** can be layered on top of the
-registered database — see `collibra/tech-lineage`.
+registered database — see `collibra/techlin`.
 
 ## Two job-id spaces — do not cross them
 

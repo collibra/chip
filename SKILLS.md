@@ -19,7 +19,7 @@ those tools. Skill content lives in [`pkg/skills/files/collibra/`](pkg/skills/fi
 | `collibra/asset-edit` | `edit_asset` operation types |
 | `collibra/jdbc-ingestion` | End-to-end jdbc-ingestion setup: Edge connection/capability, database registration, running and polling a sync |
 | `collibra/etl-integration` | End-to-end ETL sync integrations (Dataplex, Databricks UC, Purview, Sigma, …): connection, capability, generic config (fetched live), schedule/run; per-integration references |
-| `collibra/tech-lineage` | Technical lineage harvesting setup: prerequisites (Database asset + jdbc-ingestion), Technical Lineage capability, `start_technical_lineage` trigger; per-source references (Snowflake) |
+| `collibra/techlin` | Technical lineage (techlin) harvesting setup: prerequisites (Database asset + jdbc-ingestion), Technical Lineage capability, `start_technical_lineage` trigger; per-source references (Snowflake) |
 
 Each skill is one `SKILL.md` per directory, with frontmatter (`description`, `related`) and an
 optional `references/` directory for bundled reference documents.

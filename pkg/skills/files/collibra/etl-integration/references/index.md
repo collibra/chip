@@ -36,7 +36,7 @@ through the `catalog_etl_*` tools — see "Not controllable via chip (yet)" in `
 Notes:
 - **JDBC technical lineage capabilities (e.g. "Technical Lineage for Snowflake") are not
   `catalog_etl_*` integrations** — they are triggered per Database asset via
-  `start_technical_lineage`. See `collibra/tech-lineage`.
+  `start_technical_lineage`. See `collibra/techlin`.
 - ThoughtSpot's manifest uses a generated typeId; confirm the live value with
   `edge_list_capability_types` if `edge_create_capability` rejects the id above.
 - SAP capabilities (AI Core, Datasphere, Data Products, S/4HANA) are out of scope for this

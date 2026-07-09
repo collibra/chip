@@ -20,7 +20,7 @@ type Input struct {
 	Description  string         `json:"description,omitempty" jsonschema:"Optional description of the capability."`
 	TypeID       string         `json:"typeId" jsonschema:"The id of the capability type (e.g. 'jdbc-ingestion'). Use the edge_list_capability_types tool to discover available types and their expected parameters."`
 	EdgeSiteID   string         `json:"edgeSiteId" jsonschema:"UUID of the edge site where this capability will run. Use the edge_list_sites tool to discover available sites."`
-	Parameters   map[string]any `json:"parameters" jsonschema:"Capability install parameters as defined by the capability type's manifest. For jdbc-ingestion, this includes 'connection' (the id of a connection created via edge_create_connection), 'data-source-type', 'message-mode', and an optional 'other-settings' list of {name, type, value}."`
+	Parameters   map[string]any `json:"parameters" jsonschema:"Capability install parameters as defined by the capability type's manifest — read it via edge_list_capability_types (pass a query) and ask the user for user-choice values; never invent them. For jdbc-ingestion this includes 'connection' (the id of a connection created via edge_create_connection), 'data-source-type', 'message-mode', and an optional 'other-settings' list of {name, type, value}. For technical lineage capabilities (edgeharvester-*) the parameters are the capability's entire configuration — collect and confirm them with the user before calling this tool (see the collibra/techlin skill); custom properties like techlinHost/techlinKey go inside the 'customParameters' list parameter as {name, value, type: 'string', secret: false, encrypted: false, fromVault: false} objects (never top-level); harvest-query parameters are omitted to accept the defaults (the server fills required ones) or set to the literal string 'use-default' — never invented SQL."`
 }
 
 type Output struct {
@@ -33,7 +33,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "edge_create_capability",
 		Title:       "Create or Update Edge Capability",
-		Description: "Creates or updates an Edge capability (e.g. jdbc-ingestion) via the private Edge capability management API. Does not run the capability — use start_ingestion to trigger a jdbc-ingestion run.",
+		Description: "Creates or updates an Edge capability (e.g. jdbc-ingestion or a technical lineage capability) via the private Edge capability management API. Parameters must come from the capability type's manifest (edge_list_capability_types) and, for user-choice values, from the user — confirm the full set before calling. The server materializes defaults for required manifest parameters at save (the response echoes them back), and rejects a second capability of the same type on one connection (400 'already used') — treat that as 'the capability already exists', not as a reason to switch connections. Does not run the capability — use start_ingestion to trigger a jdbc-ingestion run, or start_technical_lineage for a technical lineage harvest.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.edge-integration-capability-manage"},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},

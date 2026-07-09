@@ -1,13 +1,13 @@
 ---
-description: Query the existing technical lineage graph — trace upstream sources and downstream consumers. Covers the DGC UUID → lineage entity ID bridge. Read-only — for setting up, creating, or running technical lineage harvesting, load collibra/tech-lineage instead.
-related: collibra/discovery, collibra/index, collibra/tech-lineage
+description: Query the existing technical lineage graph — trace upstream sources and downstream consumers. Covers the DGC UUID → lineage entity ID bridge. Read-only — for setting up, creating, or running technical lineage harvesting, load collibra/techlin instead.
+related: collibra/discovery, collibra/index, collibra/techlin
 ---
 
 # Technical lineage — querying the graph
 
 This skill only covers **querying** existing lineage. If the user wants to *set up*,
 *create*, *configure*, *enable*, or *run* technical lineage (harvest lineage from a data
-source like Snowflake), **this is the wrong skill — load `collibra/tech-lineage`**
+source like Snowflake), **this is the wrong skill — load `collibra/techlin`**
 before doing anything else.
 
 Technical lineage maps the physical data flow — including unregistered assets, temporary
