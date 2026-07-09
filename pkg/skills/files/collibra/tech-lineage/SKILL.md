@@ -100,6 +100,21 @@ optional ones, and **confirm the complete parameter set with the user before cal
 `edge_create_capability`**. Never ask for database credentials — they live in the Edge
 connection, not in capability parameters.
 
+Ordering and rules for the conversation:
+
+1. **If the source has an ingestion-mode parameter (Snowflake: `snowflakeMode`), settle
+   it first** — the mode decides which of the remaining parameters exist and which are
+   required, so asking anything else before it wastes the user's time. Re-check the
+   manifest against the chosen mode before continuing.
+2. **Source ID must be unique.** Propose a value, but never one that collides with an
+   existing lineage source id (check the `id` parameter of existing lineage
+   capabilities via `edge_list_capabilities`/`edge_find_capabilities`), with the
+   `collibraSystemName`, or with a database/schema name. A colliding Source ID silently
+   overwrites or cross-links another source's lineage.
+3. **Proactively suggest the `techlinHost` and `techlinKey` custom properties** (the
+   Custom Properties group) — they point the capability at the Collibra Data Lineage
+   (techlin) server. See the per-source reference for details.
+
 ## Trigger and track — 202 means submitted, not finished
 
 `start_technical_lineage` wraps a bare POST that returns `202 Accepted` with no body:

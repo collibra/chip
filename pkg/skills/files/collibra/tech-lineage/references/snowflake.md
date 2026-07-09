@@ -27,21 +27,31 @@ succeeds.
 
 ## Capability parameters — Main Properties
 
-- `id` (required) — **Source ID**: a unique identifier for this lineage source. It keys
-  the source on the lineage server: re-running with the same `id` replaces that source's
-  lineage; other sources can reference it via `dependentSourceIds`. Pick a stable,
-  descriptive value (e.g. `snowflake-prod`).
-- `connection` (required) — the Generic JDBC connection id (from
-  `get_registered_database`).
-- `collibraSystemName` (required) — the System asset name used to stitch harvested
-  lineage to catalog assets. Must match the system under which jdbc-ingestion registered
-  the database's assets.
-- `snowflakeMode` (required) — how lineage is derived:
+**Ask `snowflakeMode` first** — it decides which of the remaining parameters exist and
+which are required, so nothing else should be collected before it:
+
+- `snowflakeMode` (required, **first question**) — how lineage is derived:
   - **`SQL`** — parses the SQL of views and stored procedures. Gives lineage for
     defined objects; requires `databaseNames`.
   - **`SQL-API`** — reads `ACCESS_HISTORY` + `OBJECT_DEPENDENCIES`, i.e. lineage from
     what actually ran, including ad-hoc DML. Supports `extraDatabaseDefinitions` and
     `snowflakeDays`.
+
+Then the rest:
+
+- `id` (required) — **Source ID**: a unique identifier for this lineage source. It keys
+  the source on the lineage server: re-running with the same `id` replaces that source's
+  lineage; other sources can reference it via `dependentSourceIds`. Pick a stable,
+  descriptive value (e.g. `snowflake-prod`) and **verify it is unique** — it must not
+  collide with any other lineage source's `id` (check existing lineage capabilities'
+  `id` parameter via `edge_list_capabilities`), nor with the `collibraSystemName`, nor
+  with a database or schema name. A collision overwrites or cross-links another
+  source's lineage.
+- `connection` (required) — the Generic JDBC connection id (from
+  `get_registered_database`).
+- `collibraSystemName` (required) — the System asset name used to stitch harvested
+  lineage to catalog assets. Must match the system under which jdbc-ingestion registered
+  the database's assets.
 - `databaseNames` (list; required in `SQL` mode) — the databases to harvest. Collect the
   names from the user directly; leave the manifest's `databaseNamesJson` file-upload
   variant unset (there are no files in this flow).
@@ -58,6 +68,20 @@ One editable SQL parameter per query type (`columns`, `views`, `procedures`, and
 `ACCOUNT_USAGE` queries. Leave the defaults unless the user explicitly needs to override
 them (e.g. custom filtering); placeholders like `##DBNAMES##`, `##SCHEMANAMES##`,
 `##DAYS##` are substituted at run time.
+
+## Custom Properties — suggest these proactively
+
+The Custom Properties group takes free-form key/value pairs the harvester reads at run
+time. **Suggest adding these two** when creating the capability:
+
+- `techlinHost` — host URL of the Collibra Data Lineage (techlin) server the harvested
+  batches are uploaded to.
+- `techlinKey` — the API key for that server.
+
+The values are tenant-specific (the lineage server assigned to the customer's
+environment) — ask the user for them; if they don't have them at hand, the capability
+can be created without and updated later (`edge_create_capability` upserts by
+`capabilityId`).
 
 ## Advanced Properties
 
