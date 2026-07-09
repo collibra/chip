@@ -14,7 +14,7 @@ import (
 )
 
 type Input struct {
-	AssetID string `json:"assetId" jsonschema:"UUID of the Database asset to harvest technical lineage for — the asset registered by jdbc-ingestion (configure_database), NOT the capability id. A Technical Lineage capability referencing the database's connection must already exist on the edge site."`
+	AssetID string `json:"assetId" jsonschema:"UUID of the Database asset to harvest technical lineage for — the asset registered by jdbc-ingestion (register_database), NOT the capability id. A Technical Lineage capability referencing the database's connection must already exist on the edge site."`
 }
 
 type Output struct {
@@ -26,7 +26,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "start_technical_lineage",
 		Title:       "Start Technical Lineage Harvest",
-		Description: "Triggers the technical lineage harvest for a registered Database asset. The database must already be registered (configure_database) and ingested (start_ingestion), and a Technical Lineage capability must exist on the edge site. This is the only correct trigger for technical lineage — never use edge_run_capability or catalog_etl_start_job for it. A success response only means the harvest was submitted (the endpoint returns no job id): locate the spawned DGC job with jobs_find and poll it with get_job_status (NOT edge_get_job_status — the Edge-side harvest is tracked through the DGC job).",
+		Description: "Triggers the technical lineage harvest for a registered Database asset. The database must already be registered (register_database) and ingested (start_ingestion), and a Technical Lineage capability must exist on the edge site. This is the only correct trigger for technical lineage — never use edge_run_capability or catalog_etl_start_job for it. A success response only means the harvest was submitted (the endpoint returns no job id): locate the spawned DGC job with jobs_find and poll it with get_job_status (NOT edge_get_job_status — the Edge-side harvest is tracked through the DGC job).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},

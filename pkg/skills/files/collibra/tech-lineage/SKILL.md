@@ -21,7 +21,7 @@ own lineage sync capabilities managed as ETL integrations instead (Databricks, G
 Technical lineage builds on top of a completed jdbc-ingestion:
 
 1. A **Database asset** must exist for the data source, registered via
-   `configure_database` (`collibra/jdbc-ingestion`). Its UUID is the key that triggers
+   `register_database` (`collibra/jdbc-ingestion`). Its UUID is the key that triggers
    the harvest.
 2. **JDBC ingestion must have run** (`start_ingestion`) — harvested lineage stitches to
    the ingested Schema/Table/Column assets; without them the lineage has nothing to

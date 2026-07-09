@@ -14,7 +14,7 @@ import (
 )
 
 type Input struct {
-	AssetID string `json:"assetId" jsonschema:"UUID of the registered Database asset (as created by configure_database)."`
+	AssetID string `json:"assetId" jsonschema:"UUID of the registered Database asset (as created by register_database)."`
 }
 
 type Output struct {
@@ -28,7 +28,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_registered_database",
 		Title:       "Get Registered Database",
-		Description: "Resolves a registered Database asset to the Edge connection behind it (database → database connection → Edge connection), returning the connection and its edgeSiteId. Use it to reuse the ingestion's connection when setting up dependent capabilities such as Technical Lineage — the capability must be created on the returned edgeSiteId. Fails if the asset is not a database registered via configure_database.",
+		Description: "Resolves a registered Database asset to the Edge connection behind it (database → database connection → Edge connection), returning the connection and its edgeSiteId. Use it to reuse the ingestion's connection when setting up dependent capabilities such as Technical Lineage — the capability must be created on the returned edgeSiteId. Fails if the asset is not a database registered via register_database.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.edge-view-connections-and-capabilities"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -43,7 +43,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 
 		database, err := clients.GetDatabase(ctx, collibraClient, input.AssetID)
 		if err != nil {
-			return Output{Success: false, Error: fmt.Sprintf("failed to get registered database (is this the UUID of a Database asset registered via configure_database?): %s", err.Error())}, nil
+			return Output{Success: false, Error: fmt.Sprintf("failed to get registered database (is this the UUID of a Database asset registered via register_database?): %s", err.Error())}, nil
 		}
 		if database.DatabaseConnectionID == "" {
 			return Output{Database: database, Success: false, Error: "registered database has no database connection"}, nil
