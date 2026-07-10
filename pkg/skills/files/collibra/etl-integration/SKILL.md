@@ -1,6 +1,6 @@
 ---
 description: Set up, configure, schedule, and run Edge ETL integrations (metadata sync capabilities like Dataplex, Databricks Unity Catalog, Purview, Sigma) end to end.
-related: collibra/jdbc-ingestion, collibra/discovery
+related: collibra/jdbc-ingestion, collibra/discovery, collibra/techlin
 ---
 
 # ETL integrations — connect, configure, schedule, run
@@ -27,6 +27,12 @@ which ingestion type it should be** — don't assume ETL just because this skill
 3. **If more than one path is possible, ask the user which they want** before starting.
    Only proceed with this ETL skill once the user has chosen it (or it's the only supported
    path).
+
+**Technical Lineage capabilities are not ETL integrations.** If the capability to create
+or run is a technical-lineage one (display name "Technical Lineage for <Source>", e.g.
+Snowflake), stop here — that whole flow, including creating the capability and its
+mandatory parameter conversation, is owned by `collibra/techlin`. Load that skill
+instead; do not create the capability from this one.
 
 ## The three configuration layers (merged at run time)
 

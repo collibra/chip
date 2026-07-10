@@ -20,7 +20,7 @@ type Input struct {
 }
 
 type Output struct {
-	CapabilityTypes []clients.CapabilityType `json:"capabilityTypes" jsonschema:"Capability types available on this edge site (e.g. 'jdbc-ingestion'). Manifest is only populated when query narrows the results — see query's description."`
+	CapabilityTypes []clients.CapabilityType `json:"capabilityTypes" jsonschema:"Capability types available on this edge site (e.g. 'jdbc-ingestion'). Manifest is only populated when query narrows the results — see query's description. The manifest's 'required'/'default' flags describe the Edge UI form, not runtime validation — the per-source skill references (e.g. collibra/techlin) carry the runtime requiredness."`
 	ConnectionTypes []clients.ConnectionType `json:"connectionTypes" jsonschema:"Connection types available on this edge site (e.g. 'Generic' or a vendor-specific type). Manifest is only populated when query narrows the results — see query's description."`
 }
 

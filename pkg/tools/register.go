@@ -55,6 +55,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
 	"github.com/collibra/chip/pkg/tools/get_lineage_upstream"
 	"github.com/collibra/chip/pkg/tools/get_measure_data"
+	"github.com/collibra/chip/pkg/tools/get_registered_database"
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/init_data_contract"
 	"github.com/collibra/chip/pkg/tools/jobs_find"
@@ -73,6 +74,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 	"github.com/collibra/chip/pkg/tools/start_ingestion"
+	"github.com/collibra/chip/pkg/tools/start_technical_lineage"
 	"github.com/collibra/chip/pkg/tools/test_connection"
 	"github.com/collibra/chip/pkg/tools/upload_file"
 )
@@ -141,6 +143,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, register_database.NewTool(client))
 	toolRegister(server, toolConfig, configure_database_schemas.NewTool(client))
 	toolRegister(server, toolConfig, start_ingestion.NewTool(client))
+	toolRegister(server, toolConfig, get_registered_database.NewTool(client))
+	toolRegister(server, toolConfig, start_technical_lineage.NewTool(client))
 
 	// Edge Management tools — read/delete/run operations with no counterpart among the
 	// create/find/test/get-status lifecycle tools above (edge_create_connection and
