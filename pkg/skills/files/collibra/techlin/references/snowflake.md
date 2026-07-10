@@ -43,8 +43,10 @@ This is the question script for the parameter checkpoint (step 6 of the parent
    database's assets under.
 5. **Queries** — ask only whether the user wants to *override* any harvest query
    (almost nobody does; defaults apply automatically — see "Queries").
-6. **Custom Properties** — offer `techlinHost` + `techlinKey` (optional; note the
-   `customParameters` encoding below).
+6. **Techlin server (Custom Properties)** — ask whether the user wants to configure
+   the Collibra Data Lineage (techlin) server for this capability. If yes: collect
+   **`techlinHost` only** — never the key. `techlinKey` is a secret; the user adds
+   it after creation, outside this conversation (see "Custom Properties" below).
 7. **Advanced Properties** — only when the user asks for them.
 8. **Present the complete parameter set in one table and get an explicit "create
    it"** before calling `edge_create_capability`.
@@ -113,32 +115,42 @@ mode's query types and set that one parameter to the user's SQL:
 Placeholders like `##DBNAME##`, `##DBNAMES##`, `##SCHEMANAMES##`, `##DAYS##` are
 substituted at run time and must be preserved in any override.
 
-## Custom Properties — suggest these proactively
+## Custom Properties — the techlin server; the key never goes through the chat
 
 The Custom Properties group is a **single parameter, `customParameters`** — a list of
 key/value objects the harvester reads at run time. `techlinHost` and `techlinKey` are
 **not top-level parameters**: set at the top level of `parameters` they are silently
-ignored. The encoding:
-
-```json
-"customParameters": [
-  {"name": "techlinHost", "value": "https://techlin-<env>.example.com",
-   "type": "string", "secret": false, "encrypted": false, "fromVault": false},
-  {"name": "techlinKey", "value": "<api key>",
-   "type": "string", "secret": false, "encrypted": false, "fromVault": false}
-]
-```
+ignored.
 
 - `techlinHost` — host URL of the Collibra Data Lineage (techlin) server the harvested
   batches are uploaded to.
-- `techlinKey` — the API key for that server.
+- `techlinKey` — the API key for that server. **A secret: never collect, store, or
+  echo its value in the conversation** — a value passed through
+  `edge_create_capability` is stored plaintext and readable back through the API.
 
 The values are tenant-specific (the lineage server assigned to the customer's
-environment). They are optional — but always ask for them explicitly; deferring them
-is the **user's** decision, never a silent default. If the user doesn't have the
-values at hand, create without them and point out they can be added later via
-`edge_create_capability` with the `capabilityId` (upsert) — see "Updating an existing
-capability" in the parent `SKILL.md`.
+environment) and optional — always ask explicitly whether the user wants to configure
+them; declining is the **user's** decision, never a silent default. When the user
+wants them, the flow is split:
+
+1. Ask for **`techlinHost` only** and include it in the capability:
+
+   ```json
+   {"customParameters": [
+     {"name": "techlinHost", "value": "https://techlin-<env>.example.com",
+      "type": "string", "secret": false, "encrypted": false, "fromVault": false}
+   ]}
+   ```
+
+2. Create the capability with the confirmed parameter set — **without `techlinKey`**.
+3. Tell the user to add `techlinKey` themselves in the Collibra/Edge UI — the
+   capability's **Custom Properties** group → add property `techlinKey`, **marked
+   secret** so it is masked and encrypted — and to say when it is done.
+4. **Trigger the harvest only after the user confirms the key is in place.**
+
+`techlinHost` alone can also be added or changed later via the upsert (see "Updating
+an existing capability" in the parent `SKILL.md`); `techlinKey` always goes in
+through the Edge UI.
 
 ## Advanced Properties
 

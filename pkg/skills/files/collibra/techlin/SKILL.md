@@ -117,6 +117,8 @@ create the Database asset any other way.
    See "Capability parameters".
 7. **`start_technical_lineage`** with the Database asset UUID from step 1 — **not** the
    capability id. Only reached once step 3 (or step 6) confirmed the capability exists.
+   If the user opted into the techlin server configuration in step 6, wait for their
+   confirmation that `techlinKey` was added in the Edge UI before triggering.
    Success means *submitted*, nothing more.
 8. **Track:** the trigger returns no job id. Find the spawned DGC job with **`jobs_find`**
    (jobs started at/after the trigger), then poll it with **`get_job_status`** until it
@@ -181,13 +183,17 @@ Ordering and rules for the conversation:
    capabilities via `edge_list_capabilities`/`edge_find_capabilities`), with the
    `collibraSystemName`, or with a database/schema name. A colliding Source ID silently
    overwrites or cross-links another source's lineage.
-4. **Proactively offer the `techlinHost` and `techlinKey` custom properties** — they
-   point the capability at the Collibra Data Lineage (techlin) server and are passed
-   **inside the `customParameters` list parameter** (the per-source reference shows
-   the exact encoding), never as top-level parameters. They are optional: ask for
-   them explicitly; if the user doesn't have the values at hand, deferring them is
-   the **user's** decision, never a silent default — they can be added later (see
-   "Updating an existing capability").
+4. **Proactively offer the techlin server configuration** (`techlinHost` /
+   `techlinKey` custom properties) — they point the capability at the Collibra Data
+   Lineage (techlin) server and are passed **inside the `customParameters` list
+   parameter** (the per-source reference shows the exact encoding), never as
+   top-level parameters. They are optional, and the two are handled differently:
+   when the user wants them, collect **`techlinHost` only** and create the
+   capability without the key — **`techlinKey` is a secret and is never collected,
+   stored, or echoed in the conversation**. After creation, the user adds
+   `techlinKey` in the Collibra/Edge UI (Custom Properties, marked secret);
+   **trigger the harvest only after the user confirms the key is in place**.
+   Declining both is the user's decision, never a silent default.
 5. **Confirm the complete set.** Present every parameter — chosen values, applied
    defaults, custom properties — in one table and get an explicit confirmation before
    calling `edge_create_capability`.
@@ -231,10 +237,12 @@ rule as creation — show what will change and get a go-ahead first.
    parameters the reference doesn't mention are surfaced to the user, not guessed.
 5. **Ask the user for parameter values and confirm the full set** before
    `edge_create_capability` — even when the user already approved creating the
-   capability; approval covers the creation, not skipping the questions. Never ask for
-   credentials. The `connection` value and the `edgeSiteId` are not user choices —
-   take both from `get_registered_database`; the capability lives on the same edge
-   site as the connection.
+   capability; approval covers the creation, not skipping the questions. Never ask
+   for credentials, and never collect the `techlinKey` value in the conversation —
+   the user adds it in the Edge UI after creation (see the per-source reference).
+   The `connection` value and the `edgeSiteId` are not user choices — take both from
+   `get_registered_database`; the capability lives on the same edge site as the
+   connection.
 6. **Only `start_technical_lineage` triggers a harvest** — never `edge_run_capability`
    and never `catalog_etl_start_job`. Pass the **Database asset** UUID, not the
    capability id.
