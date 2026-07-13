@@ -28,15 +28,21 @@ Rule tools: `validate_dq_rule`, `preview_dq_rule_sql`, `create_dq_rule`, `get_dq
    `delete_dq_rule`, `get_dq_rule_results` and the job tools take only names/ids and need no
    discovery step.)
 3. **`monitorType` is `FREEFORM_SQL` or `SIMPLE_SQL`.** `FREEFORM_SQL` is a full SQL query;
-   `SIMPLE_SQL` is a single-column predicate (set `columnName`). Nothing else is valid.
-4. **Rules require a PUSHDOWN job.** If a rule call returns an error mentioning the dataset is
+   `SIMPLE_SQL` is a single-column predicate. Nothing else is valid.
+4. **Always give the rule a meaningful name.** `monitorName` is required and is how the rule is
+   found, edited and reported on later. Ask the user for a name; if they don't supply one,
+   propose a clear, descriptive name (e.g. `orders_amount_not_null`) and confirm it before
+   creating — do not invent an opaque name. Names allow only letters, digits, `-` and `_`.
+5. **For `SIMPLE_SQL`, ask which column the check targets** and pass it as `columnName`. For
+   `FREEFORM_SQL` the column(s) live inside the SQL, so `columnName` is not needed.
+6. **Rules require a PUSHDOWN job.** If a rule call returns an error mentioning the dataset is
    not PUSHDOWN (HTTP 422), rule creation/editing is not allowed on that job — tell the user
    rather than retrying.
-5. **Read the `status` field in every response.** Branch on `success`, `validation_error`,
+7. **Read the `status` field in every response.** Branch on `success`, `validation_error`,
    or `error`. For `validate_dq_rule`, `status: success` means validation *ran* — the verdict
    is the separate `valid` field.
-6. **`delete_dq_rule` is destructive.** Confirm with the user before deleting a rule.
-7. **Creating a rule does not run it.** A new rule is only evaluated on the next run. Call
+8. **`delete_dq_rule` is destructive.** Confirm with the user before deleting a rule.
+9. **Creating a rule does not run it.** A new rule is only evaluated on the next run. Call
    `run_dq_job` to execute it, then observe the outcome.
 
 ## Workflow: create and run a rule
@@ -46,9 +52,10 @@ Rule tools: `validate_dq_rule`, `preview_dq_rule_sql`, `create_dq_rule`, `get_dq
 2. **Validate** — call `validate_dq_rule` with those IDs, the `jobName`, and `previewRule`
    (the SQL you intend to use as `monitorValue`). If `valid` is `false`, fix and re-validate.
    Optionally call `preview_dq_rule_sql` (same inputs) to see the sample rows the SQL returns.
-3. **Create** — only once valid, call `create_dq_rule` with `jobName`, `monitorName`,
-   `monitorType`, `monitorValue` (and optional `filterQuery`, `columnName`, `dimensions`,
-   `tolerance`, `active`, `suppressed`).
+3. **Create** — only once valid, call `create_dq_rule`. First make sure you have a meaningful
+   `monitorName` from the user (rule 4) and, for a `SIMPLE_SQL` rule, the target `columnName`
+   (rule 5). Pass `jobName`, `monitorName`, `monitorType`, `monitorValue` (and optional
+   `filterQuery`, `columnName`, `dimensions`, `tolerance`, `active`, `suppressed`).
 4. **Run** — call `run_dq_job` with the `jobName`. It returns a `jobRunId`.
 5. **Observe** — poll `get_dq_job_status` with the `jobRunId` until it is terminal
    (`FINISHED`, `FAILED`, `CANCELLED`). On failure, read `exception` and call `get_dq_job_log`
