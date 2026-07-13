@@ -91,3 +91,86 @@ func RunDQJob(ctx context.Context, client *http.Client, jobName string, request 
 
 	return &result, nil
 }
+
+// DQRunDateValue is the discriminated runDate value on a job run ({kind, value}).
+type DQRunDateValue struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+// DQJobRun is the status of a single job run, from
+// GET /rest/dq/1.0/jobRuns/{jobRunId}. status is the JobRunStatus enum
+// (WAITING, DISPATCHED, SETUP, RUNNING, SENDING, FINISHED, CANCELLED, FAILED,
+// UNKNOWN — the field is open, so additional values may appear). exception is
+// only populated on FAILED runs.
+type DQJobRun struct {
+	JobRunID             string          `json:"jobRunId"`
+	JobName              string          `json:"jobName"`
+	RunDate              *DQRunDateValue `json:"runDate,omitempty"`
+	Status               string          `json:"status"`
+	Activity             string          `json:"activity,omitempty"`
+	Exception            string          `json:"exception,omitempty"`
+	StartTime            string          `json:"startTime,omitempty"`
+	EndTime              string          `json:"endTime,omitempty"`
+	ExecutionTimeSeconds *int64          `json:"executionTimeSeconds,omitempty"`
+	Score                *float64        `json:"score,omitempty"`
+	ActiveMonitors       *int            `json:"activeMonitors,omitempty"`
+	BreakingMonitors     *int            `json:"breakingMonitors,omitempty"`
+	RowCount             *int64          `json:"rowCount,omitempty"`
+	ExecutedQuery        string          `json:"executedQuery,omitempty"`
+}
+
+// GetDQJobRunStatus fetches the status of a job run by its run id (the jobRunId
+// returned when the job was run) — GET /rest/dq/1.0/jobRuns/{jobRunId}.
+func GetDQJobRunStatus(ctx context.Context, client *http.Client, jobRunID string) (*DQJobRun, error) {
+	path := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID)
+	respBody, status, err := dqDo(ctx, client, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getting dq job status: %w", err)
+	}
+	if status != http.StatusOK {
+		if status == http.StatusNotFound {
+			return nil, fmt.Errorf("getting dq job status: job run %q not found: %s", jobRunID, string(respBody))
+		}
+		return nil, fmt.Errorf("getting dq job status: unexpected status %d: %s", status, string(respBody))
+	}
+	var result DQJobRun
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("getting dq job status: decoding response: %w", err)
+	}
+	return &result, nil
+}
+
+// DQJobLogEntry is one entry in a job run's execution log (a JobLog): the stage,
+// activity and a human-readable description with an optional hint.
+type DQJobLogEntry struct {
+	LogID           int64  `json:"logId"`
+	Activity        string `json:"activity,omitempty"`
+	Stage           string `json:"stage,omitempty"`
+	LogDesc         string `json:"logDesc,omitempty"`
+	LogHint         string `json:"logHint,omitempty"`
+	StageTime       int64  `json:"stageTime,omitempty"`
+	PrettyStageTime string `json:"prettyStageTime,omitempty"`
+}
+
+// GetDQJobLog fetches the execution log for a job run by its run id. NOTE: there
+// is no public log endpoint, so this uses the internal UI surface —
+// GET /rest/dq/internal/v1/job/logs?jobUUID={jobRunId}.
+func GetDQJobLog(ctx context.Context, client *http.Client, jobRunID string) ([]DQJobLogEntry, error) {
+	path := "/rest/dq/internal/v1/job/logs?" + url.Values{"jobUUID": {jobRunID}}.Encode()
+	respBody, status, err := dqDo(ctx, client, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getting dq job log: %w", err)
+	}
+	if status != http.StatusOK {
+		if status == http.StatusNotFound {
+			return nil, fmt.Errorf("getting dq job log: job run %q not found: %s", jobRunID, string(respBody))
+		}
+		return nil, fmt.Errorf("getting dq job log: unexpected status %d: %s", status, string(respBody))
+	}
+	var result []DQJobLogEntry
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("getting dq job log: decoding response: %w", err)
+	}
+	return result, nil
+}
