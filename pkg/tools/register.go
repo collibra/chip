@@ -10,6 +10,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
 	"github.com/collibra/chip/pkg/tools/delete_dq_rule"
+	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
@@ -23,6 +24,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_dq_job_status"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_results"
+	"github.com/collibra/chip/pkg/tools/get_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
@@ -33,6 +35,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_context_specifications"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
+	"github.com/collibra/chip/pkg/tools/list_dq_rule_templates"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/preview_dq_rule_sql"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
@@ -96,6 +99,9 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, run_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job_status.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job_log.NewTool(client))
+	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
+	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
+	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
