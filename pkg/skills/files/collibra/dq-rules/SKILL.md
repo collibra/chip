@@ -22,6 +22,10 @@ Rule tools: `validate_dq_rule`, `preview_dq_rule_sql`, `create_dq_rule`, `get_dq
    front instead of failing at run time. `validate_dq_rule` takes the raw SQL — the rule does
    **not** need to exist yet. If `valid` is `false`, fix the SQL and re-validate; do **not**
    create the rule.
+   - **`create_dq_rule` has a confirm checkpoint.** Call it first with `confirm` omitted/false:
+     it returns a `preview` (the composed rule and its SQL) and creates nothing. Show that
+     preview to the user, then call again with `confirm: true` to actually create. The tool
+     enforces this — it will not write on a `confirm=false` call.
 2. **`validate_dq_rule` and `preview_dq_rule_sql` need discovery IDs.** Both require
    `edgeSiteId`, `connectionId` and `schemaName`. Get them from `prepare_create_dq_job` for
    the target job — do not guess them. (`create_dq_rule`, `get_dq_rule`, `edit_dq_rule`,

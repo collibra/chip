@@ -121,7 +121,10 @@ Progress through these states; the user may revise within a state before moving 
      the approved SQL (+ any filter) — since each rule's SQL can differ.
    Then get explicit approval.
 
-**7. Execution.** Create the rules:
+**7. Execution.** Create the rules. Both write tools have a **confirm checkpoint**:
+   call with `confirm` omitted to get a `preview` (nothing is written), then call
+   again with `confirm: true` only after the step-6 approval. The tools enforce
+   this — a `confirm=false` call never writes.
    - Template path: `deploy_dq_rule_template` with `targets` = the confirmed
      `{jobName, columnName}` list (bulk; rules named `{template}_{column}`).
    - Plain-language path: `create_dq_rule` per column (validated SQL as

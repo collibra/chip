@@ -27,6 +27,9 @@ const (
 	// StatusError means the rule could not be created due to a downstream
 	// DQ service error.
 	StatusError OutputStatus = "error"
+	// StatusPreview means confirm was not set: the tool returned the composed
+	// rule (including its SQL) for review and created nothing.
+	StatusPreview OutputStatus = "preview"
 )
 
 // monitorType discriminators accepted by the DQ API.
@@ -49,12 +52,28 @@ type Input struct {
 	Active       *bool    `json:"active,omitempty" jsonschema:"Optional. Whether the rule is active. Defaults to true."`
 	Suppressed   bool     `json:"suppressed,omitempty" jsonschema:"Optional. Whether the rule is suppressed (kept but not scored). Defaults to false."`
 	TemplateID   string   `json:"templateId,omitempty" jsonschema:"Optional. UUID of a rule template to link this rule to so it appears under the template's 'Used In' tab."`
+	Confirm      bool     `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of the rule — including its SQL — WITHOUT creating it, so it can be reviewed with the user. Set true to actually create the rule after the user has approved."`
+}
+
+// RulePreview is the composed rule echoed back for review when confirm is false.
+type RulePreview struct {
+	JobName      string   `json:"jobName"`
+	MonitorName  string   `json:"monitorName"`
+	MonitorType  string   `json:"monitorType"`
+	MonitorValue string   `json:"monitorValue" jsonschema:"The rule's SQL that will be saved — review this with the user before confirming."`
+	FilterQuery  string   `json:"filterQuery,omitempty"`
+	ColumnName   string   `json:"columnName,omitempty"`
+	Dimensions   []string `json:"dimensions,omitempty"`
+	Tolerance    int      `json:"tolerance"`
+	Active       bool     `json:"active"`
+	Suppressed   bool     `json:"suppressed"`
 }
 
 // Output is the typed response.
 type Output struct {
-	Status      OutputStatus `json:"status" jsonschema:"'success' when the rule was created; 'validation_error' for bad inputs; 'error' for downstream DQ failures."`
+	Status      OutputStatus `json:"status" jsonschema:"'preview' when confirm was not set (nothing created — review the preview and call again with confirm=true); 'success' when the rule was created; 'validation_error' for bad inputs; 'error' for downstream DQ failures."`
 	Message     string       `json:"message" jsonschema:"Human-readable summary."`
+	Preview     *RulePreview `json:"preview,omitempty" jsonschema:"The composed rule (with its SQL) returned when confirm=false; nothing was created."`
 	JobName     string       `json:"jobName,omitempty" jsonschema:"Job the rule was created on, on success."`
 	MonitorName string       `json:"monitorName,omitempty" jsonschema:"Name of the created rule, on success."`
 }
@@ -67,6 +86,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Create a data quality rule (monitor) on an existing data quality job (dataset). " +
 			"monitorType is 'FREEFORM_SQL' (a full SQL query) or 'SIMPLE_SQL' (a single-column check). " +
 			"The rule defaults to active and not suppressed. " +
+			"Built around a confirm checkpoint: confirm=false (default) returns a PREVIEW of the rule and its SQL without creating anything — review it with the user; confirm=true creates the rule. " +
 			"Returns the job name and rule name on success. " +
 			"Note: this uses the DQ monitoring API and requires permission to create rules on the target job.",
 		Handler:     handler(collibraClient),
@@ -81,7 +101,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return *out, nil
 		}
 
-		resp, err := clients.CreateDQRule(ctx, collibraClient, clients.CreateDQRuleRequest{
+		request := clients.CreateDQRuleRequest{
 			JobName:      strings.TrimSpace(input.JobName),
 			MonitorName:  strings.TrimSpace(input.MonitorName),
 			MonitorType:  input.MonitorType,
@@ -94,7 +114,31 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			IsActive:     activeFlag(input.Active),
 			IsSuppressed: input.Suppressed,
 			TemplateID:   strings.TrimSpace(input.TemplateID),
-		})
+		}
+
+		// Confirm checkpoint: without confirm, return the composed rule (SQL
+		// included) for review and create nothing.
+		if !input.Confirm {
+			return Output{
+				Status: StatusPreview,
+				Message: fmt.Sprintf("Preview only — nothing created. Will create rule %q on job %q with SQL: %s. "+
+					"Review this with the user, then call again with confirm=true.", request.MonitorName, request.JobName, request.MonitorValue),
+				Preview: &RulePreview{
+					JobName:      request.JobName,
+					MonitorName:  request.MonitorName,
+					MonitorType:  request.MonitorType,
+					MonitorValue: request.MonitorValue,
+					FilterQuery:  request.FilterQuery,
+					ColumnName:   request.ColumnName,
+					Dimensions:   request.Dimensions,
+					Tolerance:    request.Tolerance,
+					Active:       request.IsActive == 1,
+					Suppressed:   request.IsSuppressed,
+				},
+			}, nil
+		}
+
+		resp, err := clients.CreateDQRule(ctx, collibraClient, request)
 		if err != nil {
 			return Output{Status: StatusError, Message: fmt.Sprintf("Could not create rule: %v", err)}, nil
 		}

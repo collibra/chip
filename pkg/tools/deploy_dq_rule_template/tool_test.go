@@ -50,6 +50,7 @@ func TestDeployDQRuleTemplate_HappyPath(t *testing.T) {
 			{JobName: "PUBLIC.CUSTOMERS", ColumnName: "email"},
 			{JobName: "PUBLIC.CUSTOMERS", ColumnName: "name"},
 		},
+		Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -92,8 +93,32 @@ func TestDeployDQRuleTemplate_DownstreamErrorSurfaces(t *testing.T) {
 	out, _ := deploy_dq_rule_template.NewTool(c).Handler(t.Context(), deploy_dq_rule_template.Input{
 		TemplateID: "t1",
 		Targets:    []deploy_dq_rule_template.Target{{JobName: "DS"}},
+		Confirm:    true,
 	})
 	if out.Status != deploy_dq_rule_template.StatusError {
 		t.Fatalf("status = %q, want error", out.Status)
+	}
+}
+
+func TestDeployDQRuleTemplate_PreviewByDefault_DeploysNothing(t *testing.T) {
+	var rec capture
+	c := server(t, http.StatusNoContent, &rec)
+	out, err := deploy_dq_rule_template.NewTool(c).Handler(t.Context(), deploy_dq_rule_template.Input{
+		TemplateID: "t1",
+		Targets:    []deploy_dq_rule_template.Target{{JobName: "PUBLIC.CUSTOMERS", ColumnName: "email"}},
+		// Confirm omitted -> preview
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != deploy_dq_rule_template.StatusPreview {
+		t.Fatalf("status = %q, want preview", out.Status)
+	}
+	if out.Preview == nil || out.Preview.Count != 1 {
+		t.Fatalf("expected preview with 1 target, got %+v", out.Preview)
+	}
+	// The deploy endpoint must not have been called.
+	if rec.path != "" {
+		t.Fatalf("expected no deploy call in preview mode, but server was hit: %s", rec.path)
 	}
 }

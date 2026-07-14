@@ -50,6 +50,7 @@ func TestCreateDQRule_HappyPath_DefaultsActive(t *testing.T) {
 		MonitorName:  "Name_Not_Null",
 		MonitorType:  "FREEFORM_SQL",
 		MonitorValue: "SELECT * FROM @PUBLIC.SAMPLE_DATASET WHERE NAME IS NULL",
+		Confirm:      true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -79,6 +80,7 @@ func TestCreateDQRule_InactiveMapsToZero(t *testing.T) {
 		MonitorType:  "SIMPLE_SQL",
 		MonitorValue: "NAME IS NOT NULL",
 		Active:       &inactive,
+		Confirm:      true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -126,8 +128,35 @@ func TestCreateDQRule_DownstreamErrorSurfaces(t *testing.T) {
 		MonitorName:  "R",
 		MonitorType:  "FREEFORM_SQL",
 		MonitorValue: "x",
+		Confirm:      true,
 	})
 	if out.Status != create_dq_rule.StatusError {
 		t.Fatalf("status = %q, want error", out.Status)
+	}
+}
+
+func TestCreateDQRule_PreviewByDefault_CreatesNothing(t *testing.T) {
+	var got clients.CreateDQRuleRequest
+	c := server(t, http.StatusOK, &got)
+
+	out, err := create_dq_rule.NewTool(c).Handler(t.Context(), create_dq_rule.Input{
+		JobName:      "PUBLIC.DS",
+		MonitorName:  "Name_Not_Null",
+		MonitorType:  "FREEFORM_SQL",
+		MonitorValue: "SELECT * FROM @PUBLIC.DS WHERE NAME IS NULL",
+		// Confirm omitted -> preview
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != create_dq_rule.StatusPreview {
+		t.Fatalf("status = %q, want preview", out.Status)
+	}
+	if out.Preview == nil || out.Preview.MonitorValue == "" {
+		t.Fatalf("expected preview with SQL, got %+v", out.Preview)
+	}
+	// The DQ endpoint must not have been called (nothing written).
+	if got.MonitorName != "" {
+		t.Fatalf("expected no create request in preview mode, but server was called: %+v", got)
 	}
 }
