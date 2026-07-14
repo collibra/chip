@@ -36,6 +36,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
 - [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets; filters (status, community, domain, domain type, asset type, created-by) accept names or UUIDs
+- [`search_catalog_columns`](pkg/tools/search_catalog_columns/) - Find catalog Column assets by metadata that keyword search can't filter on — Description/Data Type (attribute values), a Data Steward role, or relations to a Business Term/Business Rule/Data Element/Data Attribute (by name); AND-combined. Uses the DGC Knowledge Graph GraphQL API (must be enabled on the instance). Classification-tag filtering is not supported
 - [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters. **Requires:** `dgc.data-classes-read`
 - [`search_data_classification_match`](pkg/tools/search_data_classification_matches/) - Search for associations between data classes and assets. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`search_lineage_entities`](pkg/tools/search_lineage_entities/) - Search for entities in the technical lineage graph

@@ -45,6 +45,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/run_dq_job"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
+	"github.com/collibra/chip/pkg/tools/search_catalog_columns"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
@@ -106,6 +107,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
 	toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
 	toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
+	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
