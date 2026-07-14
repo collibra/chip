@@ -23,6 +23,8 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`get_dq_job_log`](pkg/tools/get_dq_job_log/) - Read the execution log for a job run by its `jobRunId` — run stages, timings, descriptions and exceptions. Uses the internal DQ UI surface (the public DQ API has no log endpoint)
 - [`list_dq_rule_templates`](pkg/tools/list_dq_rule_templates/) - List the DQ rule templates (built-in OOTB + custom) available in the connected environment. Each is a parameterized SQL pattern deployable via `deploy_dq_rule_template`. Filters: `name`, `dimension`, `ootb`; paginated
 - [`get_dq_rule_template`](pkg/tools/get_dq_rule_template/) - Read a single DQ rule template by id — its parameterized SQL, dimensions, default tolerance, OOTB flag and deployment count
+- [`find_dq_rules`](pkg/tools/find_dq_rules/) - Search existing DQ rules (monitors) across jobs. Filter by exact `jobName` and/or `columnName` (combine both to detect rules already on a target column) or a rule-name substring. Returns each rule's job, column, type, status and SQL; paginated
+- [`generate_dq_rule_sql`](pkg/tools/generate_dq_rule_sql/) - Turn a plain-language description of a check into rule SQL (Text2SQL / Collibra DQ AI), so a rule can be authored without writing SQL. Returns a single SQL string (validate before use). Requires `edgeSiteId`/`connectionId` (from `prepare_create_dq_job`)
 - [`get_lineage_downstream`](pkg/tools/get_lineage_downstream/) - Get downstream technical lineage (consumers) for a data entity
 - [`get_lineage_entity`](pkg/tools/get_lineage_entity/) - Get metadata about a specific entity in the technical lineage graph
 - [`get_lineage_transformation`](pkg/tools/get_lineage_transformation/) - Get details and logic of a specific data transformation
