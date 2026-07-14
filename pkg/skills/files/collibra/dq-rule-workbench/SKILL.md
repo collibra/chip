@@ -124,10 +124,25 @@ Progress through these states; the user may revise within a state before moving 
 
 ## Rule settings & catalog associations
 
-Configurable at creation (bulk-uniform unless the user asks per-column): DQ
-`dimensions` (default none), `tolerance` (default 0), `description` (default
-auto-generated from the template name or the intent), and notifications (default
-none). To link created rules to catalog assets — Business Rule, Data Element, Data
+Which settings you can set depends on the path:
+
+- **Plain-language path (`create_dq_rule`)**: set `dimensions` (default none),
+  `tolerance` (default 0), and `description` (default auto-generated from the
+  intent) per rule, bulk-uniform unless the user asks for per-column values.
+  **`tolerance` is a count of breaking records allowed before the rule fails, not
+  a percentage** — despite the ticket's "Tolerance %", the API takes an integer
+  record count. Say it that way to the user.
+- **Template path (`deploy_dq_rule_template`)**: rules inherit the template's
+  `dimensions`, `tolerance` and `description`. The deploy call takes only
+  `{jobName, columnName}` targets, so these are **not** set per deploy — choose
+  (or create) a template that already carries the settings you want.
+
+**Notifications are job-level, not per-rule.** `create_dq_rule` cannot attach
+notifications to a rule; notification recipients/triggers are configured when the
+job is created (`create_dq_job` `notify*` fields) and apply to the whole job. Do
+not tell the user a rule carries its own notification settings.
+
+To link created rules to catalog assets — Business Rule, Data Element, Data
 Attribute, or a Data Quality Rule asset — use `edit_asset` `add_relation` by role
 name. If a Business Rule asset was used as a targeting filter, pre-populate that
 association and confirm it with the user.
@@ -139,3 +154,7 @@ association and confirm it with the user.
 - Template/data-type compatibility is not pre-flagged (no API); incompatible
   deploys fail at execution.
 - Text2SQL returns one SQL string, not a primary-SQL + filter split.
+- Per-rule notifications are not supported — notifications are job-level only
+  (`create_dq_job`). The ticket lists notifications as a rule setting; the tools
+  do not.
+- `tolerance` is a breaking-record count, not the ticket's "Tolerance %".
