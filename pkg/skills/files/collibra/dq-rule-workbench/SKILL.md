@@ -19,7 +19,10 @@ Relationship to the other DQ skills:
 
 ## Tools this flow orchestrates
 
-- **Target columns**: `search_asset_keyword` (structured filters + free-text),
+- **Target columns**: `search_catalog_columns` (metadata filters — description,
+  data type, data-steward role, and relations to a business term / business rule /
+  data element / data attribute; needs the Knowledge Graph API), plus
+  `search_asset_keyword` (domain/community/asset-type + free-text),
   `discover_data_assets` (natural-language), `get_asset_details` (by UUID).
 - **Resolve DQ location / job + detect PUSHDOWN**: `prepare_create_dq_job`
   (resolves a catalog Table asset → connection / edge / job and reports the job
@@ -61,22 +64,26 @@ Relationship to the other DQ skills:
    and offer retry, modify, or skip for the failures.
 8. **Permissions are per job.** If a `403` comes back for a job, exclude that
    job's columns with a clear message and continue with the rest.
-9. **Search is not yet full-fidelity — be honest about it.** Only **Domain**,
-   **Community**, and **asset type** (Column) are structured filters today. The
-   other requested fields (Data Steward, Classification Tags, Data Type, Business
-   Term, Business Rule, Data Element, Data Attribute, Description) are reachable
-   only via the free-text query or by naming columns explicitly. When the user
-   asks to filter by one of those, say it can't be applied precisely yet, then
-   fall back to free-text search + explicit confirmation of the results.
+9. **Metadata search via `search_catalog_columns` (needs the Knowledge Graph
+   API).** It filters columns by description, data type, a data-steward role, and
+   relations to a business term / business rule / data element / data attribute
+   (by name), AND-combined — plus domain/community. Two caveats: **Classification
+   Tags is not supported** (no KG predicate), and the tool errors if the KG API
+   isn't enabled on the instance. When KG is unavailable, or for a
+   classification-tag filter, fall back to `search_asset_keyword`
+   (domain/community + free-text) or explicit column naming, and say so. A broad
+   lone substring filter can hit the KG query timeout — combine filters.
 
 ## Conversational flow
 
 Progress through these states; the user may revise within a state before moving on.
 
 **1. Column targeting.** Two modes:
-   - *Search*: combine supported filters (`domain`, `community`, asset type
-     `Column`) with a free-text query for the rest; or use `discover_data_assets`
-     for a natural-language ask. Apply rule 9 for unsupported filters.
+   - *Search*: use `search_catalog_columns` for metadata filters (description,
+     data type, data-steward role, business term / rule / data element / data
+     attribute), or `search_asset_keyword` for domain/community + free-text, or
+     `discover_data_assets` for a natural-language ask. Apply rule 9 (KG
+     availability, classification tags).
    - *Explicit*: the user names columns by qualified path (`schema.table.column`)
      or catalog asset name; resolve each with `search_asset_keyword` /
      `get_asset_details`.
@@ -159,8 +166,8 @@ association and confirm it with the user.
 
 ## Known limitations (state these when relevant)
 
-- Column search across all the ticket's metadata fields is not fully supported —
-  see rule 9.
+- Column metadata search (`search_catalog_columns`) needs the Knowledge Graph API
+  enabled, and does not support Classification Tags — see rule 9.
 - Template/data-type compatibility is not pre-flagged (no API); incompatible
   deploys fail at execution.
 - Text2SQL returns one SQL string, not a primary-SQL + filter split.
