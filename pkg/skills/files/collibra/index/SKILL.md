@@ -1,6 +1,6 @@
 ---
 description: Navigator for chip's Collibra skills. Start here when unsure which skill applies.
-related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context, collibra/dq-rules
+related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context, collibra/dq-rules, collibra/dq-rule-workbench
 ---
 
 # Collibra skills — navigator
@@ -20,6 +20,7 @@ must be bridged to another, and which permissions are required.
 | Register a table (and its dimension tables) as a Collibra Data Product with ports | `collibra/data-product-create` |
 | Generate governed YAML context (semantic blueprints, metric definitions) for an asset | `collibra/context` |
 | Author, validate, run or inspect data quality rules (monitors) on a DQ job | `collibra/dq-rules` |
+| Create DQ rules at scale across many catalog columns (templates or plain-language), with job assignment | `collibra/dq-rule-workbench` |
 
 If a task is a single tool call with no chaining (e.g. `get_asset_details` by UUID,
 `list_asset_types`, `pull_data_contract_manifest`), no skill is needed — the tool's own
