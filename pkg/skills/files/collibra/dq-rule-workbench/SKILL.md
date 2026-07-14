@@ -111,8 +111,15 @@ Progress through these states; the user may revise within a state before moving 
    Group columns by connection, resolve one job per group, and show the full
    grouping. The user confirms all assignments before any rule is saved (rule 1).
 
-**6. Final confirmation.** Summarize everything to be written: per column, its job,
-   rule name, SQL (+ any filter), and settings. Get explicit approval.
+**6. Final confirmation.** Summarize what will be written, and present it by path —
+   do not dump a flat list of template×column pairs:
+   - *Template path*: show the chosen template **once** (its name and what it
+     checks), then, grouped by job, the list of columns it will be applied to and
+     the resulting rule name per column (`{template}_{column}`). One template
+     header, then its columns — not a row per template/column combination.
+   - *Plain-language path*: list one entry per rule — column, job, rule name, and
+     the approved SQL (+ any filter) — since each rule's SQL can differ.
+   Then get explicit approval.
 
 **7. Execution.** Create the rules:
    - Template path: `deploy_dq_rule_template` with `targets` = the confirmed
