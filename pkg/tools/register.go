@@ -51,6 +51,11 @@ var CopilotToolNames = []string{
 	"discover_business_glossary",
 }
 
+// DataQualityFeatureName gates the data-quality job-creation tools (create_data_quality_job and its
+// prepare_ companion) behind --experimental. They WRITE to Collibra (create and queue jobs), so they
+// stay opt-in — like the Data Product skills — until they graduate. Off by default.
+const DataQualityFeatureName = "data-quality"
+
 func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) error {
 	toolRegister(server, toolConfig, discover_data_assets.NewTool(client))
 	toolRegister(server, toolConfig, discover_business_glossary.NewTool(client))
@@ -82,8 +87,10 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
 	}
-	toolRegister(server, toolConfig, prepare_create_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_job.NewTool(client))
+	if toolConfig.IsExperimentalEnabled(DataQualityFeatureName) {
+		toolRegister(server, toolConfig, prepare_create_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
+	}
 
 	if toolConfig.EnableDebugTools {
 		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))

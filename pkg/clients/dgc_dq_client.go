@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -398,7 +399,7 @@ type DqProfileMonitors struct {
 }
 
 // DqMonitorInfo describes one profile monitor for display and selection. Key matches the
-// DqProfileMonitors JSON field and the create_dq_job `monitors` input; DefaultEnabled marks
+// DqProfileMonitors JSON field and the create_data_quality_job `monitors` input; DefaultEnabled marks
 // the monitors the wizard turns on by default.
 type DqMonitorInfo struct {
 	Key            string `json:"key"`
@@ -500,7 +501,7 @@ func EnabledMonitorKeys(pm *DqProfileMonitors) []string {
 }
 
 // DqAdaptiveMonitorSetting describes one tunable "Advanced monitor setting" (the adaptive
-// behavior in the Monitors step). Key matches the create_dq_job input; Default is the wizard
+// behavior in the Monitors step). Key matches the create_data_quality_job input; Default is the wizard
 // default applied when the user doesn't override.
 type DqAdaptiveMonitorSetting struct {
 	Key         string `json:"key"`
@@ -708,64 +709,23 @@ func GetDqDataDistribution(ctx context.Context, collibraHttpClient *http.Client,
 }
 
 // =====================================================================================
-// Job-name helpers (the wizard's Step 1 name handling) — all on the internal jobs surface.
+// Job-name validation (client-side).
+//
+// The job-creation flow no longer calls the internal /jobs/name, /jobs/{name}/exists, or
+// /jobs/{name}/validJobName endpoints. Collision-free naming is delegated to the PUBLIC create API:
+// omitting jobName makes the server auto-assign and auto-increment it (e.g. "sales.orders_2"), and
+// the assigned name is returned in the create response. A user-supplied name is validated here
+// against the same rules the server enforces before submit.
 // =====================================================================================
 
-type dqJobNameRequest struct {
-	SchemaName string `json:"schemaName"`
-	TableName  string `json:"tableName"`
-}
+// dqJobNamePattern mirrors the server's dataset-name constraint (@DatasetName,
+// VALIDATION_PATTERN_DATASET_NAME default ^[a-zA-Z0-9_.-]+$).
+var dqJobNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
-type dqJobNameResponse struct {
-	JobName string `json:"jobName"`
-}
-
-// GenerateUniqueJobName asks the server for a collision-free default job name for schema.table.
-// The server auto-increments (e.g. "sales.orders_2") when the base name is taken, so the user is
-// never asked to resolve a name conflict manually — POST /rest/dq/internal/v1/jobs/name.
-func GenerateUniqueJobName(ctx context.Context, collibraHttpClient *http.Client, schemaName, tableName string) (string, error) {
-	payload, err := json.Marshal(dqJobNameRequest{SchemaName: schemaName, TableName: tableName})
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal job-name request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, "POST", "/rest/dq/internal/v1/jobs/name", bytes.NewBuffer(payload))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	body, err := executeRequest(collibraHttpClient, req)
-	if err != nil {
-		return "", err
-	}
-	var resp dqJobNameResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("failed to parse job-name response: %w", err)
-	}
-	return resp.JobName, nil
-}
-
-// IsValidDqJobName asks the server whether a job name is syntactically valid — the wizard rejects
-// special characters other than - and _. GET /rest/dq/internal/v1/jobs/{name}/validJobName.
-func IsValidDqJobName(ctx context.Context, collibraHttpClient *http.Client, jobName string) (bool, error) {
-	return dqGetBool(ctx, collibraHttpClient, "/rest/dq/internal/v1/jobs/"+url.PathEscape(jobName)+"/validJobName")
-}
-
-// DqJobExists reports whether a job with the given name already exists —
-// GET /rest/dq/internal/v1/jobs/{name}/exists.
-func DqJobExists(ctx context.Context, collibraHttpClient *http.Client, jobName string) (bool, error) {
-	return dqGetBool(ctx, collibraHttpClient, "/rest/dq/internal/v1/jobs/"+url.PathEscape(jobName)+"/exists")
-}
-
-func dqGetBool(ctx context.Context, collibraHttpClient *http.Client, endpoint string) (bool, error) {
-	body, err := dqGet(ctx, collibraHttpClient, endpoint)
-	if err != nil {
-		return false, err
-	}
-	var b bool
-	if err := json.Unmarshal(body, &b); err != nil {
-		return false, fmt.Errorf("failed to parse boolean response from %s: %w", endpoint, err)
-	}
-	return b, nil
+// IsValidDqJobName reports whether jobName satisfies the DQ server's job-name rules: the dataset-name
+// charset (letters, digits, '.', '-', '_') and no leading hyphen (the server's validJobName check).
+func IsValidDqJobName(jobName string) bool {
+	return jobName != "" && !strings.HasPrefix(jobName, "-") && dqJobNamePattern.MatchString(jobName)
 }
 
 // =====================================================================================
@@ -1064,8 +1024,8 @@ func dqPageQuery(values url.Values, limit, offset int) string {
 
 // UnsupportedWizardOptions lists the data-quality wizard configuration steps the
 // create-DQ-job tools do NOT expose yet, each paired with the default the server
-// applies. Shared by prepare_create_dq_job (to disclose proactively at the ready
-// step) and create_dq_job (to disclose again at preview), so the user is never
+// applies. Shared by prepare_create_data_quality_job (to disclose proactively at the ready
+// step) and create_data_quality_job (to disclose again at preview), so the user is never
 // misled about scope. jobType selects the type-specific entry (Sizing for Pullup,
 // Compute for Pushdown).
 func UnsupportedWizardOptions(jobType string) []string {

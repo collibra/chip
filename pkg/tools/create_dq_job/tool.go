@@ -1,11 +1,11 @@
-// Package create_dq_job implements the create_dq_job MCP tool — it creates a
+// Package create_data_quality_job implements the create_data_quality_job MCP tool — it creates a
 // Collibra data-quality job for a table and (per the wizard) queues a run.
 //
 // IT POSTS TO THE PUBLIC DQ API: POST /rest/dq/1.0/jobs (clients.CreateDqJob /
 // clients.CreateDqJobRequest, contract dq/udq-app-client/oas/dq-v1-public-oas-spec.yaml).
 // The public create accepts the full job definition — sourceQuery, runDate window, monitors,
 // schedule, back-runs, notifications, and pullup/pushdown settings — so the internal BFF
-// endpoint is no longer needed. (Discovery in prepare_create_dq_job still uses internal
+// endpoint is no longer needed. (Discovery in prepare_create_data_quality_job still uses internal
 // endpoints; the public DQ API exposes no connection/edge metadata browse.)
 //
 // HOW SCHEDULING + TIME-SLICE + ${rd} FIT TOGETHER:
@@ -42,10 +42,10 @@ const (
 	StatusError      Status = "error"
 )
 
-// Input — the five dataLocation fields are required (easiest via prepare_create_dq_job's
+// Input — the five dataLocation fields are required (easiest via prepare_create_data_quality_job's
 // `resolved` block). Time-slice / schedule / back-run fields are optional and structured.
 type Input struct {
-	EdgeSiteName       string `json:"edgeSiteName" jsonschema:"Edge site name. From prepare_create_dq_job resolved.edgeSiteName."`
+	EdgeSiteName       string `json:"edgeSiteName" jsonschema:"Edge site name. From prepare_create_data_quality_job resolved.edgeSiteName."`
 	EdgeConnectionName string `json:"edgeConnectionName" jsonschema:"Edge connection name, e.g. 'POSTGRES-SOURCE'. The tool resolves its databaseProductName + job type from the connection for the create request."`
 	DataSourceName     string `json:"dataSourceName" jsonschema:"Data source / database, e.g. 'postgres'."`
 	SchemaName         string `json:"schemaName" jsonschema:"Schema, e.g. 'sales'."`
@@ -56,12 +56,12 @@ type Input struct {
 
 	// --- Column selection. Omit to monitor ALL columns (the default). Provide a subset to
 	// scope profiling/monitoring to just those columns (each sent with selected=true). ---
-	SelectedColumns []string `json:"selectedColumns,omitempty" jsonschema:"Columns to monitor. Omit for ALL columns (default). Provide a subset — exact names from prepare_create_dq_job's columns — to profile only those. Does not change the source query (still SELECT *); only scopes what is profiled."`
+	SelectedColumns []string `json:"selectedColumns,omitempty" jsonschema:"Columns to monitor. Omit for ALL columns (default). Provide a subset — exact names from prepare_create_data_quality_job's columns — to profile only those. Does not change the source query (still SELECT *); only scopes what is profiled."`
 
 	// --- Monitors. Omit to use the default set; provide an authoritative set of monitor keys
 	// to enable (anything not listed is turned off). descriptiveStatistics unmasks sensitive
 	// data — only include it after explicit user confirmation. ---
-	Monitors []string `json:"monitors,omitempty" jsonschema:"Monitor keys to enable — authoritative (anything omitted is turned OFF). Omit to use the defaults (rowCount, nullValues, emptyFields, uniqueness). Valid keys (see prepare_create_dq_job's monitors): rowCount, nullValues, emptyFields, uniqueness, min, mean, max, executionTime, descriptiveStatistics. descriptiveStatistics UNMASKS sensitive data — only include it after explicit user confirmation."`
+	Monitors []string `json:"monitors,omitempty" jsonschema:"Monitor keys to enable — authoritative (anything omitted is turned OFF). Omit to use the defaults (rowCount, nullValues, emptyFields, uniqueness). Valid keys (see prepare_create_data_quality_job's monitors): rowCount, nullValues, emptyFields, uniqueness, min, mean, max, executionTime, descriptiveStatistics. descriptiveStatistics UNMASKS sensitive data — only include it after explicit user confirmation."`
 
 	// --- Advanced monitor settings (adaptive behavior). Omit both to use the wizard defaults
 	// (lookback 10, learning phase 4). Setting either sends a structured `settings` object. ---
@@ -71,7 +71,7 @@ type Input struct {
 	// --- Row filter (the wizard's single-column predicate). Scopes the job to rows matching
 	// "filterColumn filterOperator filterValue" (e.g. amount > 100). Omit to scan all rows.
 	// This is ONE predicate — not compound AND/OR or free-form SQL (mirrors the DQ wizard). ---
-	FilterColumn   string `json:"filterColumn,omitempty" jsonschema:"Column for a single-predicate row filter (the wizard's row filter). Use a name from prepare_create_dq_job's columns. Set filterColumn + filterOperator (+ filterValue) to scope the job to matching rows; omit to scan all rows."`
+	FilterColumn   string `json:"filterColumn,omitempty" jsonschema:"Column for a single-predicate row filter (the wizard's row filter). Use a name from prepare_create_data_quality_job's columns. Set filterColumn + filterOperator (+ filterValue) to scope the job to matching rows; omit to scan all rows."`
 	FilterOperator string `json:"filterOperator,omitempty" jsonschema:"Comparison operator for the row filter: = != <> > >= < <= (the wizard's set) or LIKE; the value is treated as a single literal. For IS NULL / IS NOT NULL leave filterValue empty. Required when filterColumn is set."`
 	FilterValue    string `json:"filterValue,omitempty" jsonschema:"Right-hand value for the row filter, passed BARE — do NOT add quotes. The tool wraps it in single quotes for you (matching the DQ wizard), e.g. pass US (not 'US'), 100, 2024-01-01. Leave empty for valueless operators (IS NULL / IS NOT NULL). Applied by writing it into the job's source-query WHERE."`
 
@@ -82,7 +82,7 @@ type Input struct {
 	// --- Time slice (incremental scanning). Pick a DATE COLUMN; when set, the tool writes a
 	// "<col> >= '${rd}' AND <col> < '${rdEnd}'" predicate into the job SQL's WHERE. The scheduler
 	// substitutes ${rd}/${rdEnd} per run, so each run scans only that slice, not the whole table. ---
-	TimeSliceColumn string `json:"timeSliceColumn,omitempty" jsonschema:"Date/timestamp column to slice on (e.g. 'txn_ts'). When set, the tool adds a WHERE \"<col>\" >= '${rd}' AND \"<col>\" < '${rdEnd}' predicate to the job SQL so each scheduled/backrun run scans only that slice. REQUIRED for incremental scheduling — without it, every scheduled run rescans the whole table. Pick a real date/timestamp column from prepare_create_dq_job's columns."`
+	TimeSliceColumn string `json:"timeSliceColumn,omitempty" jsonschema:"Date/timestamp column to slice on (e.g. 'txn_ts'). When set, the tool adds a WHERE \"<col>\" >= '${rd}' AND \"<col>\" < '${rdEnd}' predicate to the job SQL so each scheduled/backrun run scans only that slice. REQUIRED for incremental scheduling — without it, every scheduled run rescans the whole table. Pick a real date/timestamp column from prepare_create_data_quality_job's columns."`
 	TimeSliceSize   int    `json:"timeSliceSize,omitempty" jsonschema:"Time-slice window width (default 1 when timeSliceColumn set). Combined with timeSliceUnit, e.g. size=1 unit=DAYS = one day per run."`
 	TimeSliceUnit   string `json:"timeSliceUnit,omitempty" jsonschema:"HOURS | DAYS | WEEKS | MONTHS (default DAYS)."`
 
@@ -102,7 +102,7 @@ type Input struct {
 
 	// --- Notifications (optional). Configured when `notify` or `notifyRecipients` is set; otherwise
 	// no notifications. The invoking user is always the default recipient. ---
-	Notify                         []string `json:"notify,omitempty" jsonschema:"Notification keys to enable (authoritative; omit but set notifyRecipients to use the defaults jobFailed/rowsBelow/scoreBelow/runTimeAbove). Keys (see prepare_create_dq_job notifications): jobFailed, rowsBelow, scoreBelow, runTimeAbove, jobCompleted, runsWithoutData, daysWithoutData."`
+	Notify                         []string `json:"notify,omitempty" jsonschema:"Notification keys to enable (authoritative; omit but set notifyRecipients to use the defaults jobFailed/rowsBelow/scoreBelow/runTimeAbove). Keys (see prepare_create_data_quality_job notifications): jobFailed, rowsBelow, scoreBelow, runTimeAbove, jobCompleted, runsWithoutData, daysWithoutData."`
 	NotifyRowsBelow                int      `json:"notifyRowsBelow,omitempty" jsonschema:"Threshold for rowsBelow — alert when row count <= this. Default 1."`
 	NotifyScoreBelow               int      `json:"notifyScoreBelow,omitempty" jsonschema:"Threshold for scoreBelow — alert when score (0-100) <= this. Default 75."`
 	NotifyRunTimeAboveMinutes      int      `json:"notifyRunTimeAboveMinutes,omitempty" jsonschema:"Threshold for runTimeAbove — alert when run time minutes > this. Default 60."`
@@ -141,9 +141,9 @@ type Input struct {
 	PushdownConnections int `json:"pushdownConnections,omitempty" jsonschema:"PUSHDOWN compute: number of connections (1-50). Default 10 when omitted."`
 	PushdownThreads     int `json:"pushdownThreads,omitempty" jsonschema:"PUSHDOWN compute: number of threads (1-10). Default 2 when omitted."`
 
-	// --- Catalog linkage (optional). When set (e.g. from prepare_create_dq_job's resolved table
+	// --- Catalog linkage (optional). When set (e.g. from prepare_create_data_quality_job's resolved table
 	// asset), the success result includes a deep link to the catalog Table asset. ---
-	TableAssetID string `json:"tableAssetId,omitempty" jsonschema:"Catalog Table asset UUID this job monitors (from prepare_create_dq_job). When set, the success result includes a catalog deep link to the asset."`
+	TableAssetID string `json:"tableAssetId,omitempty" jsonschema:"Catalog Table asset UUID this job monitors (from prepare_create_data_quality_job). When set, the success result includes a catalog deep link to the asset."`
 
 	// AcknowledgeDescriptiveStatistics must be true to enable the descriptiveStatistics monitor — it
 	// UNMASKS sensitive values. Without it the tool refuses to proceed (the wizard's explicit-confirm).
@@ -169,18 +169,28 @@ type Output struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "create_dq_job",
+		Name:  "create_data_quality_job",
 		Title: "Create Data Quality Job",
-		Description: "Creates a Collibra data-quality job for a table (and queues a run). Provide the table location " +
-			"(edgeSiteName, edgeConnectionName, dataSourceName, schemaName, tableName — easiest from prepare_create_dq_job's " +
-			"`resolved`). Optional structured config: column selection (selectedColumns — subset to monitor; omit for all), monitors (monitors — " +
-			"set of monitor keys to enable; omit for defaults) with adaptive settings (dataLookback/learningPhase), row sampling (sampleSize — sample N " +
-			"rows; omit for all), row filter (filterColumn/filterOperator/filterValue — single-column predicate like amount > 100, inlined into the " +
-			"source-query WHERE), time slice (timeSliceColumn/Size/Unit — writes a ${rd}/${rdEnd} WHERE so each run scans one slice), schedule " +
-			"(scheduleRepeat/RunTime/DaysOfWeek/DayOfMonth/MonthlyMode + runDateOffset — pair with a timeSliceColumn for incremental runs), " +
-			"back runs (backrun*), notifications (notify keys + thresholds + notifyRecipients — the invoking user is always a recipient). jobType resolves from the connection if omitted. " +
-			"Posts to the PUBLIC DQ API (POST /rest/dq/1.0/jobs). Defaults to a PREVIEW: " +
-			"confirm=false returns the exact payload without creating; call again with confirm=true after the user approves.",
+		Description: "Sets up automated data-quality monitoring on a database table in Collibra, and starts the first run. " +
+			"A 'data quality job' profiles a table and watches it over time for problems — sudden row-count drops, spikes in " +
+			"null or empty values, duplicates, and other anomalies. Use prepare_create_data_quality_job FIRST to discover and " +
+			"validate the inputs, then pass its `resolved` block here.\n\n" +
+			"Where the data lives (all required): edgeSiteName and edgeConnectionName identify the source — a 'connection' is a " +
+			"saved link to a source database, reached through a Collibra Edge site (the agent that runs the scan); dataSourceName " +
+			"is the database/catalog, plus schemaName and tableName.\n\n" +
+			"Optional tuning: selectedColumns (which columns to monitor; omit for all), monitors (which checks to run; omit for " +
+			"sensible defaults) with adaptive-baseline settings (dataLookback/learningPhase), sampleSize (scan a sample instead " +
+			"of every row), a single-column row filter (filterColumn/filterOperator/filterValue, e.g. amount > 100), a time slice " +
+			"(timeSliceColumn so each run only checks that period's new rows), a recurring schedule " +
+			"(scheduleRepeat/scheduleRunTime/… — pair it with a timeSliceColumn for incremental runs), historical back-runs " +
+			"(backrun*), and notifications (notify keys + thresholds + notifyRecipients — the requesting user is always notified).\n\n" +
+			"jobType is PUSHDOWN (the checks run inside the source database) or PULLUP (data is pulled into Spark to be checked); " +
+			"it is detected from the connection if you omit it. Leave jobName empty to let Collibra assign a unique name.\n\n" +
+			"Safety: this WRITES to Collibra, so it defaults to a PREVIEW — confirm=false returns the exact request without " +
+			"creating anything; review it with the user, then call again with confirm=true to create and run the job.\n\n" +
+			"Example user requests: \"Set up data quality monitoring on the sales.orders table\"; \"Create a DQ job for orders " +
+			"and alert me if the row count drops\"; \"Watch my Postgres customers table for nulls and duplicates every day\"; " +
+			"\"Start checking data quality on this table.\"",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 	}
@@ -192,7 +202,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{
 				Status:   StatusNeedsInput,
 				Message:  fmt.Sprintf("Missing required field(s): %s.", strings.Join(missing, ", ")),
-				Guidance: "Call prepare_create_dq_job to resolve connection/data source/schema/table, then pass its `resolved` block here.",
+				Guidance: "Call prepare_create_data_quality_job to resolve connection/data source/schema/table, then pass its `resolved` block here.",
 			}, nil
 		}
 
@@ -200,7 +210,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		// valueless operators like IS NULL). Catch a half-specified filter before any API call.
 		if hasFilterFields(input) {
 			if strings.TrimSpace(input.FilterColumn) == "" {
-				return Output{Status: StatusNeedsInput, Message: "filterOperator/filterValue given without filterColumn.", Guidance: "Set filterColumn (a column from prepare_create_dq_job) to apply a row filter, or omit all filter fields."}, nil
+				return Output{Status: StatusNeedsInput, Message: "filterOperator/filterValue given without filterColumn.", Guidance: "Set filterColumn (a column from prepare_create_data_quality_job) to apply a row filter, or omit all filter fields."}, nil
 			}
 			if strings.TrimSpace(input.FilterOperator) == "" {
 				return Output{Status: StatusNeedsInput, Message: "filterColumn set but filterOperator is missing.", Guidance: "Provide filterOperator (e.g. =, >, <, LIKE, IN, IS NULL), plus filterValue unless the operator takes none."}, nil
@@ -213,7 +223,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				return Output{
 					Status:   StatusNeedsInput,
 					Message:  fmt.Sprintf("Unknown monitor(s): %s.", strings.Join(unknown, ", ")),
-					Guidance: "Use monitor keys from prepare_create_dq_job's `monitors`: " + strings.Join(clients.MonitorKeys(), ", ") + ".",
+					Guidance: "Use monitor keys from prepare_create_data_quality_job's `monitors`: " + strings.Join(clients.MonitorKeys(), ", ") + ".",
 				}, nil
 			}
 		}
@@ -270,7 +280,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				return Output{
 					Status:   StatusNeedsInput,
 					Message:  fmt.Sprintf("Unknown notification(s): %s.", strings.Join(unknown, ", ")),
-					Guidance: "Use notification keys from prepare_create_dq_job's `notifications`: " + strings.Join(clients.NotificationKeys(), ", ") + ".",
+					Guidance: "Use notification keys from prepare_create_data_quality_job's `notifications`: " + strings.Join(clients.NotificationKeys(), ", ") + ".",
 				}, nil
 			}
 			// Recipients: invoking user (always) + any additional usernames/emails, de-duped. The public
@@ -333,27 +343,25 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 		}
 		if jobType == "" {
-			return Output{Status: StatusNeedsInput, Message: "Could not determine job type.", Guidance: "Set jobType to PUSHDOWN or PULLUP, or call prepare_create_dq_job."}, nil
+			return Output{Status: StatusNeedsInput, Message: "Could not determine job type.", Guidance: "Set jobType to PUSHDOWN or PULLUP, or call prepare_create_data_quality_job."}, nil
 		}
 		if connErr != nil || conn == nil {
-			return Output{Status: StatusNeedsInput, Message: fmt.Sprintf("Could not resolve connection %q (needed for connectionId/edgeSiteId).", input.EdgeConnectionName), Guidance: "Verify the connection name via prepare_create_dq_job."}, nil
+			return Output{Status: StatusNeedsInput, Message: fmt.Sprintf("Could not resolve connection %q (needed for connectionId/edgeSiteId).", input.EdgeConnectionName), Guidance: "Verify the connection name via prepare_create_data_quality_job."}, nil
 		}
 
-		// Job name: default from the server's collision-free generator (auto-increments, e.g. "..._2");
-		// validate a user-provided name against the server's rules (rejects special chars).
+		// Job name: when the user supplies one, validate it client-side against the DQ server's rules;
+		// when omitted, leave it empty so the PUBLIC create auto-assigns a collision-free name
+		// (auto-incremented, e.g. "sales.orders_2"). The assigned name is read back from the response.
 		jobName := strings.TrimSpace(input.JobName)
-		if jobName == "" {
-			if generated, err := clients.GenerateUniqueJobName(ctx, collibraClient, input.SchemaName, input.TableName); err == nil && strings.TrimSpace(generated) != "" {
-				jobName = generated
-			} else {
-				jobName = input.SchemaName + "." + input.TableName
-			}
-		} else if ok, err := clients.IsValidDqJobName(ctx, collibraClient, jobName); err == nil && !ok {
-			guidance := "Use only letters, numbers, '-' and '_'."
-			if suggestion, sErr := clients.GenerateUniqueJobName(ctx, collibraClient, input.SchemaName, input.TableName); sErr == nil && strings.TrimSpace(suggestion) != "" {
-				guidance += fmt.Sprintf(" A valid default is %q.", suggestion)
-			}
-			return Output{Status: StatusNeedsInput, AffectedStep: stepSelectData, Message: fmt.Sprintf("Job name %q is invalid (special characters other than - and _ are not allowed).", jobName), Guidance: guidance}, nil
+		if jobName != "" && !clients.IsValidDqJobName(jobName) {
+			return Output{
+				Status:       StatusNeedsInput,
+				AffectedStep: stepSelectData,
+				Message:      fmt.Sprintf("Job name %q is invalid.", jobName),
+				Guidance: fmt.Sprintf(
+					"Use only letters, numbers, '.', '-' and '_', and don't start with '-'. A valid default is %q.",
+					input.SchemaName+"."+input.TableName),
+			}, nil
 		}
 
 		// Type-specific config must match the job type (sizing/Parallel JDBC are PULLUP-only; compute is PUSHDOWN-only).
@@ -440,16 +448,22 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			if len(warnings) > 0 {
 				warnNote = " WARNINGS: " + strings.Join(warnings, " ")
 			}
+			previewName := jobName
+			nameClause := "job name is overridable via jobName"
+			if jobName == "" {
+				previewName = input.SchemaName + "." + input.TableName
+				nameClause = fmt.Sprintf("job name will be auto-assigned (default %q, with a numeric suffix if it already exists) and returned on create; set jobName to override", previewName)
+			}
 			return Output{
 				Status:             StatusPreview,
 				JobType:            jobType,
-				JobName:            jobName,
+				JobName:            previewName,
 				Request:            req,
 				Warnings:           warnings,
 				UnsupportedOptions: clients.UnsupportedWizardOptions(jobType),
 				Message: fmt.Sprintf("Preview only — nothing created. Will create a %s job %q for %s.%s (columns=%s, rows=%s, filter=%q, monitors=[%s], adaptive=%s, timeSlice=%v, schedule=%s, backrun=%v, notifications=%s, %s). "+
-					"Review with the user (job name is overridable via jobName), then call again with confirm=true.%s%s%s",
-					jobType, jobName, input.SchemaName, input.TableName, columnsDesc, sampleDesc, filterDesc, strings.Join(enabledMonitors, ", "), adaptiveDesc, hasSlice, describeSchedule(req.SchedulingSettings), req.Backrun != nil, notifyDesc, describeCompute(req.JobSettings, jobType), sensitiveWarning, rdNote, warnNote),
+					"Review with the user (%s), then call again with confirm=true.%s%s%s",
+					jobType, previewName, input.SchemaName, input.TableName, columnsDesc, sampleDesc, filterDesc, strings.Join(enabledMonitors, ", "), adaptiveDesc, hasSlice, describeSchedule(req.SchedulingSettings), req.Backrun != nil, notifyDesc, describeCompute(req.JobSettings, jobType), nameClause, sensitiveWarning, rdNote, warnNote),
 			}, nil
 		}
 

@@ -1,10 +1,10 @@
-// Package prepare_create_dq_job implements the prepare_create_dq_job MCP tool —
-// a read-only companion to create_dq_job. Given whatever the agent knows so far
+// Package prepare_create_data_quality_job implements the prepare_create_data_quality_job MCP tool —
+// a read-only companion to create_data_quality_job. Given whatever the agent knows so far
 // (a connection, and optionally a data source / schema / table), it walks the
 // same discovery chain the data-quality job-creation wizard uses: resolve the
 // connection, detect the job type (PUSHDOWN/PULLUP) from its capabilities, and
 // enumerate data sources, schemas, tables, and columns. It returns a status
-// that tells the agent whether it has everything needed to call create_dq_job,
+// that tells the agent whether it has everything needed to call create_data_quality_job,
 // what's still missing (with the options to choose from), or what couldn't be
 // resolved. It performs NO mutations.
 package prepare_create_dq_job
@@ -33,7 +33,7 @@ type Status string
 
 const (
 	// StatusReady means connection + data source + schema + table all resolved;
-	// `resolved` holds the exact inputs to pass to create_dq_job.
+	// `resolved` holds the exact inputs to pass to create_data_quality_job.
 	StatusReady Status = "ready"
 	// StatusIncomplete means a required selection is missing; the response
 	// includes the pre-fetched options for the next field to choose.
@@ -68,31 +68,31 @@ type Input struct {
 type Output struct {
 	Status                  Status                             `json:"status" jsonschema:"ready when connection+dataSource+schema+table are all resolved; incomplete when a selection is missing (options provided); needs_clarification when an input could not be resolved."`
 	Message                 string                             `json:"message" jsonschema:"Human-readable summary of the outcome and what to do next."`
-	Resolved                *ResolvedPlan                      `json:"resolved,omitempty" jsonschema:"Present only when status=ready. Pass these fields straight to create_dq_job."`
+	Resolved                *ResolvedPlan                      `json:"resolved,omitempty" jsonschema:"Present only when status=ready. Pass these fields straight to create_data_quality_job."`
 	JobType                 string                             `json:"jobType,omitempty" jsonschema:"Detected job type for the resolved connection: PUSHDOWN or PULLUP. Empty when the connection advertises more than one and the user must choose."`
 	ConnectionOptions       []ConnectionOption                 `json:"connectionOptions,omitempty" jsonschema:"Connections to choose from — returned when 'connection' was omitted or could not be resolved."`
 	TableAssetOptions       []TableAssetOption                 `json:"tableAssetOptions,omitempty" jsonschema:"Returned when tableAssetName matched multiple Table assets. Present these to the user; re-call with the chosen asset's id as tableAssetId."`
 	DataSourceOptions       []string                           `json:"dataSourceOptions,omitempty" jsonschema:"Data source names to choose from — returned when 'dataSourceName' was omitted or unmatched."`
 	SchemaOptions           []string                           `json:"schemaOptions,omitempty" jsonschema:"Schema names to choose from — returned when 'schemaName' was omitted or unmatched."`
 	TableOptions            []string                           `json:"tableOptions,omitempty" jsonschema:"Table names to choose from — returned when 'tableName' was omitted or unmatched."`
-	Columns                 []ColumnInfo                       `json:"columns,omitempty" jsonschema:"Columns of the resolved table (the actual schema). Offer these so the user can pick a subset to monitor, then pass the chosen names to create_dq_job.selectedColumns. Omit selectedColumns to monitor all columns (the default)."`
-	Monitors                []clients.DqMonitorInfo            `json:"monitors,omitempty" jsonschema:"Present only when status=ready. The available profile monitors, each with a defaultEnabled flag. Show these to the user so they can choose a set, then pass the chosen keys to create_dq_job.monitors (omit to use the defaults). Note: enabling descriptiveStatistics unmasks sensitive data."`
-	AdaptiveMonitorSettings []clients.DqAdaptiveMonitorSetting `json:"adaptiveMonitorSettings,omitempty" jsonschema:"Present only when status=ready. The 'Advanced monitor settings' (adaptive behavior) the user can tune, each with its default. ALWAYS surface these together with monitors — do not omit them: tell the user data lookback and learning phase are adjustable (defaults 10 and 4) and pass overrides to create_dq_job.dataLookback / learningPhase."`
-	Notifications           []clients.DqNotificationInfo       `json:"notifications,omitempty" jsonschema:"Present only when status=ready. The available notification alerts, each with a defaultEnabled flag and whether it takes a threshold quantity. Offer these to the user; pass the chosen keys to create_dq_job.notify (+ thresholds + notifyRecipients). The invoking user is always a recipient; additional recipients are validated against active accounts."`
+	Columns                 []ColumnInfo                       `json:"columns,omitempty" jsonschema:"Columns of the resolved table (the actual schema). Offer these so the user can pick a subset to monitor, then pass the chosen names to create_data_quality_job.selectedColumns. Omit selectedColumns to monitor all columns (the default)."`
+	Monitors                []clients.DqMonitorInfo            `json:"monitors,omitempty" jsonschema:"Present only when status=ready. The available profile monitors, each with a defaultEnabled flag. Show these to the user so they can choose a set, then pass the chosen keys to create_data_quality_job.monitors (omit to use the defaults). Note: enabling descriptiveStatistics unmasks sensitive data."`
+	AdaptiveMonitorSettings []clients.DqAdaptiveMonitorSetting `json:"adaptiveMonitorSettings,omitempty" jsonschema:"Present only when status=ready. The 'Advanced monitor settings' (adaptive behavior) the user can tune, each with its default. ALWAYS surface these together with monitors — do not omit them: tell the user data lookback and learning phase are adjustable (defaults 10 and 4) and pass overrides to create_data_quality_job.dataLookback / learningPhase."`
+	Notifications           []clients.DqNotificationInfo       `json:"notifications,omitempty" jsonschema:"Present only when status=ready. The available notification alerts, each with a defaultEnabled flag and whether it takes a threshold quantity. Offer these to the user; pass the chosen keys to create_data_quality_job.notify (+ thresholds + notifyRecipients). The invoking user is always a recipient; additional recipients are validated against active accounts."`
 	UnsupportedOptions      []string                           `json:"unsupportedOptions,omitempty" jsonschema:"Present only when status=ready. The wizard options this tool does NOT set, each with the default the server will apply. Present these to the user PROACTIVELY at the ready step (do not wait to be asked) so they know what is auto-filled and what would require the DQ UI."`
 	OptionsTruncated        bool                               `json:"optionsTruncated" jsonschema:"True when an options list was truncated below the instance's true total."`
 }
 
-// ResolvedPlan is the set of inputs create_dq_job needs, fully resolved.
+// ResolvedPlan is the set of inputs create_data_quality_job needs, fully resolved.
 type ResolvedPlan struct {
 	JobType             string `json:"jobType" jsonschema:"PUSHDOWN or PULLUP. Empty if the connection supports both and the user must pick."`
 	SuggestedJobName    string `json:"suggestedJobName" jsonschema:"Default job name '<schema>.<table>'. The user may override; the server auto-increments on collision."`
-	EdgeSiteName        string `json:"edgeSiteName" jsonschema:"dataLocation.edgeSiteName for create_dq_job."`
-	EdgeConnectionName  string `json:"edgeConnectionName" jsonschema:"dataLocation.edgeConnectionName for create_dq_job."`
-	DataSourceName      string `json:"dataSourceName" jsonschema:"dataLocation.dataSourceName for create_dq_job."`
-	SchemaName          string `json:"schemaName" jsonschema:"dataLocation.schemaName for create_dq_job."`
-	TableName           string `json:"tableName" jsonschema:"dataLocation.tableName for create_dq_job."`
-	DatabaseProductName string `json:"databaseProductName,omitempty" jsonschema:"dataLocation.databaseProductName for create_dq_job (e.g. POSTGRES)."`
+	EdgeSiteName        string `json:"edgeSiteName" jsonschema:"dataLocation.edgeSiteName for create_data_quality_job."`
+	EdgeConnectionName  string `json:"edgeConnectionName" jsonschema:"dataLocation.edgeConnectionName for create_data_quality_job."`
+	DataSourceName      string `json:"dataSourceName" jsonschema:"dataLocation.dataSourceName for create_data_quality_job."`
+	SchemaName          string `json:"schemaName" jsonschema:"dataLocation.schemaName for create_data_quality_job."`
+	TableName           string `json:"tableName" jsonschema:"dataLocation.tableName for create_data_quality_job."`
+	DatabaseProductName string `json:"databaseProductName,omitempty" jsonschema:"dataLocation.databaseProductName for create_data_quality_job (e.g. POSTGRES)."`
 	TableAssetLink      string `json:"tableAssetLink,omitempty" jsonschema:"Catalog deep-link path to the resolved Table asset (relative to the instance URL). Present only when resolved from tableAssetId."`
 }
 
@@ -121,14 +121,20 @@ type ColumnInfo struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "prepare_create_dq_job",
+		Name:  "prepare_create_data_quality_job",
 		Title: "Prepare to Create Data Quality Job",
-		Description: "Read-only companion to create_dq_job. Walks the data-quality wizard's discovery chain — resolve the edge " +
-			"connection, detect the job type (PUSHDOWN/PULLUP) from its capabilities, and enumerate data sources, schemas, " +
-			"tables, and columns — driven by whatever inputs you already have. Returns status='ready' with a fully-resolved " +
-			"plan to hand to create_dq_job, 'incomplete' with the options for the next field to pick, or 'needs_clarification' " +
-			"when something couldn't be resolved. Call this to gather/validate inputs before create_dq_job; make one selection " +
-			"per turn (connection -> dataSource -> schema -> table) and re-call until status='ready'.",
+		Description: "Read-only companion to create_data_quality_job — use it FIRST to gather and validate everything that tool " +
+			"needs to set up data-quality monitoring on a database table. It walks the discovery chain: find the source " +
+			"connection (a saved link to a source database, reached through a Collibra Edge site — the agent that runs the scan), " +
+			"detect the job type (PUSHDOWN vs PULLUP) from what the connection supports, and list the available databases, " +
+			"schemas, tables, and columns — using whatever you already know (a connection name, a catalog table, etc.).\n\n" +
+			"Returns status='ready' with a fully-resolved plan to hand straight to create_data_quality_job, 'incomplete' with " +
+			"the choices for the next field to pick, or 'needs_clarification' when something can't be resolved. Make one " +
+			"selection per turn (connection -> dataSource -> schema -> table) and call again until status='ready'. This is " +
+			"read-only — it never creates anything.\n\n" +
+			"Example user requests: \"I want to monitor data quality on a table\"; \"Set up a DQ check but I'm not sure which " +
+			"connection to use\"; \"What tables can I run data quality on in my warehouse?\"; \"Prepare a data quality job for " +
+			"the customers table.\"",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -273,14 +279,12 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		out.Notifications = clients.DqNotificationCatalog()
 		out.UnsupportedOptions = clients.UnsupportedWizardOptions(jobType)
 
-		// Suggested job name: ask the server for a collision-free default (auto-increments, e.g. "..._2").
+		// Suggested job name: the create step defaults to "<schema>.<table>" and lets the PUBLIC create
+		// API auto-assign a collision-free name (a numeric suffix is added if it already exists).
 		suggestedName := matchedSchema + "." + matchedTable
-		if generated, gErr := clients.GenerateUniqueJobName(ctx, collibraClient, matchedSchema, matchedTable); gErr == nil && strings.TrimSpace(generated) != "" {
-			suggestedName = generated
-		}
 
 		// Permission preflight (best-effort): Create is a hard prerequisite — if it's missing, the flow
-		// should not begin. Schedule/Run gaps are surfaced as a note (create_dq_job degrades gracefully).
+		// should not begin. Schedule/Run gaps are surfaced as a note (create_data_quality_job degrades gracefully).
 		permNote := ""
 		if global, resource, permErr := clients.GetDqConnectionPermissions(ctx, collibraClient, conn.ConnectionID); permErr == nil {
 			has := func(p string) bool { return clients.HasPermission(global, p) || clients.HasPermission(resource, p) }
@@ -300,7 +304,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				missing = append(missing, "Run")
 			}
 			if len(missing) > 0 {
-				permNote = fmt.Sprintf(" NOTE: you lack the Data Quality Job > %s permission(s) on this connection; create_dq_job will warn and degrade (a schedule is dropped; a run may be rejected server-side).", strings.Join(missing, " and "))
+				permNote = fmt.Sprintf(" NOTE: you lack the Data Quality Job > %s permission(s) on this connection; create_data_quality_job will warn and degrade (a schedule is dropped; a run may be rejected server-side).", strings.Join(missing, " and "))
 			}
 		}
 
@@ -317,9 +321,9 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if id := strings.TrimSpace(input.TableAssetID); id != "" {
 			out.Resolved.TableAssetLink = clients.CatalogAssetPath(id)
 		}
-		out.Message += fmt.Sprintf("Ready. Resolved a %s job for %s.%s on connection %q (%d column(s)). Before creating, PROACTIVELY tell the user (do not wait for them to ask): (1) only connection/data source/schema/table are required — everything else is auto-filled, and the exact defaults are listed in unsupportedOptions; (2) offer them a custom job name (default %q); (3) offer column selection (a subset from `columns` → create_dq_job.selectedColumns; default = all %d) and an optional single-column row filter (create_dq_job.filterColumn/filterOperator/filterValue, e.g. amount > 100); (4) walk the Monitors step, which has THREE parts you must each mention: (a) monitor toggles — `monitors` lists them with defaultEnabled flags, pass a custom set to create_dq_job.monitors (enabling descriptiveStatistics unmasks sensitive data); (b) ADVANCED monitor settings — explicitly tell the user that Data Lookback and Learning Phase are adjustable (see `adaptiveMonitorSettings`; defaults 10 and 4) and can be overridden via create_dq_job.dataLookback/learningPhase; (c) row sampling — create_dq_job.sampleSize (default = all rows); (5) for recurring monitoring, offer a schedule (create_dq_job.scheduleRepeat = HOURLY/DAILY/WEEKLY/WEEKDAYS/MONTHLY + scheduleRunTime) and PAIR it with a timeSliceColumn (a date/timestamp column from `columns`) so each run scans only that period's slice — the tool writes a ${rd}/${rdEnd} WHERE for you; without a timeSliceColumn every run rescans the whole table; (6) offer notifications — `notifications` lists the available alerts with defaultEnabled flags; pass chosen keys to create_dq_job.notify (+ thresholds), and additional recipients via create_dq_job.notifyRecipients (the invoking user is always included; others are validated against active accounts); (7) note those listed options are not configurable through this tool and would need the DQ UI. Then call create_dq_job with `resolved` — it returns a preview before anything is created.",
+		out.Message += fmt.Sprintf("Ready. Resolved a %s job for %s.%s on connection %q (%d column(s)). Before creating, PROACTIVELY tell the user (do not wait for them to ask): (1) only connection/data source/schema/table are required — everything else is auto-filled, and the exact defaults are listed in unsupportedOptions; (2) offer them a custom job name (default %q); (3) offer column selection (a subset from `columns` → create_data_quality_job.selectedColumns; default = all %d) and an optional single-column row filter (create_data_quality_job.filterColumn/filterOperator/filterValue, e.g. amount > 100); (4) walk the Monitors step, which has THREE parts you must each mention: (a) monitor toggles — `monitors` lists them with defaultEnabled flags, pass a custom set to create_data_quality_job.monitors (enabling descriptiveStatistics unmasks sensitive data); (b) ADVANCED monitor settings — explicitly tell the user that Data Lookback and Learning Phase are adjustable (see `adaptiveMonitorSettings`; defaults 10 and 4) and can be overridden via create_data_quality_job.dataLookback/learningPhase; (c) row sampling — create_data_quality_job.sampleSize (default = all rows); (5) for recurring monitoring, offer a schedule (create_data_quality_job.scheduleRepeat = HOURLY/DAILY/WEEKLY/WEEKDAYS/MONTHLY + scheduleRunTime) and PAIR it with a timeSliceColumn (a date/timestamp column from `columns`) so each run scans only that period's slice — the tool writes a ${rd}/${rdEnd} WHERE for you; without a timeSliceColumn every run rescans the whole table; (6) offer notifications — `notifications` lists the available alerts with defaultEnabled flags; pass chosen keys to create_data_quality_job.notify (+ thresholds), and additional recipients via create_data_quality_job.notifyRecipients (the invoking user is always included; others are validated against active accounts); (7) note those listed options are not configurable through this tool and would need the DQ UI. Then call create_data_quality_job with `resolved` — it returns a preview before anything is created.",
 			displayJobType(jobType), matchedSchema, matchedTable, conn.ConnectionName, len(out.Columns), suggestedName, len(out.Columns))
-		out.Message += " (8) for a PULLUP job, optionally Size Job Resources — automatic by default (recommended); manual sizing (create_dq_job.sizing*) and Parallel JDBC (create_dq_job.parallelJdbc*) are advanced; for a PUSHDOWN job, optionally set compute via create_dq_job.pushdownConnections/pushdownThreads (defaults 10/2). Per-notification messages can be set via create_dq_job.notifyMessages." + permNote
+		out.Message += " (8) for a PULLUP job, optionally Size Job Resources — automatic by default (recommended); manual sizing (create_data_quality_job.sizing*) and Parallel JDBC (create_data_quality_job.parallelJdbc*) are advanced; for a PUSHDOWN job, optionally set compute via create_data_quality_job.pushdownConnections/pushdownThreads (defaults 10/2). Per-notification messages can be set via create_data_quality_job.notifyMessages." + permNote
 		if jobTypeMsg != "" {
 			out.Message = joinMsg(jobTypeMsg, out.Message)
 		}
@@ -363,7 +367,7 @@ func detectJobType(conn *clients.DqConnection) (string, string) {
 	case 0:
 		return "", fmt.Sprintf("Note: connection %q advertises no DQ capability — it may not support data-quality jobs.", conn.ConnectionName)
 	default:
-		return "", fmt.Sprintf("Note: connection %q supports multiple job types (%s); set jobType explicitly when calling create_dq_job.",
+		return "", fmt.Sprintf("Note: connection %q supports multiple job types (%s); set jobType explicitly when calling create_data_quality_job.",
 			conn.ConnectionName, strings.Join(conn.CapabilityTypes, ", "))
 	}
 }

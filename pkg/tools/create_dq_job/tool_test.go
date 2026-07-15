@@ -91,8 +91,13 @@ func TestPreviewDoesNotCreate(t *testing.T) {
 	if dl.EdgeConnectionName != "POSTGRES-SOURCE" || dl.EdgeSiteName != "EDGE-1" || dl.DatabaseProductName != "POSTGRES" {
 		t.Errorf("dataLocation not resolved into request: %+v", dl)
 	}
-	if out.Request.JobType != "PULLUP" || out.Request.JobName != "sales.transactions" {
-		t.Errorf("unexpected request: jobType=%s jobName=%s", out.Request.JobType, out.Request.JobName)
+	// jobName is omitted from the request so the PUBLIC create auto-assigns a collision-free name;
+	// the preview surfaces the default display name.
+	if out.Request.JobType != "PULLUP" || out.Request.JobName != "" {
+		t.Errorf("unexpected request: jobType=%s jobName=%q (expected empty so the server auto-assigns)", out.Request.JobType, out.Request.JobName)
+	}
+	if out.JobName != "sales.transactions" {
+		t.Errorf("expected preview display name sales.transactions, got %q", out.JobName)
 	}
 	// PULLUP defaults to automatic sizing: pullupSettings present, sparkJobSizing omitted (nil).
 	if out.Request.JobSettings == nil || out.Request.JobSettings.PullupSettings == nil {
@@ -944,34 +949,32 @@ func TestRunPermissionWarns(t *testing.T) {
 
 // ---- WS1: job name handling ----
 
-func TestServerGeneratedJobName(t *testing.T) {
+// When the user omits a name, the create request omits jobName and the server-assigned
+// (auto-incremented) name from the create response is surfaced.
+func TestServerAssignsJobNameWhenOmitted(t *testing.T) {
 	mux := muxWithPerms("DATA_QUALITY_JOB_CREATE")
-	mux.HandleFunc("/rest/dq/internal/v1/jobs/name", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/rest/dq/1.0/jobs", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jobName":"sales.transactions_2"}`))
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"jobName":"sales.transactions_2","jobType":"PULLUP","jobRunId":"run-1"}`))
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), baseInput())
+	in := baseInput()
+	in.Confirm = true
+	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), in)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if out.JobName != "sales.transactions_2" {
-		t.Errorf("expected server-generated unique name, got %q", out.JobName)
+		t.Errorf("expected the server-assigned job name to be surfaced, got %q", out.JobName)
 	}
 }
 
 func TestInvalidJobNameRejected(t *testing.T) {
+	// Name validation is client-side now — no server endpoint is consulted.
 	mux := muxWithPerms("DATA_QUALITY_JOB_CREATE")
-	mux.HandleFunc("/rest/dq/internal/v1/jobs/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/validJobName") {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte("false"))
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
