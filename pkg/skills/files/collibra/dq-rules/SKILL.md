@@ -10,7 +10,7 @@ A data quality **rule** (a "monitor") is a check attached to an existing DQ **jo
 delete — plus running the job and observing the outcome. It does **not** cover creating
 the job itself.
 
-Rule tools: `validate_dq_rule`, `preview_dq_rule_sql`, `create_dq_rule`, `get_dq_rule`,
+Rule tools: `validate_dq_rule`, `create_dq_rule`, `get_dq_rule`,
 `edit_dq_rule`, `delete_dq_rule`, `get_dq_rule_results`. Job tools: `run_dq_job`,
 `get_dq_job_status`, `get_dq_job_log`.
 
@@ -26,11 +26,10 @@ Rule tools: `validate_dq_rule`, `preview_dq_rule_sql`, `create_dq_rule`, `get_dq
      it returns a `preview` (the composed rule and its SQL) and creates nothing. Show that
      preview to the user, then call again with `confirm: true` to actually create. The tool
      enforces this — it will not write on a `confirm=false` call.
-2. **`validate_dq_rule` and `preview_dq_rule_sql` need discovery IDs.** Both require
-   `edgeSiteId`, `connectionId` and `schemaName`. Get them from `prepare_create_dq_job` for
-   the target job — do not guess them. (`create_dq_rule`, `get_dq_rule`, `edit_dq_rule`,
-   `delete_dq_rule`, `get_dq_rule_results` and the job tools take only names/ids and need no
-   discovery step.)
+2. **`validate_dq_rule` needs discovery IDs.** It requires `edgeSiteId`,
+   `connectionId` and `schemaName`. Get them from `prepare_create_dq_job` for the target job
+   — do not guess them. (`create_dq_rule`, `get_dq_rule`, `edit_dq_rule`, `delete_dq_rule`,
+   `get_dq_rule_results` and the job tools take only names/ids and need no discovery step.)
 3. **`monitorType` is `FREEFORM_SQL` or `SIMPLE_SQL`.** `FREEFORM_SQL` is a full SQL query;
    `SIMPLE_SQL` is a single-column predicate. Nothing else is valid.
 4. **Always give the rule a meaningful name.** `monitorName` is required and is how the rule is
@@ -55,7 +54,6 @@ Rule tools: `validate_dq_rule`, `preview_dq_rule_sql`, `create_dq_rule`, `get_dq
    `connectionId` and `schemaName`. (Skip if you already have them.)
 2. **Validate** — call `validate_dq_rule` with those IDs, the `jobName`, and `previewRule`
    (the SQL you intend to use as `monitorValue`). If `valid` is `false`, fix and re-validate.
-   Optionally call `preview_dq_rule_sql` (same inputs) to see the sample rows the SQL returns.
 3. **Create** — only once valid, call `create_dq_rule`. First make sure you have a meaningful
    `monitorName` from the user (rule 4) and, for a `SIMPLE_SQL` rule, the target `columnName`
    (rule 5). Pass `jobName`, `monitorName`, `monitorType`, `monitorValue` (and optional

@@ -39,7 +39,6 @@ import (
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
 	"github.com/collibra/chip/pkg/tools/list_dq_rule_templates"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
-	"github.com/collibra/chip/pkg/tools/preview_dq_rule_sql"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
@@ -98,7 +97,6 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, delete_dq_rule.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
 	toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, preview_dq_rule_sql.NewTool(client))
 	toolRegister(server, toolConfig, run_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job_status.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job_log.NewTool(client))

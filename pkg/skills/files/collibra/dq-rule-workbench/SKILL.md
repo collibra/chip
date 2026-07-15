@@ -32,7 +32,7 @@ Relationship to the other DQ skills:
   - Templates: `list_dq_rule_templates` / `get_dq_rule_template` →
     `deploy_dq_rule_template` (bulk).
   - Plain-language / AI: `generate_dq_rule_sql` (Text2SQL) → `create_dq_rule`.
-- **Review SQL**: `preview_dq_rule_sql`, `validate_dq_rule`.
+- **Review SQL**: `validate_dq_rule`.
 - **Run & observe**: `run_dq_job`, `get_dq_job_status`, `get_dq_rule_results`.
 - **Catalog associations**: `edit_asset` (`add_relation`) to Business Rule, Data
   Element, Data Attribute, or a catalog Data Quality Rule asset.
@@ -53,8 +53,8 @@ Relationship to the other DQ skills:
    `find_dq_rules` with `jobName` + `columnName`. Show any existing rule (name,
    job, SQL) and have the user confirm-to-proceed or skip that column.
 5. **Validate every rule's SQL before saving.** Run `validate_dq_rule` on each
-   generated or edited SQL (and optionally `preview_dq_rule_sql`). Do not create
-   a rule whose SQL is invalid. See `collibra/dq-rules`.
+   generated or edited SQL. Do not create a rule whose SQL is invalid. See
+   `collibra/dq-rules`.
 6. **A newly created job must complete at least one run before rules can be
    added.** When the job-assignment step creates a job via the sub-flow, tell the
    user about this dependency and confirm before proceeding; the new job runs
