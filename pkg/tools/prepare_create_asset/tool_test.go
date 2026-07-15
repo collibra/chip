@@ -24,6 +24,12 @@ const (
 	defAttrName      = "Definition"
 	noteAttrID       = "00000000-0000-0000-0000-0000000003116"
 	noteAttrName     = "Note"
+	relTypeID        = "00000000-0000-0000-0000-000000007038"
+	relTypePublicID  = "BusinessAssetRepresentsDataAsset"
+	relRole          = "represents"
+	relCoRole        = "is represented by"
+	relTargetTypeID  = "00000000-0000-0000-0000-000000031007"
+	relTargetName    = "Data Asset"
 )
 
 // Mock fixture for the consolidated /assignments shape. Kept local rather
@@ -154,8 +160,36 @@ func (m *mockDGC) server() *httptest.Server {
 					"assignedResourcePublicId": "Note",
 					"minimumOccurrences":       0,
 				},
+				{
+					"id": "ref-rel",
+					"assignedResourceReference": map[string]string{
+						"id": relTypeID, "name": relTypePublicID, "resourceType": "RelationType", "resourceDiscriminator": "RelationType",
+					},
+					"assignedResourcePublicId": relTypePublicID,
+					"minimumOccurrences":       0,
+					// direction + the other-leg type restriction live on the
+					// reference; role/coRole are served from /relationTypes/{id}.
+					"relationTypeDirection": "TO_TARGET",
+					"relationTypeRestriction": map[string]string{
+						"id": relTargetTypeID, "name": relTargetName,
+					},
+				},
 			},
 		}})
+	})
+
+	mux.HandleFunc("GET /rest/2.0/relationTypes/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/relationTypes/")
+		if id != relTypeID {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":       relTypeID,
+			"publicId": relTypePublicID,
+			"role":     relRole,
+			"coRole":   relCoRole,
+		})
 	})
 
 	mux.HandleFunc("GET /rest/2.0/attributeTypes/", func(w http.ResponseWriter, r *http.Request) {
@@ -302,6 +336,25 @@ func TestPrepare_BothResolved_ReturnsReadyWithSchema(t *testing.T) {
 	}
 	if def.StringType != "" {
 		t.Errorf("StringType should be empty without includeStringType, got %q", def.StringType)
+	}
+	if len(out.RelationTypes) != 1 {
+		t.Fatalf("expected 1 relation slot in schema, got %d", len(out.RelationTypes))
+	}
+	rel := out.RelationTypes[0]
+	if rel.RelationTypeID != relTypeID {
+		t.Errorf("expected relation type id %q, got %q", relTypeID, rel.RelationTypeID)
+	}
+	if rel.PublicID != relTypePublicID {
+		t.Errorf("expected relation publicId %q, got %q", relTypePublicID, rel.PublicID)
+	}
+	if rel.Role != relRole || rel.CoRole != relCoRole {
+		t.Errorf("expected role %q/coRole %q, got %q/%q", relRole, relCoRole, rel.Role, rel.CoRole)
+	}
+	if rel.TargetTypeID != relTargetTypeID || rel.TargetTypeName != relTargetName {
+		t.Errorf("expected target %q/%q, got %q/%q", relTargetTypeID, relTargetName, rel.TargetTypeID, rel.TargetTypeName)
+	}
+	if rel.Direction != "TO_TARGET" {
+		t.Errorf("expected direction %q, got %q", "TO_TARGET", rel.Direction)
 	}
 }
 

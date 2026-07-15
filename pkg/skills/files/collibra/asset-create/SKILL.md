@@ -56,6 +56,21 @@ Optional companion tool. Only useful when:
 For straightforward creates where the user gave you asset type + domain, skip
 `prepare_create_asset` entirely.
 
+A `ready` response carries the resolved schema. Each `attributeSchema` entry and each
+`relationTypes` entry exposes both the type's UUID and its publicId:
+
+```json
+{
+  "status": "ready",
+  "attributeSchema": [
+    { "attributeTypeId": "00000000-0000-0000-0000-000000000202", "name": "Definition", "publicId": "Definition", "kind": "StringAttributeType", "required": true }
+  ],
+  "relationTypes": [
+    { "relationTypeId": "00000000-0000-0000-0000-000000007038", "publicId": "BusinessAssetRepresentsDataAsset", "role": "represents", "coRole": "is represented by", "targetTypeName": "Data Asset" }
+  ]
+}
+```
+
 ## Attribute reference
 
 - Reference attributes by `name` (e.g. `[{"name": "Definition", "value": "Monthly Recurring

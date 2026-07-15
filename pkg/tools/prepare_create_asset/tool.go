@@ -65,7 +65,7 @@ type Output struct {
 	DomainOptions     []DomainOption         `json:"domainOptions,omitempty" jsonschema:"Domains available on this instance. Returned when domain was omitted or could not be resolved."`
 	OptionsTruncated  bool                   `json:"optionsTruncated" jsonschema:"Whether assetTypeOptions or domainOptions was truncated below the instance's true total."`
 	AttributeSchema   []AttributeSchemaEntry `json:"attributeSchema,omitempty" jsonschema:"Attribute slots in the scoped assignment for the resolved (assetType, domain) pair. Each entry tells the agent which attributes are required, what kind of value to supply, and (with includeStringType) whether the value is rich text."`
-	RelationTypes     []RelationSchemaEntry  `json:"relationTypes,omitempty" jsonschema:"Relation slots in the scoped assignment — the relation roles available for assets of this type in this domain."`
+	RelationTypes     []RelationSchemaEntry  `json:"relationTypes,omitempty" jsonschema:"Relation slots in the scoped assignment — the relation roles available for assets of this type in this domain. Each entry carries the relation type's UUID and publicId, mirroring attributeSchema."`
 	AvailableStatuses []StatusOption         `json:"availableStatuses,omitempty" jsonschema:"All statuses defined on this instance. Returned alongside ready/needs_clarification responses so the agent can pick a non-default initial status when calling create_asset."`
 }
 
@@ -111,11 +111,12 @@ type AttributeSchemaEntry struct {
 // RelationSchemaEntry is one relation slot in the scoped assignment.
 type RelationSchemaEntry struct {
 	RelationTypeID string `json:"relationTypeId" jsonschema:"UUID of the relation type."`
-	Role           string `json:"role" jsonschema:"Forward role name of the relation (e.g. 'is synonym of')."`
-	CoRole         string `json:"coRole,omitempty" jsonschema:"Reverse role name."`
-	Direction      string `json:"direction,omitempty" jsonschema:"Direction of the relation as defined in the assignment."`
-	TargetTypeID   string `json:"targetTypeId,omitempty" jsonschema:"UUID of the asset type on the target side of the relation."`
-	TargetTypeName string `json:"targetTypeName,omitempty" jsonschema:"Display name of the asset type on the target side of the relation."`
+	PublicID       string `json:"publicId,omitempty" jsonschema:"PublicId of the relation type."`
+	Role           string `json:"role" jsonschema:"Forward role name of the relation (e.g. 'is part of'). Empty for complex relation types, whose role names are not exposed by /relationTypes/{id}."`
+	CoRole         string `json:"coRole,omitempty" jsonschema:"Reverse role name (e.g. 'contains')."`
+	Direction      string `json:"direction,omitempty" jsonschema:"Direction of the relation from the created asset's side: 'TO_TARGET' (the asset is the source leg) or 'TO_SOURCE' (the asset is the target leg)."`
+	TargetTypeID   string `json:"targetTypeId,omitempty" jsonschema:"UUID of the asset type on the other leg. Only present when the assignment restricts that leg to a specific type; many assignments do not."`
+	TargetTypeName string `json:"targetTypeName,omitempty" jsonschema:"Display name of the asset type on the other leg, when restricted."`
 }
 
 // StatusOption is one entry in availableStatuses.
@@ -216,6 +217,13 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			if err := hydrateAttributeDetails(ctx, collibraClient, out.AttributeSchema); err != nil {
 				out.Message += " (attribute details could not be fully hydrated: " + err.Error() + ")"
 			}
+		}
+
+		// role/coRole are not in the assignment payload, so always hydrate them
+		// from the relation type resource — an empty role would otherwise break
+		// the RelationSchemaEntry contract.
+		if err := hydrateRelationDetails(ctx, collibraClient, out.RelationTypes); err != nil {
+			out.Message += " (relation details could not be fully hydrated: " + err.Error() + ")"
 		}
 
 		statuses, _ := clients.ListStatusesAll(ctx, collibraClient)
@@ -509,6 +517,29 @@ func hydrateAttributeDetails(ctx context.Context, client *http.Client, schema []
 	return firstErr
 }
 
+// hydrateRelationDetails fans out one /relationTypes/{id} call per relation
+// slot to pull role and coRole, which don't exist on the assignment payload.
+// Errors on individual fetches are tolerated so one missing detail doesn't
+// blank the whole schema.
+func hydrateRelationDetails(ctx context.Context, client *http.Client, relations []RelationSchemaEntry) error {
+	var firstErr error
+	for i := range relations {
+		details, err := clients.GetRelationTypeFull(ctx, client, relations[i].RelationTypeID)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		relations[i].Role = details.Role
+		relations[i].CoRole = details.CoRole
+		if relations[i].PublicID == "" {
+			relations[i].PublicID = details.PublicID
+		}
+	}
+	return firstErr
+}
+
 // --- shape converters ---
 
 func toAssetTypeOptions(in []clients.PrepareCreateAssetType) []AssetTypeOption {
@@ -563,6 +594,7 @@ func relationEntriesFromAssignment(in []clients.PrepareCreateScopedRelation) []R
 	for i, r := range in {
 		entry := RelationSchemaEntry{
 			RelationTypeID: r.RelationTypeID,
+			PublicID:       r.RelationTypePublicID,
 			Role:           r.Role,
 			CoRole:         r.CoRole,
 			Direction:      r.Direction,
