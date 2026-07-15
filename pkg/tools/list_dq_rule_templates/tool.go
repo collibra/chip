@@ -31,8 +31,8 @@ const defaultLimit = 100
 // Input is the tool's typed input. All fields are optional filters/pagination.
 type Input struct {
 	Name      string `json:"name,omitempty" jsonschema:"Optional. Partial-match filter on the template name."`
-	Dimension string `json:"dimension,omitempty" jsonschema:"Optional. Filter by data quality dimension (e.g. 'Completeness', 'Validity')."`
-	Ootb      *bool  `json:"ootb,omitempty" jsonschema:"Optional. Filter by origin: true = built-in (OOTB) templates only, false = custom templates only, omit = all."`
+	Dimension string `json:"dimension,omitempty" jsonschema:"Optional. Filter by data quality dimension — a category such as Accuracy, Completeness or Validity (e.g. 'Completeness', 'Validity')."`
+	Ootb      *bool  `json:"ootb,omitempty" jsonschema:"Optional. Filter by origin: true = built-in (OOTB, out-of-the-box) templates only, false = custom user-defined templates only, omit = all."`
 	Offset    int    `json:"offset,omitempty" jsonschema:"Optional. Pagination offset (min 0). Defaults to 0."`
 	Limit     int    `json:"limit,omitempty" jsonschema:"Optional. Max templates to return (1-100). Defaults to 100."`
 }
@@ -43,9 +43,9 @@ type Template struct {
 	Name        string   `json:"name" jsonschema:"Template name."`
 	Description string   `json:"description,omitempty" jsonschema:"What the template checks."`
 	SQLQuery    string   `json:"sqlQuery,omitempty" jsonschema:"Parameterized SQL pattern (uses a {{column}} placeholder)."`
-	Dimensions  []string `json:"dimensions,omitempty" jsonschema:"Data quality dimensions the template covers."`
-	Tolerance   *int     `json:"tolerance,omitempty" jsonschema:"Default tolerance threshold, when set."`
-	Ootb        bool     `json:"ootb" jsonschema:"True for built-in (out-of-the-box) templates, false for custom."`
+	Dimensions  []string `json:"dimensions,omitempty" jsonschema:"Data quality dimensions (categories such as Accuracy, Completeness, Validity) the template covers."`
+	Tolerance   *int     `json:"tolerance,omitempty" jsonschema:"Default tolerance — number of failing ('breaking') records allowed before a rule fails; a count, not a percentage — when set."`
+	Ootb        bool     `json:"ootb" jsonschema:"True for built-in (out-of-the-box) templates, false for custom user-defined ones."`
 }
 
 // Output is the typed response.
@@ -62,9 +62,9 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:  "list_dq_rule_templates",
 		Title: "List Data Quality Rule Templates",
 		Description: "List the data quality rule templates available in the connected DQ environment — built-in " +
-			"(OOTB) templates plus any custom user-defined ones. Each template is a parameterized SQL pattern that " +
-			"can be deployed as concrete rules across columns via deploy_dq_rule_template. Optional filters: name, " +
-			"dimension, and ootb (built-in vs custom). Paginated (offset/limit).",
+			"(OOTB, i.e. out-of-the-box) templates plus any custom user-defined ones. Each template is a parameterized SQL pattern that " +
+			"can be deployed as concrete rules (checks; Collibra calls them 'monitors') across columns via deploy_dq_rule_template. Optional filters: name, " +
+			"dimension (a data-quality category such as Accuracy or Completeness), and ootb (built-in vs custom). Paginated (offset/limit).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

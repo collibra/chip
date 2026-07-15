@@ -35,8 +35,8 @@ const (
 
 // Input is the tool's typed input.
 type Input struct {
-	JobName   string `json:"jobName" jsonschema:"Required. Name of the data quality job (dataset) the rule is attached to."`
-	RuleName  string `json:"ruleName" jsonschema:"Required. Name of the rule (monitor) whose results to read."`
+	JobName   string `json:"jobName" jsonschema:"Required. Name of the data quality job the rule is attached to (a job, also called a 'dataset', is a saved check on one database table)."`
+	RuleName  string `json:"ruleName" jsonschema:"Required. Name of the rule (the check; Collibra calls it a 'monitor') whose results to read."`
 	Offset    int    `json:"offset,omitempty" jsonschema:"Optional. Pagination offset (min 0). Defaults to 0."`
 	Limit     int    `json:"limit,omitempty" jsonschema:"Optional. Max number of run-result entries to return (min 1). Defaults to 10."`
 	SortOrder string `json:"sortOrder,omitempty" jsonschema:"Optional. Order results by run date: 'DESC' (newest first, the default) or 'ASC'."`
@@ -47,9 +47,9 @@ type ResultEntry struct {
 	RunDate         int64   `json:"runDate" jsonschema:"Run date as epoch milliseconds."`
 	RuleStatus      string  `json:"ruleStatus,omitempty" jsonschema:"Outcome for this run, e.g. PASSING, BREAKING, or EXCEPTION."`
 	PassFail        bool    `json:"passFail" jsonschema:"Whether the rule passed for this run."`
-	Score           int     `json:"score" jsonschema:"Rule score for this run."`
+	Score           int     `json:"score" jsonschema:"Rule score for this run (0-100)."`
 	TotalCount      float64 `json:"totalCount" jsonschema:"Total records evaluated."`
-	BreakingRecords float64 `json:"breakingRecords" jsonschema:"Number of breaking (failing) records."`
+	BreakingRecords float64 `json:"breakingRecords" jsonschema:"Number of breaking (failing) records for this run."`
 	PassingRecords  float64 `json:"passingRecords" jsonschema:"Number of passing records."`
 	BreakMsg        string  `json:"breakMsg,omitempty" jsonschema:"Break message, when the rule broke."`
 	Exception       string  `json:"exception,omitempty" jsonschema:"Exception message, when the run errored."`
@@ -70,8 +70,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "get_dq_rule_results",
 		Title: "Get Data Quality Rule Results",
-		Description: "Read a data quality rule's per-run results after a job run — the score, breaking/passing " +
-			"record counts, pass/fail status and any exception for each run. Paginated (offset/limit), newest first by default.",
+		Description: "Read a data quality rule's (a check on a table's data; Collibra calls it a 'monitor') results for each run of the job — the 0-100 score, the counts of breaking (failing) and passing records, " +
+			"pass/fail status and any exception for each run. Paginated (offset/limit), newest first by default.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

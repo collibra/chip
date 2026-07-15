@@ -69,8 +69,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title: "Search Catalog Columns by Metadata",
 		Description: "Find catalog Column assets by metadata that keyword search cannot filter on — Description / Data Type " +
 			"(attribute values), a Data Steward role, or relations to a Business Term, Business Rule, Data Element or Data Attribute " +
-			"(by name). Filters are combined with AND. Useful for targeting columns for data quality rules at scale. " +
-			"Requires the DGC Knowledge Graph API to be enabled on the instance; classification-tag filtering is not supported. " +
+			"(by name). Filters are combined with AND. Useful for picking out columns to attach data-quality rules (checks; Collibra calls them 'monitors') to at scale. " +
+			"Requires the DGC Knowledge Graph API (Collibra's metadata graph query service) to be enabled on the instance; classification-tag filtering is not supported. " +
 			"A broad lone substring filter (e.g. description alone) can exceed the Knowledge Graph query timeout — combine with a domain or another selective filter.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

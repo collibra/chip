@@ -27,8 +27,8 @@ const (
 
 // Input is the tool's typed input.
 type Input struct {
-	JobName     string `json:"jobName" jsonschema:"Required. Name of the data quality job (dataset) the rule is attached to."`
-	MonitorName string `json:"monitorName" jsonschema:"Required. Name of the rule (monitor) to delete."`
+	JobName     string `json:"jobName" jsonschema:"Required. Name of the data quality job the rule is attached to (a job, also called a 'dataset', is a saved check on one database table)."`
+	MonitorName string `json:"monitorName" jsonschema:"Required. Name of the rule (the check; Collibra calls it a 'monitor') to delete."`
 }
 
 // Output is the typed response.
@@ -42,7 +42,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "delete_dq_rule",
 		Title: "Delete Data Quality Rule",
-		Description: "Delete a data quality rule (monitor) from an existing data quality job. " +
+		Description: "Delete a data quality rule (a check on a table's data; Collibra calls it a 'monitor') from an existing data quality job (a saved check on ONE database table; also called a 'dataset'). " +
 			"This is irreversible. Requires permission to delete rules on the target job.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

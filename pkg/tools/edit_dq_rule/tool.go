@@ -35,16 +35,16 @@ const (
 // monitorName); the remaining fields are the new definition (send the full
 // definition — this is a replace, not a patch).
 type Input struct {
-	JobName        string   `json:"jobName" jsonschema:"Required. Name of the data quality job (dataset) the rule is attached to."`
-	MonitorName    string   `json:"monitorName" jsonschema:"Required. Name of the existing rule (monitor) to edit."`
+	JobName        string   `json:"jobName" jsonschema:"Required. Name of the data quality job the rule is attached to (a job, also called a 'dataset', is a saved check on one database table)."`
+	MonitorName    string   `json:"monitorName" jsonschema:"Required. Name of the existing rule (the check; Collibra calls it a 'monitor') to edit."`
 	MonitorType    string   `json:"monitorType" jsonschema:"Required. Rule type: 'FREEFORM_SQL' (a full SQL query) or 'SIMPLE_SQL' (a single-column check)."`
 	MonitorValue   string   `json:"monitorValue" jsonschema:"Required. The rule's SQL. For FREEFORM_SQL a full query; for SIMPLE_SQL the column predicate."`
 	NewMonitorName string   `json:"newMonitorName,omitempty" jsonschema:"Optional. New name for the rule (rename). Only letters, digits, '-' and '_'; max 256 characters."`
 	FilterQuery    string   `json:"filterQuery,omitempty" jsonschema:"Optional. Additional WHERE-clause filter applied to the rule."`
 	ColumnName     string   `json:"columnName,omitempty" jsonschema:"Optional. Target column name; used with SIMPLE_SQL rules."`
 	Description    string   `json:"description,omitempty" jsonschema:"Optional. Human-readable description; max 256 characters."`
-	Dimensions     []string `json:"dimensions,omitempty" jsonschema:"Optional. Data quality dimensions to associate with the rule."`
-	Tolerance      int      `json:"tolerance,omitempty" jsonschema:"Optional. Number of breaking records allowed before the rule fails. Defaults to 0."`
+	Dimensions     []string `json:"dimensions,omitempty" jsonschema:"Optional. Data quality dimensions — categories such as Accuracy, Completeness, Validity — to associate with the rule."`
+	Tolerance      int      `json:"tolerance,omitempty" jsonschema:"Optional. Number of failing ('breaking') records allowed before the rule fails — a count, NOT a percentage. Defaults to 0."`
 	Active         *bool    `json:"active,omitempty" jsonschema:"Optional. Whether the rule is active. Defaults to true."`
 	Suppressed     bool     `json:"suppressed,omitempty" jsonschema:"Optional. Whether the rule is suppressed (kept but not scored). Defaults to false."`
 	TemplateID     string   `json:"templateId,omitempty" jsonschema:"Optional. UUID of a rule template to link this rule to."`
@@ -63,10 +63,10 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "edit_dq_rule",
 		Title: "Edit Data Quality Rule",
-		Description: "Update an existing data quality rule (monitor) on a data quality job. " +
+		Description: "Update an existing data quality rule (a check on a table's data; Collibra calls it a 'monitor') on a data quality job (a saved check on ONE database table; also called a 'dataset'). " +
 			"Send the full rule definition (this replaces the rule, it is not a partial patch). " +
 			"Set newMonitorName to rename the rule. " +
-			"Note: this uses the DQ monitoring API and requires permission to edit rules on the target job.",
+			"Note: requires permission to edit rules on the target job.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(false)},

@@ -36,16 +36,16 @@ const (
 
 // Input is the tool's typed input.
 type Input struct {
-	JobName    string        `json:"jobName" jsonschema:"Required. Name of the data quality job (dataset) to run, e.g. 'PUBLIC.SAMPLE_DATASET'."`
+	JobName    string        `json:"jobName" jsonschema:"Required. Name of the data quality job to run (a job, also called a 'dataset', is a saved data-quality check on one database table), e.g. 'PUBLIC.SAMPLE_DATASET'."`
 	RunDate    string        `json:"runDate,omitempty" jsonschema:"Optional. Run date. Use 'yyyy-MM-dd' when dateKind is DATE (the default), or an RFC 3339 timestamp ('2026-06-28T10:00:00Z') when dateKind is TIMESTAMP. Defaults to the current date/time."`
 	RunDateEnd string        `json:"runDateEnd,omitempty" jsonschema:"Optional. End of the run time slice, same format as runDate."`
 	DateKind   string        `json:"dateKind,omitempty" jsonschema:"Optional. How runDate/runDateEnd are interpreted: 'DATE' (yyyy-MM-dd, the default) or 'TIMESTAMP' (RFC 3339)."`
-	Backrun    *BackrunInput `json:"backrun,omitempty" jsonschema:"Optional. Historical backfill: trigger additional runs for prior periods relative to runDate."`
+	Backrun    *BackrunInput `json:"backrun,omitempty" jsonschema:"Optional. Backfill: also run the job for past dates/periods relative to runDate."`
 }
 
 // BackrunInput configures an optional historical backfill.
 type BackrunInput struct {
-	TimeBin  string `json:"timeBin" jsonschema:"Time bin for the backfill: 'DAY', 'MONTH', or 'YEAR'."`
+	TimeBin  string `json:"timeBin" jsonschema:"Time bin for the backfill (the past periods to also run): 'DAY', 'MONTH', or 'YEAR'."`
 	BinValue int    `json:"binValue" jsonschema:"Number of past bins to backfill (minimum 1). E.g. timeBin=DAY, binValue=10 backfills the previous 10 days."`
 }
 
@@ -53,7 +53,7 @@ type BackrunInput struct {
 type Output struct {
 	Status   OutputStatus `json:"status" jsonschema:"'success' when the run was created and queued; 'validation_error' for bad inputs; 'error' for downstream DQ failures."`
 	Message  string       `json:"message" jsonschema:"Human-readable summary."`
-	JobRunID string       `json:"jobRunId,omitempty" jsonschema:"Identifier of the created run, on success. Use it to track the run."`
+	JobRunID string       `json:"jobRunId,omitempty" jsonschema:"The jobRunId — id of this one execution (run) of the job — on success. Use it to track the run."`
 }
 
 // NewTool returns the registered tool.
@@ -61,10 +61,10 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "run_dq_job",
 		Title: "Run Data Quality Job",
-		Description: "Trigger a run of an existing data quality job (dataset), executing its configured rules. " +
+		Description: "Trigger a run of an existing data quality job (a saved data-quality check on ONE database table; also called a 'dataset'), scanning the table and running its rules. " +
 			"runDate/runDateEnd are optional and default to the current date/time; use dateKind to switch between a calendar date (DATE) and a timestamp (TIMESTAMP). " +
-			"An optional backrun backfills prior periods. " +
-			"Returns the job run id so the run can be tracked. " +
+			"An optional backrun backfills the job for past dates/periods (a 'backfill'). " +
+			"Returns the jobRunId (the id of this one execution/run of the job) so the run can be tracked. " +
 			"Requires permission to run the target job.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

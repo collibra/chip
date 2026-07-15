@@ -40,15 +40,15 @@ const (
 
 // Input is the tool's typed input.
 type Input struct {
-	JobName      string   `json:"jobName" jsonschema:"Required. Name of the existing data quality job (dataset) the rule is attached to, e.g. 'PUBLIC.SAMPLE_DATASET'."`
+	JobName      string   `json:"jobName" jsonschema:"Required. Name of the existing data quality job the rule is attached to (a job, also called a 'dataset', is a saved data-quality check on one database table), e.g. 'PUBLIC.SAMPLE_DATASET'."`
 	MonitorName  string   `json:"monitorName" jsonschema:"Required. Rule name. Only letters, digits, '-' and '_' are allowed; max 256 characters."`
 	MonitorType  string   `json:"monitorType" jsonschema:"Required. Rule type: 'FREEFORM_SQL' for a full SQL expression, or 'SIMPLE_SQL' for a single-column check."`
 	MonitorValue string   `json:"monitorValue" jsonschema:"Required. The rule's SQL. For FREEFORM_SQL this is a full query (e.g. 'SELECT * FROM @PUBLIC.SAMPLE_DATASET WHERE NAME IS NULL'); for SIMPLE_SQL it is the column predicate."`
 	FilterQuery  string   `json:"filterQuery,omitempty" jsonschema:"Optional. Additional WHERE-clause filter applied to the rule (e.g. ' where NAME IS NULL')."`
 	ColumnName   string   `json:"columnName,omitempty" jsonschema:"Optional. Target column name; used with SIMPLE_SQL rules."`
 	Description  string   `json:"description,omitempty" jsonschema:"Optional. Human-readable description; max 256 characters."`
-	Dimensions   []string `json:"dimensions,omitempty" jsonschema:"Optional. Data quality dimensions to associate with the rule (e.g. ['Accuracy','Completeness'])."`
-	Tolerance    int      `json:"tolerance,omitempty" jsonschema:"Optional. Tolerance threshold — number of breaking records allowed before the rule is considered failing. Defaults to 0."`
+	Dimensions   []string `json:"dimensions,omitempty" jsonschema:"Optional. Data quality dimensions — categories such as Accuracy, Completeness, Validity — to associate with the rule (e.g. ['Accuracy','Completeness'])."`
+	Tolerance    int      `json:"tolerance,omitempty" jsonschema:"Optional. Number of failing ('breaking') records allowed before the rule is considered failed — a count, NOT a percentage. Defaults to 0."`
 	Active       *bool    `json:"active,omitempty" jsonschema:"Optional. Whether the rule is active. Defaults to true."`
 	Suppressed   bool     `json:"suppressed,omitempty" jsonschema:"Optional. Whether the rule is suppressed (kept but not scored). Defaults to false."`
 	TemplateID   string   `json:"templateId,omitempty" jsonschema:"Optional. UUID of a rule template to link this rule to so it appears under the template's 'Used In' tab."`
@@ -83,12 +83,13 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "create_dq_rule",
 		Title: "Create Data Quality Rule",
-		Description: "Create a data quality rule (monitor) on an existing data quality job (dataset). " +
+		Description: "Create a data quality rule (a single data-quality check on a table's data; Collibra calls it a 'monitor') " +
+			"on an existing data quality job (a saved data-quality check on ONE database table that scans the table and runs its rules; also called a 'dataset'), identified by its job name. " +
 			"monitorType is 'FREEFORM_SQL' (a full SQL query) or 'SIMPLE_SQL' (a single-column check). " +
-			"The rule defaults to active and not suppressed. " +
+			"The rule defaults to active and not suppressed (suppressed = kept but not scored). " +
 			"Built around a confirm checkpoint: confirm=false (default) returns a PREVIEW of the rule and its SQL without creating anything — review it with the user; confirm=true creates the rule. " +
 			"Returns the job name and rule name on success. " +
-			"Note: this uses the DQ monitoring API and requires permission to create rules on the target job.",
+			"Note: requires permission to create rules on the target job.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(false)},

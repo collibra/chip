@@ -27,8 +27,8 @@ const (
 
 // Input is the tool's typed input.
 type Input struct {
-	JobName     string `json:"jobName" jsonschema:"Required. Name of the data quality job (dataset) the rule is attached to, e.g. 'PUBLIC.SAMPLE_DATASET'."`
-	MonitorName string `json:"monitorName" jsonschema:"Required. Name of the rule (monitor) to read."`
+	JobName     string `json:"jobName" jsonschema:"Required. Name of the data quality job the rule is attached to (a job, also called a 'dataset', is a saved check on one database table), e.g. 'PUBLIC.SAMPLE_DATASET'."`
+	MonitorName string `json:"monitorName" jsonschema:"Required. Name of the rule (the check; Collibra calls it a 'monitor') to read."`
 }
 
 // Rule is the returned rule definition.
@@ -59,8 +59,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "get_dq_rule",
 		Title: "Get Data Quality Rule",
-		Description: "Read the definition of a single data quality rule (monitor) on an existing data quality job. " +
-			"Returns the rule's type, SQL, filter, tolerance and active/suppressed state.",
+		Description: "Read the definition of a single data quality rule (a check on a table's data; Collibra calls it a 'monitor') on an existing data quality job (a saved check on ONE database table; also called a 'dataset'). " +
+			"Returns the rule's type, SQL, filter, tolerance (count of failing records allowed before it fails) and active/suppressed (kept but not scored) state.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

@@ -55,8 +55,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "get_dq_rule_template",
 		Title: "Get Data Quality Rule Template",
-		Description: "Read a single data quality rule template by id — its parameterized SQL, dimensions, " +
-			"default tolerance, whether it is built-in (OOTB), and how many times it has been deployed.",
+		Description: "Read a single data quality rule template by id — its parameterized SQL, dimensions (data-quality categories such as Accuracy or Completeness), " +
+			"default tolerance (number of failing records allowed before a rule fails; a count, not a percentage), whether it is built-in (OOTB, out-of-the-box) vs custom, and how many times it has been deployed.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

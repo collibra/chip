@@ -40,9 +40,9 @@ const (
 // Input is the tool's typed input. At least one filter should be provided; for
 // duplicate detection, set jobName and columnName.
 type Input struct {
-	JobName      string `json:"jobName,omitempty" jsonschema:"Optional. Exact job (dataset) name to scope the search to."`
+	JobName      string `json:"jobName,omitempty" jsonschema:"Optional. Exact job name to scope the search to (a job, also called a 'dataset', is a saved check on one database table)."`
 	ColumnName   string `json:"columnName,omitempty" jsonschema:"Optional. Exact column name — combine with jobName to find existing rules on a specific column (duplicate detection)."`
-	NameContains string `json:"nameContains,omitempty" jsonschema:"Optional. Substring match on the rule (monitor) name."`
+	NameContains string `json:"nameContains,omitempty" jsonschema:"Optional. Substring match on the rule name (the check; Collibra calls it a 'monitor')."`
 	Offset       int    `json:"offset,omitempty" jsonschema:"Optional. Pagination offset (min 0). Defaults to 0."`
 	Limit        int    `json:"limit,omitempty" jsonschema:"Optional. Max rules to return (1-100). Defaults to 25."`
 }
@@ -72,7 +72,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "find_dq_rules",
 		Title: "Find Data Quality Rules",
-		Description: "Search existing data quality rules (monitors) across jobs. Filter by exact jobName and/or " +
+		Description: "Search existing data quality rules (checks on a table's data; Collibra calls them 'monitors') across data quality jobs " +
+			"(a job, also called a 'dataset', is a saved check on ONE database table). Filter by exact jobName and/or " +
 			"columnName (combine both to detect rules already on a target column before creating a new one), or by " +
 			"a rule-name substring. Returns each rule's job, column, type, status and SQL. Paginated (offset/limit).",
 		Handler:     handler(collibraClient),

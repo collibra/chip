@@ -29,10 +29,10 @@ const (
 // Input is the tool's typed input. edgeSiteId/connectionId/schemaName are the
 // discovery fields from prepare_create_dq_job.
 type Input struct {
-	EdgeSiteID   string `json:"edgeSiteId" jsonschema:"Required. Edge site UUID. From prepare_create_dq_job resolved.edgeSiteId."`
-	ConnectionID string `json:"connectionId" jsonschema:"Required. Edge connection UUID. From prepare_create_dq_job resolved.connectionId."`
+	EdgeSiteID   string `json:"edgeSiteId" jsonschema:"Required. UUID of the Collibra Edge runtime/site that reaches the source database. From prepare_create_dq_job resolved.edgeSiteId."`
+	ConnectionID string `json:"connectionId" jsonschema:"Required. UUID of the specific database connection on that Edge site. From prepare_create_dq_job resolved.connectionId."`
 	SchemaName   string `json:"schemaName" jsonschema:"Required. Schema name the rule runs against."`
-	JobName      string `json:"jobName" jsonschema:"Required. Name of the data quality job (dataset) the rule belongs to."`
+	JobName      string `json:"jobName" jsonschema:"Required. Name of the data quality job the rule belongs to (a job, also called a 'dataset', is a saved check on one database table)."`
 	PreviewRule  string `json:"previewRule" jsonschema:"Required. The rule SQL to preview (the same value you would pass as monitorValue)."`
 	FilterQuery  string `json:"filterQuery,omitempty" jsonschema:"Optional. Additional WHERE-clause filter applied to the rule."`
 	RowLimit     int    `json:"rowLimit,omitempty" jsonschema:"Optional. Max number of sample rows to return. Defaults to 0 (service default)."`
@@ -58,9 +58,9 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "preview_dq_rule_sql",
 		Title: "Preview Data Quality Rule SQL",
-		Description: "Run a data quality rule's SQL against the source and return the composed query's sample result set " +
+		Description: "Run a data quality rule's (a check on a table's data; Collibra calls it a 'monitor') SQL against the source database and return the composed query's sample result set " +
 			"(columns and sample rows), so the rule's behavior can be inspected before saving or running it. " +
-			"Requires edgeSiteId/connectionId/schemaName (from prepare_create_dq_job).",
+			"Requires edgeSiteId, connectionId and schemaName — the connection to the source database (edgeSiteId = the Collibra Edge runtime/site that reaches the source, connectionId = the specific database connection), all from prepare_create_dq_job.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

@@ -31,7 +31,7 @@ const (
 
 // Target is one deployment target.
 type Target struct {
-	JobName    string `json:"jobName" jsonschema:"Required. Name of the existing DQ job (dataset) to deploy the rule on, e.g. 'PUBLIC.CUSTOMERS'."`
+	JobName    string `json:"jobName" jsonschema:"Required. Name of the existing data quality job to deploy the rule on (a job, also called a 'dataset', is a saved check on one database table), e.g. 'PUBLIC.CUSTOMERS'."`
 	ColumnName string `json:"columnName,omitempty" jsonschema:"Column substituted for the template's {{column}} placeholder. Required for column-level templates; omit for table-level templates."`
 }
 
@@ -62,7 +62,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "deploy_dq_rule_template",
 		Title: "Deploy Data Quality Rule Template",
-		Description: "Instantiate a rule template as concrete rules across one or more job/column targets. " +
+		Description: "Instantiate a rule template as concrete rules (checks on a table's data; Collibra calls them 'monitors') across one or more job/column targets " +
+			"(a job, also called a 'dataset', is a saved check on ONE database table). " +
 			"The DQ service resolves dialect-specific SQL and creates one rule per target, each named " +
 			"{templateName}_{columnName}. Provide a columnName per target for column-level templates. " +
 			"Built around a confirm checkpoint: confirm=false (default) returns a PREVIEW of the template + targets without deploying — review it with the user; confirm=true deploys. " +

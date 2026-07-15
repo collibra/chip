@@ -27,7 +27,7 @@ const (
 
 // Input is the tool's typed input.
 type Input struct {
-	JobRunID string `json:"jobRunId" jsonschema:"Required. The job run id returned by run_dq_job (or create_dq_job)."`
+	JobRunID string `json:"jobRunId" jsonschema:"Required. The jobRunId — id of one execution (run) of the job — returned by run_dq_job (or create_dq_job)."`
 }
 
 // LogEntry is one entry in a job run's execution log.
@@ -51,8 +51,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "get_dq_job_log",
 		Title: "Get Data Quality Job Log",
-		Description: "Read the execution log for a data quality job run by its jobRunId (returned by run_dq_job / create_dq_job) — " +
-			"the run stages, timings, descriptions and any exceptions. " +
+		Description: "Read the execution log for one execution (run) of a data quality job (a saved check on ONE database table; also called a 'dataset') by its jobRunId — the id of that run, returned by run_dq_job / create_dq_job — " +
+			"giving the run stages, timings, descriptions and any exceptions. " +
 			"Note: the DQ public API has no log endpoint, so this uses the internal DQ UI surface.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

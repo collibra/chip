@@ -29,9 +29,9 @@ const (
 // Input is the tool's typed input. edgeSiteId/connectionId come from
 // prepare_create_dq_job; the table is identified by jobName.
 type Input struct {
-	EdgeSiteID   string   `json:"edgeSiteId" jsonschema:"Required. Edge site UUID. From prepare_create_dq_job resolved.edgeSiteId."`
-	ConnectionID string   `json:"connectionId" jsonschema:"Required. Edge connection UUID. From prepare_create_dq_job resolved.connectionId."`
-	JobName      string   `json:"jobName" jsonschema:"Required. Name of the DQ job (dataset) whose table the rule runs against."`
+	EdgeSiteID   string   `json:"edgeSiteId" jsonschema:"Required. UUID of the Collibra Edge runtime/site that reaches the source database. From prepare_create_dq_job resolved.edgeSiteId."`
+	ConnectionID string   `json:"connectionId" jsonschema:"Required. UUID of the specific database connection on that Edge site. From prepare_create_dq_job resolved.connectionId."`
+	JobName      string   `json:"jobName" jsonschema:"Required. Name of the data quality job whose table the rule runs against (a job, also called a 'dataset', is a saved check on one database table)."`
 	Columns      []string `json:"columns" jsonschema:"Required. One or more column names giving the rule its context (e.g. the column(s) the check concerns)."`
 	Query        string   `json:"query" jsonschema:"Required. Plain-language description of the rule intent, e.g. 'email must not be null and must contain an @'."`
 }
@@ -48,10 +48,10 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "generate_dq_rule_sql",
 		Title: "Generate Data Quality Rule SQL (Text2SQL)",
-		Description: "Turn a plain-language description of a data quality check into rule SQL, so a rule can be " +
+		Description: "Turn a plain-language description of a data quality check into rule SQL, so a rule (the check; Collibra calls it a 'monitor') can be " +
 			"authored without writing SQL by hand. Returns a single SQL string (no separate filter clause). " +
 			"Always review and validate the generated SQL (validate_dq_rule) before creating the rule. " +
-			"Requires edgeSiteId/connectionId (from prepare_create_dq_job) and uses Collibra DQ AI.",
+			"Requires edgeSiteId and connectionId — the connection to the source database (edgeSiteId = the Collibra Edge runtime/site that reaches the source, connectionId = the specific database connection), from prepare_create_dq_job — and uses Collibra DQ AI.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
