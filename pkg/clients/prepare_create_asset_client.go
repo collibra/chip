@@ -334,8 +334,12 @@ type PrepareCreateScopedAttribute struct {
 type PrepareCreateScopedRelation struct {
 	RelationTypeID       string
 	RelationTypePublicID string
-	Role                 string
-	CoRole               string
+	// Kind is the assignment discriminator, e.g. "RelationType" or
+	// "ComplexRelationType". It selects which resource endpoint hydrates the
+	// leg detail (role/coRole live on different resources for the two).
+	Kind   string
+	Role   string
+	CoRole string
 	// Direction is "TO_TARGET" or "TO_SOURCE" — describing which side of the
 	// relation the asset being created sits on (TO_TARGET means it is the
 	// source leg and the relation points out to the target).
@@ -730,9 +734,14 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 					// reference itself. Role/coRole are not in the assignment
 					// payload — hydrateRelationDetails fills them from the
 					// relation type resource.
+					kind := disc
+					if kind == "" {
+						kind = rt
+					}
 					rel := PrepareCreateScopedRelation{
 						RelationTypeID:       ref.AssignedResourceReference.ID,
 						RelationTypePublicID: ref.AssignedResourcePublicID,
+						Kind:                 kind,
 						Direction:            ref.RelationTypeDirection,
 					}
 					if ref.RelationTypeRestriction != nil {
@@ -879,6 +888,84 @@ func GetRelationTypeFull(ctx context.Context, client *http.Client, id string) (*
 	var result PrepareCreateRelationTypeFull
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decoding relation type details response: %w", err)
+	}
+	return &result, nil
+}
+
+// PrepareCreateComplexRelationTypeFull is the subset of the
+// /complexRelationTypes/{id} response we need. Unlike a simple relation type,
+// a complex relation type has two or more legs, each with its own role and
+// asset type, so there is no single role/coRole.
+type PrepareCreateComplexRelationTypeFull struct {
+	ID       string
+	PublicID string
+	Legs     []PrepareCreateComplexRelationLeg
+}
+
+// PrepareCreateComplexRelationLeg is one leg of a complex relation type.
+type PrepareCreateComplexRelationLeg struct {
+	Role                 string
+	CoRole               string
+	RelationTypePublicID string
+	AssetTypeID          string
+	AssetTypeName        string
+	Min                  int
+	Max                  *int
+}
+
+// GetComplexRelationTypeFull fetches a complex relation type's legs from
+// /rest/2.0/complexRelationTypes/{id}. Complex relation type ids are not
+// resolvable via /relationTypes/{id} (that endpoint 404s for them), so
+// relation slots whose Kind is "ComplexRelationType" hydrate here instead.
+func GetComplexRelationTypeFull(ctx context.Context, client *http.Client, id string) (*PrepareCreateComplexRelationTypeFull, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/complexRelationTypes/%s", url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building get complex relation type request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("getting complex relation type details: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getting complex relation type details: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var raw struct {
+		ID       string `json:"id"`
+		PublicID string `json:"publicId"`
+		LegTypes []struct {
+			Role                 string                    `json:"role"`
+			CoRole               string                    `json:"coRole"`
+			RelationTypePublicID string                    `json:"relationTypePublicId"`
+			MinimumOccurrences   int                       `json:"minimumOccurrences"`
+			MaximumOccurrences   *int                      `json:"maximumOccurrences"`
+			AssetType            *rawAssignmentResourceRef `json:"assetType"`
+		} `json:"legTypes"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("decoding complex relation type details response: %w", err)
+	}
+
+	result := PrepareCreateComplexRelationTypeFull{ID: raw.ID, PublicID: raw.PublicID}
+	for _, leg := range raw.LegTypes {
+		entry := PrepareCreateComplexRelationLeg{
+			Role:                 leg.Role,
+			CoRole:               leg.CoRole,
+			RelationTypePublicID: leg.RelationTypePublicID,
+			Min:                  leg.MinimumOccurrences,
+			Max:                  leg.MaximumOccurrences,
+		}
+		if leg.AssetType != nil {
+			entry.AssetTypeID = leg.AssetType.ID
+			entry.AssetTypeName = leg.AssetType.Name
+		}
+		result.Legs = append(result.Legs, entry)
 	}
 	return &result, nil
 }

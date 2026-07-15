@@ -30,6 +30,10 @@ const (
 	relCoRole        = "is represented by"
 	relTargetTypeID  = "00000000-0000-0000-0000-000000031007"
 	relTargetName    = "Data Asset"
+	cxRelTypeID      = "00000000-0000-0000-0000-000000007502"
+	cxRelPublicID    = "FieldMapping_C"
+	cxLeg1Role       = "source"
+	cxLeg2Role       = "target"
 )
 
 // Mock fixture for the consolidated /assignments shape. Kept local rather
@@ -174,8 +178,34 @@ func (m *mockDGC) server() *httptest.Server {
 						"id": relTargetTypeID, "name": relTargetName,
 					},
 				},
+				{
+					"id": "ref-cxrel",
+					"assignedResourceReference": map[string]string{
+						"id": cxRelTypeID, "name": cxRelPublicID, "resourceType": "ComplexRelationType", "resourceDiscriminator": "ComplexRelationType",
+					},
+					"assignedResourcePublicId": cxRelPublicID,
+					"minimumOccurrences":       0,
+				},
 			},
 		}})
+	})
+
+	mux.HandleFunc("GET /rest/2.0/complexRelationTypes/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/complexRelationTypes/")
+		if id != cxRelTypeID {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":       cxRelTypeID,
+			"publicId": cxRelPublicID,
+			"legTypes": []map[string]any{
+				{"role": cxLeg1Role, "coRole": "source (corole)", "relationTypePublicId": "FieldMappingSourceDataElement_C",
+					"minimumOccurrences": 1, "assetType": map[string]string{"id": relTargetTypeID, "name": "Data Element"}},
+				{"role": cxLeg2Role, "coRole": "target (corole)", "relationTypePublicId": "FieldMappingTargetDataElement_C",
+					"minimumOccurrences": 1, "assetType": map[string]string{"id": relTargetTypeID, "name": "Data Element"}},
+			},
+		})
 	})
 
 	mux.HandleFunc("GET /rest/2.0/relationTypes/", func(w http.ResponseWriter, r *http.Request) {
@@ -337,10 +367,18 @@ func TestPrepare_BothResolved_ReturnsReadyWithSchema(t *testing.T) {
 	if def.StringType != "" {
 		t.Errorf("StringType should be empty without includeStringType, got %q", def.StringType)
 	}
-	if len(out.RelationTypes) != 1 {
-		t.Fatalf("expected 1 relation slot in schema, got %d", len(out.RelationTypes))
+	if len(out.RelationTypes) != 2 {
+		t.Fatalf("expected 2 relation slots in schema, got %d", len(out.RelationTypes))
 	}
-	rel := out.RelationTypes[0]
+	var rel, cxRel prepare_create_asset.RelationSchemaEntry
+	for _, e := range out.RelationTypes {
+		switch e.RelationTypeID {
+		case relTypeID:
+			rel = e
+		case cxRelTypeID:
+			cxRel = e
+		}
+	}
 	if rel.RelationTypeID != relTypeID {
 		t.Errorf("expected relation type id %q, got %q", relTypeID, rel.RelationTypeID)
 	}
@@ -355,6 +393,27 @@ func TestPrepare_BothResolved_ReturnsReadyWithSchema(t *testing.T) {
 	}
 	if rel.Direction != "TO_TARGET" {
 		t.Errorf("expected direction %q, got %q", "TO_TARGET", rel.Direction)
+	}
+
+	// The complex relation type is hydrated from /complexRelationTypes/{id}:
+	// no single role, but a legs[] list.
+	if cxRel.Kind != "ComplexRelationType" {
+		t.Errorf("expected kind %q, got %q", "ComplexRelationType", cxRel.Kind)
+	}
+	if cxRel.PublicID != cxRelPublicID {
+		t.Errorf("expected complex relation publicId %q, got %q", cxRelPublicID, cxRel.PublicID)
+	}
+	if cxRel.Role != "" {
+		t.Errorf("expected empty role on complex relation, got %q", cxRel.Role)
+	}
+	if len(cxRel.Legs) != 2 {
+		t.Fatalf("expected 2 legs, got %d", len(cxRel.Legs))
+	}
+	if cxRel.Legs[0].Role != cxLeg1Role || cxRel.Legs[1].Role != cxLeg2Role {
+		t.Errorf("expected leg roles %q/%q, got %q/%q", cxLeg1Role, cxLeg2Role, cxRel.Legs[0].Role, cxRel.Legs[1].Role)
+	}
+	if cxRel.Legs[0].RelationTypePublicID != "FieldMappingSourceDataElement_C" {
+		t.Errorf("expected leg relationTypePublicId, got %q", cxRel.Legs[0].RelationTypePublicID)
 	}
 }
 
