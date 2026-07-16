@@ -9,12 +9,10 @@ import (
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
-	"github.com/collibra/chip/pkg/tools/delete_dq_rule"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
-	"github.com/collibra/chip/pkg/tools/edit_dq_rule"
 	"github.com/collibra/chip/pkg/tools/find_dq_rules"
 	"github.com/collibra/chip/pkg/tools/generate_dq_rule_sql"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
@@ -22,8 +20,6 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
 	"github.com/collibra/chip/pkg/tools/get_context_specification"
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
-	"github.com/collibra/chip/pkg/tools/get_dq_job_log"
-	"github.com/collibra/chip/pkg/tools/get_dq_job_status"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_results"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_template"
@@ -42,7 +38,6 @@ import (
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
-	"github.com/collibra/chip/pkg/tools/run_dq_job"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
 	"github.com/collibra/chip/pkg/tools/search_catalog_columns"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
@@ -93,13 +88,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, edit_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, delete_dq_rule.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
 	toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, run_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job_status.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job_log.NewTool(client))
 	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
 	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))

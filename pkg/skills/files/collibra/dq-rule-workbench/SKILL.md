@@ -33,7 +33,7 @@ Relationship to the other DQ skills:
     `deploy_dq_rule_template` (bulk).
   - Plain-language / AI: `generate_dq_rule_sql` (Text2SQL) → `create_dq_rule`.
 - **Review SQL**: `validate_dq_rule`.
-- **Run & observe**: `run_dq_job`, `get_dq_job_status`, `get_dq_rule_results`.
+- **Read results**: `get_dq_rule_results` (per-run rule outcomes, once the job has run).
 - **Catalog associations**: `edit_asset` (`add_relation`) to Business Rule, Data
   Element, Data Attribute, or a catalog Data Quality Rule asset.
 
@@ -136,8 +136,9 @@ Progress through these states; the user may revise within a state before moving 
      `{jobName, columnName}` list (bulk; rules named `{template}_{column}`).
    - Plain-language path: `create_dq_rule` per column (validated SQL as
      `monitorValue`; a meaningful `monitorName` — see `collibra/dq-rules`).
-   Apply the partial-success model (rule 7). Then run the affected jobs
-   (`run_dq_job`) if the user wants results, and report outcomes with job links.
+   Apply the partial-success model (rule 7), and report outcomes with job links.
+   The rules are evaluated on each job's next (scheduled) run — this flow does not
+   trigger runs. Once a job has run, read outcomes with `get_dq_rule_results`.
 
 ## Rule settings & catalog associations
 
