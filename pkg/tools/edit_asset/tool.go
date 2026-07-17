@@ -165,7 +165,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"On success the response includes a post-edit snapshot of the asset and per-operation before/after values.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(true), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

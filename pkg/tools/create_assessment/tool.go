@@ -74,7 +74,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Use the returned question ids with edit_assessment to fill in the answers afterwards.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

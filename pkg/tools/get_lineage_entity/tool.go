@@ -23,7 +23,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageEn
 					  Do not call this if search_lineage_entities already returned the information you need.`,
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 
