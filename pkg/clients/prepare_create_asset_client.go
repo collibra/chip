@@ -322,10 +322,11 @@ type PrepareCreateScopedAttribute struct {
 	// Max is nil when there is no upper bound (i.e. unbounded).
 	Max *int
 	// FromOwnAssignment is true when the slot comes from the asset type's
-	// own assignment (the first chain level), false when it was unioned in
-	// from a parent asset type. Required-ness is only enforced for the
-	// type's own assignment — parent-level Required flags are
-	// informational.
+	// own assignment (chain level 0), false when it was inherited from a
+	// parent level (a sentinel subtype whose own assignment has empty
+	// domainTypes still inherits its parent's characteristics). Required-ness
+	// is only enforced at create time for the type's own assignment —
+	// parent-level Required flags are informational, matching Core API/UI.
 	FromOwnAssignment bool
 }
 
@@ -637,44 +638,56 @@ func fetchRawAssignments(ctx context.Context, client *http.Client, assetTypeID s
 	return raws, nil
 }
 
-// reduceScopedAssignmentChain unions the applicable assignments across
-// every chain level. An assignment is applicable to the target domain
-// type when its domainTypes either (a) explicitly contains the target
-// or (b) is empty (inherit-sentinel). At least one level must contain
-// the target explicitly, or we return "not allowed". Characteristics
-// are deduped by ID across the union — Collibra subtypes commonly add
-// new characteristics rather than override parent ones, but we
-// defensively dedupe in case of collisions.
+// reduceScopedAssignmentChain resolves the effective assignment for the
+// target domain type, honouring Collibra's all-or-nothing inheritance: an
+// asset type inherits its parent's assignment only until it defines its own.
+// Walking child (level 0) → parents, we locate the "authoritative" level —
+// the lowest level whose assignment explicitly lists the target domain type.
+// Characteristics are unioned only across levels 0..authoritativeLevel
+// inclusive; deeper (further-ancestor) levels are ignored, so a child's own
+// assignment is never polluted by a parent's extra characteristics.
+//
+// Levels above the authoritative one carry empty-domainTypes assignments (the
+// inherit-sentinel, e.g. Acronym → Business Term): they contribute their own
+// characteristics on top of the inherited scope, which is why those levels are
+// still unioned in rather than replaced outright.
+//
+// At least one level must contain the target domain type explicitly, or we
+// return "not allowed". Characteristics are deduped by ID (child-first wins).
 func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID string) (*PrepareCreateScopedAssignment, error) {
 	if len(chain) == 0 {
 		return nil, fmt.Errorf("no assignments found")
 	}
 
-	explicitlyAllowed := false
-	for _, node := range chain {
+	authoritativeLevel := -1
+	for level, node := range chain {
 		for _, a := range node.raws {
 			if containsDomainType(a.DomainTypes, domainTypeID) {
-				explicitlyAllowed = true
+				authoritativeLevel = level
 				break
 			}
 		}
-		if explicitlyAllowed {
+		if authoritativeLevel >= 0 {
 			break
 		}
 	}
-	if !explicitlyAllowed {
+	if authoritativeLevel < 0 {
 		return nil, fmt.Errorf("no scoped assignment found for asset type in this domain type %q", domainTypeID)
 	}
 
-	out := &PrepareCreateScopedAssignment{AssignmentID: chain[0].raws[0].ID}
+	out := &PrepareCreateScopedAssignment{}
 	seenAttrIDs := make(map[string]struct{})
 	seenRelIDs := make(map[string]struct{})
 
-	for level, node := range chain {
+	for level := 0; level <= authoritativeLevel; level++ {
+		node := chain[level]
 		for _, a := range node.raws {
 			applicable := len(a.DomainTypes) == 0 || containsDomainType(a.DomainTypes, domainTypeID)
 			if !applicable {
 				continue
+			}
+			if out.AssignmentID == "" {
+				out.AssignmentID = a.ID
 			}
 			metaByID := make(map[string]rawAssignmentCharacteristicTypeMetadata, len(a.CharacteristicTypes))
 			for _, m := range a.CharacteristicTypes {
@@ -697,9 +710,9 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 						Required:              ref.MinimumOccurrences > 0,
 						Min:                   ref.MinimumOccurrences,
 						Max:                   ref.MaximumOccurrences,
-						// Child-first iteration + dedup means a slot present
-						// on both the type and a parent keeps the type's own
-						// (level 0) origin and flags.
+						// Child-first iteration + dedup means a slot present on
+						// both the type and a parent keeps the type's own
+						// (level 0) origin. Level > 0 means inherited.
 						FromOwnAssignment: level == 0,
 					})
 				case isRelationTypeDiscriminator(disc, rt):
@@ -768,10 +781,12 @@ type PrepareCreateAllowedDomainType struct {
 }
 
 // ListAllowedDomainTypesForAssetType returns the deduped list of domain
-// type IDs the asset type can be created in, walking the parent chain
-// when needed. Subtypes whose own assignments have empty domainTypes
-// (inherit-sentinel) inherit their parent's allowed types — e.g.
-// Acronym → Business Term → Glossary, Business Asset Domain.
+// type IDs the asset type can be created in. Honouring Collibra's
+// all-or-nothing inheritance, we stop at the first chain level that defines
+// any explicit domain type: that level's own assignment governs the allowed
+// domain types, and a parent's are not merged in. Subtypes whose own
+// assignments have only empty domainTypes (inherit-sentinel) fall through to
+// the parent — e.g. Acronym → Business Term → Glossary, Business Asset Domain.
 func ListAllowedDomainTypesForAssetType(ctx context.Context, client *http.Client, assetTypeID string) ([]PrepareCreateAllowedDomainType, error) {
 	chain, err := fetchAssignmentChain(ctx, client, assetTypeID)
 	if err != nil {
@@ -781,14 +796,22 @@ func ListAllowedDomainTypesForAssetType(ctx context.Context, client *http.Client
 	seen := make(map[string]struct{})
 	out := make([]PrepareCreateAllowedDomainType, 0)
 	for _, node := range chain {
+		levelHasExplicit := false
 		for _, a := range node.raws {
 			for _, dt := range a.DomainTypes {
+				levelHasExplicit = true
 				if _, ok := seen[dt.ID]; ok {
 					continue
 				}
 				seen[dt.ID] = struct{}{}
 				out = append(out, PrepareCreateAllowedDomainType{ID: dt.ID, Name: dt.Name})
 			}
+		}
+		// Once a level declares its own domain types, it is authoritative;
+		// deeper ancestors are inherited only by sentinel (empty-domainTypes)
+		// levels, which contribute nothing here and let the walk continue.
+		if levelHasExplicit {
+			break
 		}
 	}
 	return out, nil
