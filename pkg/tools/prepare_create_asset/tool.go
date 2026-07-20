@@ -185,7 +185,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 
 		// Step 4: hydrate the scoped assignment.
-		assignment, err := clients.GetScopedAssignment(ctx, collibraClient, assetType.ID, domain.Type.ID)
+		assignment, err := clients.GetScopedAssignment(ctx, collibraClient, assetType.ID, domain.Type.ID, domain.ID)
 		if err != nil {
 			return Output{
 				Status: StatusNeedsClarification,

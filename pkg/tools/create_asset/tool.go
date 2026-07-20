@@ -227,7 +227,7 @@ func buildExecutionContext(ctx context.Context, client *http.Client, input Input
 		return nil, &Output{Status: StatusValidationError, Message: fmt.Sprintf("Domain %q has no domain type — cannot determine scoped assignment.", domain.Name)}
 	}
 
-	assignment, err := clients.GetScopedAssignment(ctx, client, assetType.ID, domain.Type.ID)
+	assignment, err := clients.GetScopedAssignment(ctx, client, assetType.ID, domain.Type.ID, domain.ID)
 	if err != nil {
 		// Disambiguate "wrong domain type for this asset type" from "asset
 		// type has no domain types at all" — the second case happens with

@@ -372,6 +372,14 @@ type rawScopedAssignment struct {
 	DomainTypes                          []rawAssignmentResourceRef                `json:"domainTypes"`
 	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference  `json:"assignedCharacteristicTypeReferences"`
 	CharacteristicTypes                  []rawAssignmentCharacteristicTypeMetadata `json:"characteristicTypes"`
+	Scope                                *rawAssignmentScope                       `json:"scope"`
+}
+
+type rawAssignmentScope struct {
+	ID          string                     `json:"id"`
+	Name        string                     `json:"name"`
+	Domains     []rawAssignmentResourceRef `json:"domains"`
+	Communities []rawAssignmentResourceRef `json:"communities"`
 }
 
 type rawAssignmentResourceRef struct {
@@ -540,7 +548,7 @@ func ListStatusesAll(ctx context.Context, client *http.Client) ([]PrepareCreateS
 const maxAssignmentChainDepth = 5
 
 // GetScopedAssignment returns the effective scoped assignment for an
-// (assetType, domainType) pair, walking the asset type's parent chain
+// (assetType, domain) pair, walking the asset type's parent chain
 // when needed. Collibra's data model lets a subtype omit domainTypes on
 // its own assignment (signalling "inherit from parent") and contribute
 // its own characteristics on top — see Acronym → Business Term in OOTB
@@ -551,12 +559,21 @@ const maxAssignmentChainDepth = 5
 // must explicitly include the target domain type, otherwise we return
 // "not allowed" — empty-domainTypes-everywhere is not the same as
 // "creatable everywhere".
-func GetScopedAssignment(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) (*PrepareCreateScopedAssignment, error) {
+//
+// Scope narrows which assignments are considered at all: a scoped
+// assignment (scope != null) governs only the domains its scope covers,
+// so it is dropped unless the target domain — identified by domainID —
+// falls under that scope. See resolveCoveredScopes.
+func GetScopedAssignment(ctx context.Context, client *http.Client, assetTypeID, domainTypeID, domainID string) (*PrepareCreateScopedAssignment, error) {
 	chain, err := fetchAssignmentChain(ctx, client, assetTypeID)
 	if err != nil {
 		return nil, err
 	}
-	return reduceScopedAssignmentChain(chain, domainTypeID)
+	coveredScopes, err := resolveCoveredScopes(ctx, client, chain, domainID)
+	if err != nil {
+		return nil, err
+	}
+	return reduceScopedAssignmentChain(chain, domainTypeID, coveredScopes)
 }
 
 // assignmentChainNode is one level of the asset type's parent chain — the
@@ -638,6 +655,154 @@ func fetchRawAssignments(ctx context.Context, client *http.Client, assetTypeID s
 	return raws, nil
 }
 
+// resolveCoveredScopes returns the IDs of the scopes — among the chain's
+// scoped assignments — that cover the target domain: the domain is listed
+// on the scope directly, or one of the communities the domain sits under
+// (its own community or any ancestor) is. The assignment listing usually
+// embeds the scope's membership; when both lists come back empty the scope
+// is re-fetched from /scopes/{id} before concluding anything. Community
+// ancestry is fetched lazily, so the common global-only case costs no
+// extra calls.
+func resolveCoveredScopes(ctx context.Context, client *http.Client, chain []assignmentChainNode, domainID string) (map[string]struct{}, error) {
+	scopes := make(map[string]*rawAssignmentScope)
+	for _, node := range chain {
+		for _, a := range node.raws {
+			if a.Scope != nil && a.Scope.ID != "" {
+				scopes[a.Scope.ID] = a.Scope
+			}
+		}
+	}
+	covered := make(map[string]struct{})
+	if len(scopes) == 0 {
+		return covered, nil
+	}
+
+	var ancestorCommunities map[string]struct{}
+	for id, scope := range scopes {
+		s := scope
+		if len(s.Domains) == 0 && len(s.Communities) == 0 {
+			full, err := getScopeByID(ctx, client, id)
+			if err != nil {
+				return nil, fmt.Errorf("resolving scope %q (%s): %w", scope.Name, id, err)
+			}
+			s = full
+		}
+		if containsResourceRef(s.Domains, domainID) {
+			covered[id] = struct{}{}
+			continue
+		}
+		if len(s.Communities) == 0 {
+			continue
+		}
+		if ancestorCommunities == nil {
+			var err error
+			ancestorCommunities, err = fetchDomainCommunityAncestors(ctx, client, domainID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		for _, c := range s.Communities {
+			if _, ok := ancestorCommunities[c.ID]; ok {
+				covered[id] = struct{}{}
+				break
+			}
+		}
+	}
+	return covered, nil
+}
+
+// getScopeByID fetches a scope's full definition, including the domains
+// and communities it covers.
+func getScopeByID(ctx context.Context, client *http.Client, scopeID string) (*rawAssignmentScope, error) {
+	var scope rawAssignmentScope
+	if err := getJSON(ctx, client, fmt.Sprintf("/rest/2.0/scopes/%s", url.PathEscape(scopeID)), &scope); err != nil {
+		return nil, err
+	}
+	return &scope, nil
+}
+
+// maxCommunityAncestryDepth bounds the walk from a domain's community up
+// through parent communities. Real hierarchies are shallow; the bound
+// guards against cyclic parent data.
+const maxCommunityAncestryDepth = 20
+
+// fetchDomainCommunityAncestors returns the IDs of every community the
+// domain sits under: its own community plus each ancestor up to the root.
+// A scope that lists any of these communities covers the domain.
+func fetchDomainCommunityAncestors(ctx context.Context, client *http.Client, domainID string) (map[string]struct{}, error) {
+	var domain struct {
+		Community *rawAssignmentResourceRef `json:"community"`
+	}
+	if err := getJSON(ctx, client, fmt.Sprintf("/rest/2.0/domains/%s", url.PathEscape(domainID)), &domain); err != nil {
+		return nil, fmt.Errorf("getting domain %q for scope coverage: %w", domainID, err)
+	}
+
+	ancestors := make(map[string]struct{})
+	current := domain.Community
+	for depth := 0; current != nil && current.ID != "" && depth < maxCommunityAncestryDepth; depth++ {
+		if _, looped := ancestors[current.ID]; looped {
+			break
+		}
+		ancestors[current.ID] = struct{}{}
+		var community struct {
+			Parent *rawAssignmentResourceRef `json:"parent"`
+		}
+		if err := getJSON(ctx, client, fmt.Sprintf("/rest/2.0/communities/%s", url.PathEscape(current.ID)), &community); err != nil {
+			return nil, fmt.Errorf("getting community %q for scope coverage: %w", current.ID, err)
+		}
+		current = community.Parent
+	}
+	return ancestors, nil
+}
+
+// getJSON is the shared GET-and-decode plumbing for the small lookups
+// above that need no custom status handling.
+func getJSON(ctx context.Context, client *http.Client, reqURL string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("building request for %s: %w", reqURL, err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("getting %s: %w", reqURL, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("getting %s: status %d: %s", reqURL, resp.StatusCode, string(body))
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decoding %s response: %w", reqURL, err)
+	}
+	return nil
+}
+
+// governingAssignments picks, within one chain level, the assignments that
+// can govern the target domain. Scope is the first cut: an assignment is in
+// play only when it is global (scope == null) or its scope covers the
+// domain. A covering scoped assignment then replaces the global one
+// outright — exactly one assignment governs a (type, domain) pair in
+// Collibra; scoped and global are never merged.
+func governingAssignments(raws []rawScopedAssignment, coveredScopes map[string]struct{}) []rawScopedAssignment {
+	var global, scoped []rawScopedAssignment
+	for _, a := range raws {
+		if a.Scope == nil {
+			global = append(global, a)
+			continue
+		}
+		if _, ok := coveredScopes[a.Scope.ID]; ok {
+			scoped = append(scoped, a)
+		}
+	}
+	if len(scoped) > 0 {
+		return scoped
+	}
+	return global
+}
+
 // reduceScopedAssignmentChain resolves the effective assignment for the
 // target domain type, honouring Collibra's all-or-nothing inheritance: an
 // asset type inherits its parent's assignment only until it defines its own.
@@ -654,15 +819,15 @@ func fetchRawAssignments(ctx context.Context, client *http.Client, assetTypeID s
 //
 // At least one level must contain the target domain type explicitly, or we
 // return "not allowed". Characteristics are deduped by ID (child-first wins).
-func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID string) (*PrepareCreateScopedAssignment, error) {
+func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID string, coveredScopes map[string]struct{}) (*PrepareCreateScopedAssignment, error) {
 	if len(chain) == 0 {
 		return nil, fmt.Errorf("no assignments found")
 	}
 
 	authoritativeLevel := -1
 	for level, node := range chain {
-		for _, a := range node.raws {
-			if containsDomainType(a.DomainTypes, domainTypeID) {
+		for _, a := range governingAssignments(node.raws, coveredScopes) {
+			if containsResourceRef(a.DomainTypes, domainTypeID) {
 				authoritativeLevel = level
 				break
 			}
@@ -681,8 +846,8 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 
 	for level := 0; level <= authoritativeLevel; level++ {
 		node := chain[level]
-		for _, a := range node.raws {
-			applicable := len(a.DomainTypes) == 0 || containsDomainType(a.DomainTypes, domainTypeID)
+		for _, a := range governingAssignments(node.raws, coveredScopes) {
+			applicable := len(a.DomainTypes) == 0 || containsResourceRef(a.DomainTypes, domainTypeID)
 			if !applicable {
 				continue
 			}
@@ -741,7 +906,7 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 	return out, nil
 }
 
-func containsDomainType(refs []rawAssignmentResourceRef, id string) bool {
+func containsResourceRef(refs []rawAssignmentResourceRef, id string) bool {
 	for _, r := range refs {
 		if r.ID == id {
 			return true

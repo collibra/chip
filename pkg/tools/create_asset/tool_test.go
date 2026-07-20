@@ -55,6 +55,10 @@ type mockDGC struct {
 	createAssetCode int    // override status; default 201
 	createAttrCode  int    // override status; default 201
 	noAssignments   bool   // /assignments/assetType/{id} returns [] (e.g. subtype with inherited assignments)
+
+	// extraAssignments are appended to the default Business Term assignment
+	// in the /assignments/assetType/{id} response (e.g. a scoped assignment).
+	extraAssignments []map[string]any
 }
 
 type assetTypeRow struct {
@@ -162,7 +166,7 @@ func (m *mockDGC) server() *httptest.Server {
 			writeJSON(w, http.StatusOK, []any{})
 			return
 		}
-		writeJSON(w, http.StatusOK, []map[string]any{
+		payload := []map[string]any{
 			{
 				"id": "assignment-bt",
 				"domainTypes": []map[string]string{
@@ -188,7 +192,9 @@ func (m *mockDGC) server() *httptest.Server {
 				},
 				"characteristicTypes": []any{},
 			},
-		})
+		}
+		payload = append(payload, m.extraAssignments...)
+		writeJSON(w, http.StatusOK, payload)
 	})
 
 	// /attributeTypes/{id} — used to pull stringType for RICH_TEXT detection
@@ -830,5 +836,59 @@ func TestCreateAsset_RequiredFieldsMissing(t *testing.T) {
 		if out.Status != create_asset.StatusValidationError {
 			t.Errorf("[%d] want validation_error for %#v, got %q", i, in, out.Status)
 		}
+	}
+}
+
+// Regression for the 2026-07-20 incident: Business Term carries, next to its
+// global assignment, an assignment scoped to a "Pricebooks" scope covering
+// other domains. Both share the Glossary domain type, and the scoped
+// assignment's required Pricebook attributes were unioned into the required
+// set, blocking every Business Term create in ordinary glossary domains.
+// An assignment whose scope does not cover the target domain must be invisible.
+func TestCreateAsset_ScopedAssignmentElsewhere_DoesNotBlockCreate(t *testing.T) {
+	m := newMockDGC(t)
+	m.extraAssignments = []map[string]any{{
+		"id": "assignment-pricebooks",
+		"domainTypes": []map[string]string{
+			{"id": glossaryTypeID, "name": glossaryTypeName},
+		},
+		"scope": map[string]any{
+			"id":   "00000000-0000-0000-0000-000000077001",
+			"name": "Pricebooks",
+			"domains": []map[string]string{
+				{"id": "00000000-0000-0000-0000-000000099777", "name": "Pricebook 4"},
+			},
+		},
+		"assignedCharacteristicTypeReferences": []map[string]any{
+			{
+				"id": "ref-pb-premier",
+				"assignedResourceReference": map[string]string{
+					"id":                    "00000000-0000-0000-0000-000000000777",
+					"name":                  "Pricebook 4 - Premier Package",
+					"resourceType":          "StringAttributeType",
+					"resourceDiscriminator": "StringAttributeType",
+				},
+				"assignedResourcePublicId": "Pricebook4PremierPackage",
+				"minimumOccurrences":       1,
+			},
+		},
+		"characteristicTypes": []any{},
+	}}
+	c, m := newClient(t, m)
+
+	out, err := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:       "Business Associate Agreement",
+		AssetType:  btTypeName,
+		Domain:     glossaryDomain,
+		Attributes: []create_asset.InputAttribute{{Name: defAttrName, Value: "A legally binding contract."}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != create_asset.StatusSuccess {
+		t.Fatalf("scoped assignment covering another domain must not block the create, got %q (%s)", out.Status, out.Message)
+	}
+	if len(m.createdAssets) != 1 {
+		t.Fatalf("expected 1 POST /assets, got %d", len(m.createdAssets))
 	}
 }

@@ -1,6 +1,13 @@
 package clients
 
-import "testing"
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/collibra/chip/pkg/tools/testutil"
+)
 
 // attrByID finds a resolved attribute slot by its attribute type id.
 func attrByID(attrs []PrepareCreateScopedAttribute, id string) (PrepareCreateScopedAttribute, bool) {
@@ -51,7 +58,7 @@ func TestReduceScopedAssignmentChain_OwnAssignmentWins_DropsParentExtras(t *test
 		}}},
 	}
 
-	got, err := reduceScopedAssignmentChain(chain, domainType)
+	got, err := reduceScopedAssignmentChain(chain, domainType, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -95,7 +102,7 @@ func TestReduceScopedAssignmentChain_SentinelInheritsParent(t *testing.T) {
 		}}},
 	}
 
-	got, err := reduceScopedAssignmentChain(chain, domainType)
+	got, err := reduceScopedAssignmentChain(chain, domainType, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,7 +133,171 @@ func TestReduceScopedAssignmentChain_NoExplicitDomainType_NotAllowed(t *testing.
 			DomainTypes: []rawAssignmentResourceRef{{ID: "dt-other", Name: "Other"}},
 		}}},
 	}
-	if _, err := reduceScopedAssignmentChain(chain, "dt-glossary"); err == nil {
+	if _, err := reduceScopedAssignmentChain(chain, "dt-glossary", nil); err == nil {
 		t.Fatal("expected 'not allowed' error when no level lists the target domain type")
+	}
+}
+
+// A scoped assignment whose scope does not cover the target domain must be
+// invisible: its characteristics never reach the effective assignment. This
+// is the 2026-07-20 "Pricebooks" regression — a Business Term assignment
+// scoped elsewhere shared the Glossary domain type, and its required
+// Pricebook attributes blocked creates in every ordinary glossary domain.
+func TestReduceScopedAssignmentChain_ScopedAssignmentOutsideScope_Ignored(t *testing.T) {
+	const domainType = "dt-glossary"
+	chain := []assignmentChainNode{
+		{raws: []rawScopedAssignment{
+			{
+				ID:          "asgn-global",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("def", "Definition", 1),
+				},
+			},
+			{
+				ID:          "asgn-pricebooks",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				Scope: &rawAssignmentScope{
+					ID: "scope-pricebooks", Name: "Pricebooks",
+					Domains: []rawAssignmentResourceRef{{ID: "dom-pricebook-4"}},
+				},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("pb-premier", "Pricebook 4 - Premier Package", 1),
+					attrRef("pb-ultimate", "Pricebook 4 - Ultimate Package", 1),
+				},
+			},
+		}},
+	}
+
+	// No scope covers the target domain.
+	got, err := reduceScopedAssignmentChain(chain, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := attrByID(got.Attributes, "def"); !ok {
+		t.Errorf("global Definition must be present, got %+v", got.Attributes)
+	}
+	if len(got.Attributes) != 1 {
+		t.Errorf("scoped Pricebook attributes must NOT be unioned in, got %+v", got.Attributes)
+	}
+	if got.AssignmentID != "asgn-global" {
+		t.Errorf("expected the global assignment to govern, got %q", got.AssignmentID)
+	}
+}
+
+// When the target domain IS covered by an assignment's scope, that scoped
+// assignment replaces the global one outright — exactly one assignment
+// governs a (type, domain) pair; scoped and global are never merged.
+func TestReduceScopedAssignmentChain_CoveringScopedAssignmentWinsOverGlobal(t *testing.T) {
+	const domainType = "dt-glossary"
+	chain := []assignmentChainNode{
+		{raws: []rawScopedAssignment{
+			{
+				ID:          "asgn-global",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("def", "Definition", 1),
+				},
+			},
+			{
+				ID:          "asgn-pricebooks",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				Scope: &rawAssignmentScope{
+					ID: "scope-pricebooks", Name: "Pricebooks",
+					Domains: []rawAssignmentResourceRef{{ID: "dom-pricebook-4"}},
+				},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("pb-premier", "Pricebook 4 - Premier Package", 1),
+				},
+			},
+		}},
+	}
+
+	covered := map[string]struct{}{"scope-pricebooks": {}}
+	got, err := reduceScopedAssignmentChain(chain, domainType, covered)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := attrByID(got.Attributes, "pb-premier"); !ok {
+		t.Errorf("covering scoped assignment's attribute must be present, got %+v", got.Attributes)
+	}
+	if _, ok := attrByID(got.Attributes, "def"); ok {
+		t.Errorf("global Definition must NOT be merged with the covering scoped assignment, got %+v", got.Attributes)
+	}
+	if got.AssignmentID != "asgn-pricebooks" {
+		t.Errorf("expected the scoped assignment to govern, got %q", got.AssignmentID)
+	}
+}
+
+// resolveCoveredScopes must recognise every way a scope can cover the target
+// domain: the domain listed directly, an ancestor community listed (walking
+// domain → community → parent community), and membership lists omitted from
+// the assignment payload (re-fetched from /scopes/{id}). A scope covering
+// only other domains stays uncovered.
+func TestResolveCoveredScopes(t *testing.T) {
+	const (
+		targetDomain   = "dom-target"
+		childCommunity = "c-child"
+		rootCommunity  = "c-root"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/domains/"+targetDomain, func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(t, w, map[string]any{
+			"id": targetDomain, "community": map[string]string{"id": childCommunity},
+		})
+	})
+	mux.HandleFunc("GET /rest/2.0/communities/"+childCommunity, func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(t, w, map[string]any{
+			"id": childCommunity, "parent": map[string]string{"id": rootCommunity},
+		})
+	})
+	mux.HandleFunc("GET /rest/2.0/communities/"+rootCommunity, func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(t, w, map[string]any{"id": rootCommunity})
+	})
+	mux.HandleFunc("GET /rest/2.0/scopes/scope-lazy", func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(t, w, map[string]any{
+			"id": "scope-lazy", "name": "Lazy",
+			"domains": []map[string]string{{"id": targetDomain}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	chain := []assignmentChainNode{{raws: []rawScopedAssignment{
+		{ID: "a-direct", Scope: &rawAssignmentScope{
+			ID: "scope-direct", Domains: []rawAssignmentResourceRef{{ID: targetDomain}},
+		}},
+		{ID: "a-community", Scope: &rawAssignmentScope{
+			ID: "scope-community", Communities: []rawAssignmentResourceRef{{ID: rootCommunity}},
+		}},
+		{ID: "a-elsewhere", Scope: &rawAssignmentScope{
+			ID: "scope-elsewhere", Domains: []rawAssignmentResourceRef{{ID: "dom-other"}},
+		}},
+		// Membership omitted on the wire — forces the /scopes/{id} fetch.
+		{ID: "a-lazy", Scope: &rawAssignmentScope{ID: "scope-lazy", Name: "Lazy"}},
+		{ID: "a-global"},
+	}}}
+
+	covered, err := resolveCoveredScopes(t.Context(), client, chain, targetDomain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, want := range []string{"scope-direct", "scope-community", "scope-lazy"} {
+		if _, ok := covered[want]; !ok {
+			t.Errorf("scope %q must cover the target domain, covered=%v", want, covered)
+		}
+	}
+	if _, ok := covered["scope-elsewhere"]; ok {
+		t.Errorf("scope covering only other domains must NOT be covered, covered=%v", covered)
+	}
+}
+
+func writeTestJSON(t *testing.T, w http.ResponseWriter, v any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Errorf("encoding test response: %v", err)
 	}
 }
