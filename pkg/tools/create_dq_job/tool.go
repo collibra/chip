@@ -56,7 +56,7 @@ type Input struct {
 
 	// --- Column selection. Omit to monitor ALL columns (the default). Provide a subset to
 	// scope profiling/monitoring to just those columns (each sent with selected=true). ---
-	SelectedColumns []string `json:"selectedColumns,omitempty" jsonschema:"Columns to monitor. Omit for ALL columns (default). Provide a subset — exact names from prepare_create_data_quality_job's columns — to profile only those. Does not change the source query (still SELECT *); only scopes what is profiled."`
+	SelectedColumns []string `json:"selectedColumns,omitempty" jsonschema:"Columns to monitor. Omit for ALL columns (default → the source query scans SELECT *). Provide a subset — exact names from prepare_create_data_quality_job's columns — to profile only those; the selected columns are projected into the source query (SELECT \"col1\", \"col2\", ...), so only they are scanned and profiled."`
 
 	// --- Monitors. Omit to use the default set; provide an authoritative set of monitor keys
 	// to enable (anything not listed is turned off). descriptiveStatistics unmasks sensitive
