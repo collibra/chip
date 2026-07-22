@@ -7,3 +7,4 @@ build
 mcp.yaml
 oas/**
 mise.toml
+.DS_Store

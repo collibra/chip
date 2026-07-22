@@ -12,9 +12,15 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 - [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
 - [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
+- [`edge_find_connections`](pkg/tools/edge_find_connections/) - Find existing Edge connections by name, to reuse instead of duplicating. **Requires:** `dgc.edge-view-connections-and-capabilities`
+- [`find_domain_types`](pkg/tools/find_domain_types/) - Resolve a domain type name (e.g. "Physical Data Dictionary") to its UUID
+- [`find_users`](pkg/tools/find_users/) - Resolve a user name to their UUID, e.g. for a database asset's owners
 - [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID, including the asset's assignable attribute schema (every attribute it can hold, including empty ones)
 - [`get_business_term_data`](pkg/tools/get_business_term_data/) - Trace a business term back to its connected physical data assets
+- [`get_job_status`](pkg/tools/get_job_status/) - Poll the status of a DGC job, e.g. a jdbc-ingestion sync started by `start_ingestion`
 - [`get_column_semantics`](pkg/tools/get_column_semantics/) - Retrieve data attributes, measures, and business assets connected to a column
+- [`get_data_source_setup_guide`](pkg/tools/get_data_source_setup_guide/) - Look up JDBC driver class, connection string format, and connection properties for a data source from Collibra's documentation
+- [`edge_get_job_status`](pkg/tools/edge_get_job_status/) - Poll the status of an Edge job, e.g. a connection test or capability run
 - [`get_lineage_downstream`](pkg/tools/get_lineage_downstream/) - Get downstream technical lineage (consumers) for a data entity
 - [`get_lineage_entity`](pkg/tools/get_lineage_entity/) - Get metadata about a specific entity in the technical lineage graph
 - [`get_lineage_transformation`](pkg/tools/get_lineage_transformation/) - Get details and logic of a specific data transformation
@@ -22,7 +28,9 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`get_measure_data`](pkg/tools/get_measure_data/) - Trace a measure back to its underlying physical columns and tables
 - [`get_table_semantics`](pkg/tools/get_table_semantics/) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
 - [`list_asset_types`](pkg/tools/list_asset_types/) - List available asset types
+- [`edge_list_capability_types`](pkg/tools/edge_list_capability_types/) - List capability and connection types available on an Edge site, with their manifests. **Requires:** `dgc.edge-view-connections-and-capabilities`
 - [`list_data_contract`](pkg/tools/list_data_contracts/) - List data contracts with pagination
+- [`edge_list_sites`](pkg/tools/edge_list_sites/) - List available Edge sites. **Requires:** `dgc.edge-view-connections-and-capabilities`
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
 - [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets; filters (status, community, domain, domain type, asset type, created-by) accept names or UUIDs
@@ -30,11 +38,17 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`search_data_classification_match`](pkg/tools/search_data_classification_matches/) - Search for associations between data classes and assets. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`search_lineage_entities`](pkg/tools/search_lineage_entities/) - Search for entities in the technical lineage graph
 - [`search_lineage_transformations`](pkg/tools/search_lineage_transformations/) - Search for transformations in the technical lineage graph
+- [`test_connection`](pkg/tools/test_connection/) - Test whether an Edge connection can reach its data source. **Requires:** `dgc.edge-integration-capability-manage`
 
 ### Write Tools
 
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
+- [`configure_database_schemas`](pkg/tools/configure_database_schemas/) - Discover and configure schema/table synchronization rules for a database registered via register_database, for jdbc-ingestion
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
+- [`edge_create_capability`](pkg/tools/edge_create_capability/) - Create or update an Edge capability (e.g. jdbc-ingestion). **Requires:** `dgc.edge-integration-capability-manage`
+- [`create_community`](pkg/tools/create_community/) - Create a DGC community
+- [`edge_create_connection`](pkg/tools/edge_create_connection/) - Create or update an Edge connection (e.g. a JDBC connection). **Requires:** `dgc.edge-integration-capability-manage`
+- [`create_domain`](pkg/tools/create_domain/) - Create a DGC domain within a community
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `set_attribute`, `add_attribute`, `remove_attribute` - set an attribute value (creates if empty, updates if present), append an extra value to a multi-valued attribute, or clear one (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
@@ -44,7 +58,10 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
     - `remove_responsibility` - unassign a user or group from a resource role (only directly-assigned responsibilities, not inherited ones)
 - [`init_data_contract`](pkg/tools/init_data_contract/) - Initialize a new data contract asset governing a Data Product Port, with an optional initial manifest. **Requires:** `dgc.data-contract`
 - [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract. **Requires:** `dgc.data-contract`
+- [`register_database`](pkg/tools/register_database/) - Discover a database through an Edge connection and register it as a Database asset, for jdbc-ingestion
 - [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match. **Requires:** `dgc.classify`, `dgc.catalog`, `dgc.data-classes-edit`
+- [`start_ingestion`](pkg/tools/start_ingestion/) - Trigger a jdbc-ingestion capability run for a registered database
+- [`upload_file`](pkg/tools/upload_file/) - Upload a file (JDBC driver, TLS certificate, private key, keytab, …) to an Edge site. **Requires:** `dgc.edge-integration-capability-manage`
 
 ## Quick Start
 
@@ -213,7 +230,7 @@ Some functionality ships behind an opt-in `experimental` flag. These features ar
 
 - `context-specifications` — Context specification tools: `list_context_specifications`, `get_context_specification`, and the `contextSpecificationId` parameter on `get_asset_details`. These tools generate structured YAML context for assets using the Semantic Blueprint API.
 
-- `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
+- `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, jdbc-ingestion setup, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
 
   Point chip at an **external skills directory** with `--skills-dir=<path>` (or `COLLIBRA_MCP_SKILLS_DIR`, or `mcp.skills-dir` in YAML) to add your own skills on top of the embedded ones. The expected layout is `<dir>/<namespace>/<name>/SKILL.md` (with optional `references/*.md` and `_shared/*.md` siblings) — same as the bundled catalog. External skills whose name matches an embedded skill (e.g. `collibra/lineage`) **fully replace** the embedded entry, including its resources, so you can override the shipped guides without rebuilding chip. `~` and `~user` in the path are expanded.
 
