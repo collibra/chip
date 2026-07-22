@@ -10,6 +10,8 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 ### Read Tools
 
+- [`check_user_data_object_access`](pkg/tools/check_user_data_object_access/) - Check whether a user has access to one or more data objects (by ID) and through which roles (access controls). Defaults to the current user
+- [`get_data_access_data_source`](pkg/tools/get_data_access_data_source/) - Fetch a Collibra Data Access data source by ID, resolving an opaque data source ID to its name, type, and description
 - [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. **Requires:** `dgc.ai-copilot`
 - [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. **Requires:** `dgc.ai-copilot`
 - [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID
@@ -26,6 +28,8 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
 - [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets
+- [`search_data_access_identities`](pkg/tools/search_lineage_transformations/) - Search for Data Access users (identities) by name and/or email
+- [`search_data_access_objects`](pkg/tools/search_lineage_transformations/) - Search for data objects in Collibra Data Access (tables, columns, schemas, views, and other entities tracked in registered data sources)
 - [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters. **Requires:** `dgc.data-classes-read`
 - [`search_data_classification_match`](pkg/tools/search_data_classification_matches/) - Search for associations between data classes and assets. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`search_lineage_entities`](pkg/tools/search_lineage_entities/) - Search for entities in the technical lineage graph
@@ -35,6 +39,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
+- [`create_data_access_request`](pkg/tools/create_asset/) - Create a new Collibra Data Access request on behalf of one or more users for one or more data objects
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `update_attribute`, `add_attribute`, `remove_attribute` - change, append, or clear an attribute value (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)

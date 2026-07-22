@@ -5,14 +5,18 @@ import (
 	"net/http"
 
 	"github.com/collibra/chip/pkg/chip"
+	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/check_user_data_object_access"
 	"github.com/collibra/chip/pkg/tools/create_asset"
+	"github.com/collibra/chip/pkg/tools/create_data_access_request"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
+	"github.com/collibra/chip/pkg/tools/get_data_access_data_source"
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
@@ -27,11 +31,12 @@ import (
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
+	"github.com/collibra/chip/pkg/tools/search_data_access_identities"
+	"github.com/collibra/chip/pkg/tools/search_data_access_objects"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
-	"github.com/collibra/chip/pkg/skills"
 )
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
@@ -68,6 +73,11 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
+	toolRegister(server, toolConfig, search_data_access_identities.NewTool(client))
+	toolRegister(server, toolConfig, search_data_access_objects.NewTool(client))
+	toolRegister(server, toolConfig, create_data_access_request.NewTool(client))
+	toolRegister(server, toolConfig, check_user_data_object_access.NewTool(client))
+	toolRegister(server, toolConfig, get_data_access_data_source.NewTool(client))
 
 	if toolConfig.EnableDebugTools {
 		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))

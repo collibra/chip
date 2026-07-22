@@ -34,6 +34,7 @@ type DataAccessControlDetails struct {
 	What              []DataAccessWhatItem     `json:"what" jsonschema:"List of access controls that this control applies to (the WHAT scope)"`
 	Who               []DataAccessWhoItem      `json:"who" jsonschema:"List of principals (users, access controls, data sources) that are granted access by this control"`
 	SyncData          []DataAccessSyncData     `json:"syncData" jsonschema:"Synchronization status per linked data source. Valid sync statuses: Notconnected, Failed, Outofdate, Inprogress, Synced, Outofsync."`
+	Url               string                   `json:"url" jsonschema:"Url in the Collibra UI to view access control"`
 }
 
 // DataAccessSyncData holds the sync status of an access control for a single data source.
@@ -98,7 +99,7 @@ func GetDataAccessControl(ctx context.Context, httpClient *http.Client, id strin
 		return nil, err
 	}
 
-	details := mapToDataAccessControlDetails(ac)
+	details := mapToDataAccessControlDetails(ctx, ac)
 
 	for whatItem, err := range accessControlClient.GetAccessControlWhatAccessControlList(ctx, id) {
 		if err != nil {
@@ -169,12 +170,65 @@ func mapToDataAccessWhoItem(w *types.AccessWhoItem) DataAccessWhoItem {
 	return item
 }
 
+// DataAccessDataSource holds the details of a single Data Access data source.
+type DataAccessDataSource struct {
+	ID          string    `json:"id" jsonschema:"Unique identifier of the data source"`
+	Name        string    `json:"name" jsonschema:"Display name of the data source"`
+	Type        string    `json:"type" jsonschema:"Type identifier of the data source, set by the connector during a sync (e.g. snowflake, databricks, bigquery)"`
+	Description string    `json:"description" jsonschema:"Description of the data source"`
+	ParentID    string    `json:"parentId,omitempty" jsonschema:"Identifier of the parent data source, when this data source has one"`
+	CreatedAt   time.Time `json:"createdAt" jsonschema:"Timestamp when the data source was created"`
+	ModifiedAt  time.Time `json:"modifiedAt" jsonschema:"Timestamp when the data source was last modified"`
+	Url         string    `json:"url" jsonschema:"Url in the Collibra UI to view data source"`
+}
+
+// GetDataAccessDataSource retrieves a single Data Access data source by ID.
+// It creates an sdk.CollibraClient using chip's existing HTTP client via sdk.WithHTTPClient,
+// so URL routing and authentication are handled by chip's RoundTripper.
+func GetDataAccessDataSource(ctx context.Context, httpClient *http.Client, id string) (*DataAccessDataSource, error) {
+	collibraHost, ok := chip.GetCollibraHost(ctx)
+	if !ok {
+		return nil, fmt.Errorf("collibra host not configured in context")
+	}
+	dataAccessURL := strings.TrimSuffix(collibraHost, "/") + "/dataAccess"
+
+	collibraClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data access client: %w", err)
+	}
+
+	ds, err := collibraClient.DataSource().GetDataSource(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapToDataAccessDataSource(ctx, ds), nil
+}
+
+func mapToDataAccessDataSource(ctx context.Context, ds *types.DataSource) *DataAccessDataSource {
+	uiURL := buildUiUrl(ctx, "data-sources", ds.Id)
+	out := &DataAccessDataSource{
+		ID:          ds.Id,
+		Name:        ds.Name,
+		Type:        ds.Type,
+		Description: ds.Description,
+		CreatedAt:   ds.CreatedAt,
+		ModifiedAt:  ds.ModifiedAt,
+		Url:         uiURL,
+	}
+	if ds.Parent != nil {
+		out.ParentID = ds.Parent.Id
+	}
+	return out
+}
+
 // DataAccessIdentity represents a user in Collibra Data Access.
 type DataAccessIdentity struct {
 	ID    string  `json:"id" jsonschema:"Unique identifier of the user"`
 	Name  string  `json:"name" jsonschema:"Display name of the user"`
 	Email *string `json:"email,omitempty" jsonschema:"Email address of the user"`
 	Type  string  `json:"type" jsonschema:"User type: Human or Machine"`
+	Url   string  `json:"url" jsonschema:"Url in the Collibra UI to view identity"`
 }
 
 // SearchDataAccessIdentitiesResult holds a page of identities.
@@ -209,7 +263,7 @@ func SearchDataAccessIdentities(ctx context.Context, httpClient *http.Client, na
 			return nil, err
 		}
 
-		identity := mapToDataAccessIdentity(user)
+		identity := mapToDataAccessIdentity(ctx, user)
 		if name != "" && !strings.Contains(strings.ToLower(identity.Name), strings.ToLower(name)) {
 			return &SearchDataAccessIdentitiesResult{Items: []*DataAccessIdentity{}}, nil
 		}
@@ -233,7 +287,7 @@ func SearchDataAccessIdentities(ctx context.Context, httpClient *http.Client, na
 		if iterErr != nil {
 			return nil, iterErr
 		}
-		result.Items = append(result.Items, mapToDataAccessIdentity(user))
+		result.Items = append(result.Items, mapToDataAccessIdentity(ctx, user))
 		if len(result.Items) >= limit {
 			break
 		}
@@ -252,6 +306,7 @@ type DataAccessObject struct {
 	Description           string                 `json:"description" jsonschema:"Description of the data object"`
 	DataSourceID          string                 `json:"dataSourceId,omitempty" jsonschema:"Identifier of the data source the object belongs to"`
 	ApplicablePermissions []DataAccessPermission `json:"applicablePermissions,omitempty" jsonschema:"Source-system permissions that can be requested or granted on this data object (and its descendants). Each permission carries its name and description."`
+	Url                   string                 `json:"url" jsonschema:"Url in the Collibra UI to view the data object"`
 }
 
 // DataAccessPermission is a permission that can be set on a data object.
@@ -312,12 +367,178 @@ func SearchDataAccessObjects(ctx context.Context, httpClient *http.Client, name 
 		if iterErr != nil {
 			return nil, iterErr
 		}
-		result.Items = append(result.Items, mapToDataAccessObject(obj))
+		result.Items = append(result.Items, mapToDataAccessObject(ctx, obj))
 		if len(result.Items) >= limit {
 			break
 		}
 	}
 	return result, nil
+}
+
+// DataObjectAccessRole is an access control (a "role") that grants a user access to a data
+// object. It is the trimmed form surfaced in NearestAccessControls.
+type DataObjectAccessRole struct {
+	ID       string                   `json:"id" jsonschema:"Unique identifier of the access control granting the access"`
+	Name     string                   `json:"name" jsonschema:"Name of the access control (role) granting the access"`
+	Action   string                   `json:"action" jsonschema:"Action type of the access control: Grant, Mask, Filter, Share, Group, or FilterRule"`
+	State    string                   `json:"state" jsonschema:"State of the access control: Active, Inactive, or Deleted"`
+	Category *DataAccessGrantCategory `json:"category,omitempty" jsonschema:"Grant category details, present only for Grant action type"`
+}
+
+// UserDataObjectAccess describes the access a single user has on a single data object, and the
+// roles (access controls) that grant it.
+type UserDataObjectAccess struct {
+	HasAccess         bool                   `json:"hasAccess" jsonschema:"Whether the user has any access to the data object"`
+	Permissions       []string               `json:"permissions,omitempty" jsonschema:"Source-system permissions the user has on the data object (e.g. SELECT)"`
+	GlobalPermissions []string               `json:"globalPermissions,omitempty" jsonschema:"Global permissions the user has on the data object (e.g. READ)"`
+	ExpiresAt         *time.Time             `json:"expiresAt,omitempty" jsonschema:"When the access expires. Only populated when access is granted through a single access control; nil when multiple roles grant access."`
+	Roles             []DataObjectAccessRole `json:"roles" jsonschema:"The access controls (roles) that grant the user access to the data object"`
+}
+
+// ObjectAccessResult ties a resolved data object to the user's access on it.
+type ObjectAccessResult struct {
+	DataObject *DataAccessObject     `json:"dataObject" jsonschema:"The resolved data object"`
+	Access     *UserDataObjectAccess `json:"access" jsonschema:"The user's access to the data object, including the granting roles"`
+}
+
+// UnresolvedObjectID is a requested data object ID that could not be resolved to a data object.
+type UnresolvedObjectID struct {
+	ID     string `json:"id" jsonschema:"The supplied data object ID that could not be resolved"`
+	Reason string `json:"reason" jsonschema:"Why it could not be resolved: not_found (no data object exists with this ID)"`
+}
+
+// CheckUserDataObjectAccessResult is the result of checking a user's access to one or more data
+// objects identified by ID.
+type CheckUserDataObjectAccessResult struct {
+	User       *DataAccessIdentity   `json:"user" jsonschema:"The user the access was checked for (the current user when no userId/email was supplied)"`
+	Results    []*ObjectAccessResult `json:"results" jsonschema:"Per-object access results for the IDs that resolved to a data object"`
+	Unresolved []*UnresolvedObjectID `json:"unresolved,omitempty" jsonschema:"IDs that did not resolve to a data object. Ask the user to correct or drop these."`
+}
+
+// CheckUserDataObjectAccess looks up each supplied data object ID and reports the access the user
+// has on it, including the access controls (roles) that grant the access.
+//
+// The user is resolved as: userID if set, otherwise the user with email, otherwise the current
+// user. IDs that do not correspond to an existing data object are returned in Unresolved so the
+// caller can ask the user to correct or drop them. Resolve names to IDs via search_data_access_objects.
+func CheckUserDataObjectAccess(ctx context.Context, httpClient *http.Client, objectIDs []string, userID, email string) (*CheckUserDataObjectAccessResult, error) {
+	collibraHost, ok := chip.GetCollibraHost(ctx)
+	if !ok {
+		return nil, fmt.Errorf("collibra host not configured in context")
+	}
+	dataAccessURL := strings.TrimSuffix(collibraHost, "/") + "/dataAccess"
+
+	collibraClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data access client: %w", err)
+	}
+
+	user, err := resolveDataAccessUser(ctx, collibraClient, userID, email)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &CheckUserDataObjectAccessResult{
+		User:       mapToDataAccessIdentity(ctx, user),
+		Results:    []*ObjectAccessResult{},
+		Unresolved: []*UnresolvedObjectID{},
+	}
+
+	for _, id := range objectIDs {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+
+		obj, err := collibraClient.DataObject().GetDataObject(ctx, trimmed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch data object %q: %w", trimmed, err)
+		}
+		if obj == nil || obj.Id == "" {
+			result.Unresolved = append(result.Unresolved, &UnresolvedObjectID{
+				ID:     trimmed,
+				Reason: "not_found",
+			})
+			continue
+		}
+
+		item, err := collibraClient.DataObject().GetUserAccessToDataObject(ctx, obj.Id, user.Id)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check access for data object %q: %w", trimmed, err)
+		}
+
+		result.Results = append(result.Results, &ObjectAccessResult{
+			DataObject: mapToDataAccessObject(ctx, obj),
+			Access:     mapToUserDataObjectAccess(item),
+		})
+	}
+
+	return result, nil
+}
+
+// resolveDataAccessUser resolves the user to check access for: by ID, then by email, then the
+// current user.
+func resolveDataAccessUser(ctx context.Context, collibraClient *sdk.CollibraClient, userID, email string) (*types.User, error) {
+	switch {
+	case strings.TrimSpace(userID) != "":
+		return collibraClient.User().GetUser(ctx, userID)
+	case strings.TrimSpace(email) != "":
+		return collibraClient.User().GetUserByEmail(ctx, email)
+	default:
+		return collibraClient.User().GetCurrentUser(ctx)
+	}
+}
+
+func mapToUserDataObjectAccess(item *types.GroupedDataAccessReturnItem) *UserDataObjectAccess {
+	if item == nil {
+		return &UserDataObjectAccess{HasAccess: false, Roles: []DataObjectAccessRole{}}
+	}
+
+	access := &UserDataObjectAccess{
+		HasAccess:         true,
+		Permissions:       derefStrings(item.Permissions),
+		GlobalPermissions: derefStrings(item.GlobalPermissions),
+		ExpiresAt:         item.ExpiresAt,
+		Roles:             make([]DataObjectAccessRole, 0, len(item.NearestAccessControls)),
+	}
+
+	for _, ac := range item.NearestAccessControls {
+		if ac == nil {
+			continue
+		}
+		role := DataObjectAccessRole{
+			ID:     ac.Id,
+			Name:   ac.Name,
+			Action: string(ac.Action),
+			State:  string(ac.State),
+		}
+		if ac.Category != nil {
+			role.Category = &DataAccessGrantCategory{
+				ID:         ac.Category.GrantCategory.Id,
+				Name:       ac.Category.GrantCategory.Name,
+				NamePlural: ac.Category.GrantCategory.NamePlural,
+				IsSystem:   ac.Category.GrantCategory.IsSystem,
+				IsDefault:  ac.Category.GrantCategory.IsDefault,
+			}
+		}
+		access.Roles = append(access.Roles, role)
+	}
+
+	return access
+}
+
+// derefStrings dereferences a slice of string pointers, skipping nils.
+func derefStrings(in []*string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if s != nil {
+			out = append(out, *s)
+		}
+	}
+	return out
 }
 
 // CreateDataAccessRequestWhatInput describes a single WHAT item (a data object) for a new
@@ -384,7 +605,7 @@ func CreateDataAccessRequest(ctx context.Context, httpClient *http.Client, input
 		return nil, err
 	}
 
-	requestURL := strings.TrimSuffix(collibraHost, "/") + "/data-access/access-requests/" + ar.Id
+	uiURL := buildUiUrl(ctx, "access-requests", ar.Id)
 
 	return &DataAccessRequestSummary{
 		ID:          ar.Id,
@@ -392,11 +613,12 @@ func CreateDataAccessRequest(ctx context.Context, httpClient *http.Client, input
 		Description: ar.Description,
 		Status:      string(ar.Status),
 		Outcome:     string(ar.Outcome),
-		Url:         requestURL,
+		Url:         uiURL,
 	}, nil
 }
 
-func mapToDataAccessObject(o *types.DataObject) *DataAccessObject {
+func mapToDataAccessObject(ctx context.Context, o *types.DataObject) *DataAccessObject {
+	uiURL := buildUiUrl(ctx, "data-objects", o.Id)
 	out := &DataAccessObject{
 		ID:          o.Id,
 		Name:        o.Name,
@@ -405,6 +627,7 @@ func mapToDataAccessObject(o *types.DataObject) *DataAccessObject {
 		DataType:    o.DataType,
 		Deleted:     o.Deleted,
 		Description: o.Description,
+		Url:         uiURL,
 	}
 	if o.DataSource != nil {
 		out.DataSourceID = o.DataSource.Id
@@ -421,16 +644,23 @@ func mapToDataAccessObject(o *types.DataObject) *DataAccessObject {
 	return out
 }
 
-func mapToDataAccessIdentity(u *types.User) *DataAccessIdentity {
+func mapToDataAccessIdentity(ctx context.Context, u *types.User) *DataAccessIdentity {
+	uiURL := buildUiUrl(ctx, "identities", u.Id)
 	return &DataAccessIdentity{
 		ID:    u.Id,
 		Name:  u.Name,
 		Email: u.Email,
 		Type:  string(u.Type),
+		Url:   uiURL,
 	}
 }
 
-func mapToDataAccessControlDetails(ac *types.AccessControl) *DataAccessControlDetails {
+func mapToDataAccessControlDetails(ctx context.Context, ac *types.AccessControl) *DataAccessControlDetails {
+	categoryName := "default"
+	if ac.GetCategory() != nil {
+		categoryName = ac.GetCategory().Name
+	}
+	uiURL := buildUiUrl(ctx, "access-controls/"+categoryName, ac.Id)
 	details := &DataAccessControlDetails{
 		What:              []DataAccessWhatItem{},
 		Who:               []DataAccessWhoItem{},
@@ -449,6 +679,7 @@ func mapToDataAccessControlDetails(ac *types.AccessControl) *DataAccessControlDe
 		WhoUnknown:        ac.WhoUnknown,
 		CreatedAt:         ac.CreatedAt,
 		ModifiedAt:        ac.ModifiedAt,
+		Url:               uiURL,
 	}
 
 	if ac.Category != nil {
@@ -471,4 +702,12 @@ func mapToDataAccessControlDetails(ac *types.AccessControl) *DataAccessControlDe
 	}
 
 	return details
+}
+
+func buildUiUrl(ctx context.Context, resourceType string, id string) string {
+	collibraHost, ok := chip.GetCollibraHost(ctx)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSuffix(collibraHost, "/") + "/data-access/" + resourceType + "/" + id
 }
