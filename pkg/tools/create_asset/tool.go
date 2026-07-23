@@ -229,20 +229,12 @@ func buildExecutionContext(ctx context.Context, client *http.Client, input Input
 
 	assignment, err := clients.GetScopedAssignment(ctx, client, assetType.ID, domain.Type.ID, domain.ID)
 	if err != nil {
-		// Disambiguate "wrong domain type for this asset type" from "asset
-		// type has no domain types at all" — the second case happens with
-		// subtypes that inherit assignments from a parent and the standard
-		// "pick a different domain" hint is misleading.
-		if allowed, allowedErr := clients.ListAllowedDomainTypesForAssetType(ctx, client, assetType.ID); allowedErr == nil && len(allowed) == 0 {
-			return nil, &Output{
-				Status:  StatusValidationError,
-				Message: fmt.Sprintf("No compatible domains found for asset type %q on this instance.", assetType.Name),
-			}
-		}
+		// The creatability gate refused this (assetType, domain). The shared
+		// message picks the nowhere / not-here branch — kept in one place so
+		// this tool and prepare_create_asset stay at parity.
 		return nil, &Output{
-			Status: StatusValidationError,
-			Message: fmt.Sprintf("Asset type %q is not allowed in domain %q (domain type %q). Pick a different domain or a different asset type.",
-				assetType.Name, domain.Name, domain.Type.Name),
+			Status:  StatusValidationError,
+			Message: clients.NotAllowedMessage(ctx, client, assetType.ID, assetType.Name, domain.Name, domain.Type.Name),
 		}
 	}
 

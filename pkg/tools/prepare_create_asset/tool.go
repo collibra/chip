@@ -187,10 +187,13 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		// Step 4: hydrate the scoped assignment.
 		assignment, err := clients.GetScopedAssignment(ctx, collibraClient, assetType.ID, domain.Type.ID, domain.ID)
 		if err != nil {
+			// The creatability gate refused this (assetType, domain). The shared
+			// message picks the nowhere / not-here branch, keeping this tool at
+			// parity with create_asset (which previously had the empty-branch
+			// distinction this tool lacked).
 			return Output{
-				Status: StatusNeedsClarification,
-				Message: fmt.Sprintf("Asset type %q is not allowed in domain %q (domain type %q). Pick a different domain or a different asset type.",
-					assetType.Name, domain.Name, domain.Type.Name),
+				Status:  StatusNeedsClarification,
+				Message: clients.NotAllowedMessage(ctx, collibraClient, assetType.ID, assetType.Name, domain.Name, domain.Type.Name),
 			}, nil
 		}
 

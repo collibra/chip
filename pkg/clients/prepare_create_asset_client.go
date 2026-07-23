@@ -938,20 +938,28 @@ func isRelationTypeDiscriminator(disc, resourceType string) bool {
 }
 
 // PrepareCreateAllowedDomainType is one domain type an asset type can
-// be created in. The set is deduped across all of an asset type's
-// assignments (an asset type may be allowed in multiple domain types).
+// be created in. The set is deduped across the single located assignment
+// level's assignments (an asset type may be allowed in multiple domain types).
 type PrepareCreateAllowedDomainType struct {
 	ID   string
 	Name string
 }
 
-// ListAllowedDomainTypesForAssetType returns the deduped list of domain
-// type IDs the asset type can be created in. Honouring Collibra's
-// all-or-nothing inheritance, we stop at the first chain level that defines
-// any explicit domain type: that level's own assignment governs the allowed
-// domain types, and a parent's are not merged in. Subtypes whose own
-// assignments have only empty domainTypes (inherit-sentinel) fall through to
-// the parent — e.g. Acronym → Business Term → Glossary, Business Asset Domain.
+// ListAllowedDomainTypesForAssetType returns the deduped domain type IDs the
+// asset type can be created in, read from the single located assignment level:
+// the asset type's own assignment set, or — when it has none — the first
+// ancestor level that carries any assignment (the same one-level walk-up
+// selectScopedAssignment performs). It stops at that first level with any
+// assignment whether or not that level lists domain types; ancestors beyond it
+// are never merged in.
+//
+// An empty result means the asset type is creatable nowhere: either no level
+// carried any assignment, or the located level's assignments all have empty
+// domainTypes. An assignment with empty domainTypes admits NO domain type — it
+// is not an "inherit from parent" signal, so an all-empty located level does
+// not fall through to a parent. Global is defined by scope == null, not by
+// empty domainTypes. Callers use empty-vs-non-empty as the creatability boolean
+// (see NotAllowedMessage).
 func ListAllowedDomainTypesForAssetType(ctx context.Context, client *http.Client, assetTypeID string) ([]PrepareCreateAllowedDomainType, error) {
 	levels, err := fetchAssignmentLevels(ctx, client, assetTypeID)
 	if err != nil {
@@ -961,10 +969,14 @@ func ListAllowedDomainTypesForAssetType(ctx context.Context, client *http.Client
 	seen := make(map[string]struct{})
 	out := make([]PrepareCreateAllowedDomainType, 0)
 	for _, level := range levels {
-		levelHasExplicit := false
+		if len(level.raws) == 0 {
+			continue // no assignment at this level — keep walking up
+		}
+		// First level with any assignment is authoritative — stop here. If
+		// every assignment on it has empty domainTypes the result stays empty,
+		// which is exactly the "creatable nowhere" verdict.
 		for _, a := range level.raws {
 			for _, dt := range a.DomainTypes {
-				levelHasExplicit = true
 				if _, ok := seen[dt.ID]; ok {
 					continue
 				}
@@ -972,14 +984,55 @@ func ListAllowedDomainTypesForAssetType(ctx context.Context, client *http.Client
 				out = append(out, PrepareCreateAllowedDomainType{ID: dt.ID, Name: dt.Name})
 			}
 		}
-		// Once a level declares its own domain types, it is authoritative;
-		// deeper ancestors are inherited only by sentinel (empty-domainTypes)
-		// levels, which contribute nothing here and let the walk continue.
-		if levelHasExplicit {
-			break
-		}
+		break
 	}
 	return out, nil
+}
+
+// NotAllowedMessage renders the user-facing "not allowed" message for a create
+// that the creatability gate refused (GetScopedAssignment returned an error).
+// It is the single raise site for that message so create_asset and
+// prepare_create_asset stay at parity. Two branches, chosen by the creatability
+// boolean "does the located assignment level list at least one domain type?":
+//
+//   - nowhere — the asset type can't be used to create an asset in ANY domain on
+//     this instance. Two sub-cases collapse into this one verdict and message:
+//     no assignment was located anywhere in the type's hierarchy, or a level was
+//     located but every assignment on it has an empty domainTypes list. The
+//     distinction is invisible in the UI and only an admin could explain it, so
+//     it is irrelevant to the end user.
+//   - not here — the type is creatable somewhere (the located level lists domain
+//     types) but not in this domain: the assignment governing this domain
+//     doesn't list the domain's type.
+//
+// The message deliberately never lists the allowed domain types. That set is
+// scope-conditioned — one list per assignment at the located level (global plus
+// each covering scope), each scope further expanded into the communities and
+// domains it covers — so there is no single coherent list to put in front of a
+// user (or model).
+//
+// The creatability boolean comes from ListAllowedDomainTypesForAssetType
+// (non-empty ⇒ creatable somewhere). When that lookup itself errors we cannot
+// prove "nowhere", so we fall back to the less absolute "not here" message.
+//
+// Stale-assignment edge case: this verdict can legitimately contradict what the
+// user observes. A domain may already hold assets of this asset type because an
+// admin removed the domain type from the governing assignment AFTER those assets
+// were created — the existing assets are valid history, while the block on NEW
+// creates is correct. The wording stays deliberately generic rather than
+// guessing at that cause (only an admin could confirm it), so the terse message
+// is a known choice, not an oversight.
+func NotAllowedMessage(ctx context.Context, client *http.Client, assetTypeID, assetTypeName, domainName, domainTypeName string) string {
+	creatableSomewhere := true // can't prove "nowhere" if the lookup fails
+	if allowed, err := ListAllowedDomainTypesForAssetType(ctx, client, assetTypeID); err == nil {
+		creatableSomewhere = len(allowed) > 0
+	}
+	if !creatableSomewhere {
+		return fmt.Sprintf("Asset type %q can't be created in any domain on this instance.", assetTypeName)
+	}
+	return fmt.Sprintf(
+		"Asset type %q isn't allowed in domain %q (domain type %q). Pick a different asset type, or a different domain.",
+		assetTypeName, domainName, domainTypeName)
 }
 
 // GetAttributeTypeFull fetches /attributeTypes/{id} and decodes the full

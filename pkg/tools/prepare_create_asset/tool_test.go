@@ -42,10 +42,11 @@ type domainRow struct {
 }
 
 type mockDGC struct {
-	t               *testing.T
-	excludeBT       bool // simulate license-gated asset type missing from /assetTypes
-	domainTypeOther bool // domain returns a non-Glossary type
-	noAssignments   bool // /assignments/assetType/{id} returns [] (subtype with inherited assignments)
+	t                *testing.T
+	excludeBT        bool // simulate license-gated asset type missing from /assetTypes
+	domainTypeOther  bool // domain returns a non-Glossary type
+	noAssignments    bool // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
+	emptyDomainTypes bool // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
 }
 
 func (m *mockDGC) server() *httptest.Server {
@@ -132,11 +133,16 @@ func (m *mockDGC) server() *httptest.Server {
 			return
 		}
 		// When domain type doesn't match the assignment's domainTypes, the
-		// reducer will surface "no scoped assignment" — we still serve the
-		// canonical assignment so that branch is exercised in the reducer.
+		// resolver surfaces "not allowed" — we still serve the canonical
+		// assignment so that branch is exercised. With emptyDomainTypes the
+		// assignment admits no domain type at all (creatable nowhere).
+		domainTypes := []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}}
+		if m.emptyDomainTypes {
+			domainTypes = []map[string]string{}
+		}
 		writeJSON(w, http.StatusOK, []map[string]any{{
 			"id":          "asgn-1",
-			"domainTypes": []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}},
+			"domainTypes": domainTypes,
 			"assignedCharacteristicTypeReferences": []map[string]any{
 				{
 					"id": "ref-def",
@@ -346,6 +352,9 @@ func TestPrepare_AssetTypeNotResolved_IncludesLicenseHint(t *testing.T) {
 	}
 }
 
+// not-here branch: the domain's type isn't governed by the type's assignment,
+// but the type IS creatable somewhere. The scope-conditioned allowed-type list
+// (Glossary) must not leak into the message.
 func TestPrepare_TypeNotAllowedInDomain(t *testing.T) {
 	c := client(t, &mockDGC{t: t, domainTypeOther: true})
 	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
@@ -355,8 +364,41 @@ func TestPrepare_TypeNotAllowedInDomain(t *testing.T) {
 	if out.Status != prepare_create_asset.StatusNeedsClarification {
 		t.Fatalf("want needs_clarification, got %q", out.Status)
 	}
-	if !strings.Contains(out.Message, "not allowed in domain") {
-		t.Errorf("expected 'not allowed in domain' message, got %q", out.Message)
+	if !strings.Contains(out.Message, "isn't allowed in domain") {
+		t.Errorf("expected not-here-branch message, got %q", out.Message)
+	}
+	if !strings.Contains(out.Message, "Pick a different asset type, or a different domain") {
+		t.Errorf("expected not-here recovery hint, got %q", out.Message)
+	}
+	// (No-list-leak is asserted in TestNotAllowedMessage_ParityAcrossCallers,
+	// which uses a distinctive allowed-type name; here "Glossary" collides with
+	// the domain name "My Glossary".)
+}
+
+// nowhere branch through the creatability gate (both inputs resolved), with the
+// two sub-cases collapsed to one identical message. Sub-case (a): no assignment
+// anywhere; sub-case (b): a located level whose assignments all have empty
+// domainTypes. prepare_create_asset previously lacked this empty-branch
+// distinction — this brings it to parity with create_asset.
+func TestPrepare_NotCreatableAnywhere_NowhereBranch(t *testing.T) {
+	run := func(m *mockDGC) string {
+		c := client(t, m)
+		out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
+			AssetType: btTypeName,
+			Domain:    glossaryDomain,
+		})
+		if out.Status != prepare_create_asset.StatusNeedsClarification {
+			t.Fatalf("want needs_clarification, got %q (%s)", out.Status, out.Message)
+		}
+		if !strings.Contains(out.Message, "can't be created in any domain") {
+			t.Errorf("expected nowhere-branch message, got %q", out.Message)
+		}
+		return out.Message
+	}
+	noAssignment := run(&mockDGC{t: t, noAssignments: true})
+	allEmpty := run(&mockDGC{t: t, emptyDomainTypes: true})
+	if noAssignment != allEmpty {
+		t.Errorf("nowhere sub-cases must produce identical messages:\n  no-assignment: %q\n  all-empty:     %q", noAssignment, allEmpty)
 	}
 }
 

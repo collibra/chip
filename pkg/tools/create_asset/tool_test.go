@@ -47,14 +47,16 @@ type mockDGC struct {
 	createdAttributes []clients.CreateAttributeRequest
 
 	// Overrides — when set, replace the corresponding default behavior.
-	assetTypeByName map[string][]assetTypeRow // case-insensitive prefix as Collibra returns it
-	domainByName    map[string][]domainRow    // case-insensitive prefix
-	dupResults      []asssetSearchRow
-	defStringType   string // value to return on /attributeTypes/{def}; default "RICH_TEXT"
-	noteStringType  string // value to return on /attributeTypes/{note}; default "PLAIN_TEXT"
-	createAssetCode int    // override status; default 201
-	createAttrCode  int    // override status; default 201
-	noAssignments   bool   // /assignments/assetType/{id} returns [] (e.g. subtype with inherited assignments)
+	assetTypeByName  map[string][]assetTypeRow // case-insensitive prefix as Collibra returns it
+	domainByName     map[string][]domainRow    // case-insensitive prefix
+	dupResults       []asssetSearchRow
+	defStringType    string // value to return on /attributeTypes/{def}; default "RICH_TEXT"
+	noteStringType   string // value to return on /attributeTypes/{note}; default "PLAIN_TEXT"
+	createAssetCode  int    // override status; default 201
+	createAttrCode   int    // override status; default 201
+	noAssignments    bool   // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
+	emptyDomainTypes bool   // the default assignment lists empty domainTypes (creatable nowhere, sub-case b)
+	domainTypeOther  bool   // the glossary domain resolves to a non-Glossary type, so the assignment doesn't govern it (not-here)
 
 	// extraAssignments are appended to the default Business Term assignment
 	// in the /assignments/assetType/{id} response (e.g. a scoped assignment).
@@ -126,6 +128,14 @@ func (m *mockDGC) server() *httptest.Server {
 		writeJSON(w, http.StatusOK, map[string]any{"results": results, "total": len(results)})
 	})
 
+	// glossaryDomainType is the type the glossary domain resolves to. With
+	// domainTypeOther it becomes a non-Glossary type, so the Glossary-typed
+	// assignment no longer governs the domain (the not-here branch).
+	glossaryDomainType := &clients.PrepareCreateDomainType{ID: glossaryTypeID, Name: glossaryTypeName}
+	if m.domainTypeOther {
+		glossaryDomainType = &clients.PrepareCreateDomainType{ID: "00000000-0000-0000-0000-000000010099", Name: "Other Domain Type"}
+	}
+
 	// /domains/{id}
 	mux.HandleFunc("GET /rest/2.0/domains/", func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/domains/")
@@ -133,7 +143,7 @@ func (m *mockDGC) server() *httptest.Server {
 			writeJSON(w, http.StatusOK, domainRow{
 				ID:   glossaryDomainID,
 				Name: glossaryDomain,
-				Type: &clients.PrepareCreateDomainType{ID: glossaryTypeID, Name: glossaryTypeName},
+				Type: glossaryDomainType,
 			})
 			return
 		}
@@ -148,7 +158,7 @@ func (m *mockDGC) server() *httptest.Server {
 			if rows, ok := m.domainByName[strings.ToLower(name)]; ok {
 				results = rows
 			} else if strings.EqualFold(name, glossaryDomain) {
-				results = []domainRow{{ID: glossaryDomainID, Name: glossaryDomain, Type: &clients.PrepareCreateDomainType{ID: glossaryTypeID, Name: glossaryTypeName}}}
+				results = []domainRow{{ID: glossaryDomainID, Name: glossaryDomain, Type: glossaryDomainType}}
 			}
 		} else {
 			results = []domainRow{
@@ -166,12 +176,17 @@ func (m *mockDGC) server() *httptest.Server {
 			writeJSON(w, http.StatusOK, []any{})
 			return
 		}
+		// domainTypes governs creatability: normally lists Glossary; with
+		// emptyDomainTypes the assignment admits no domain type at all, so the
+		// type is creatable nowhere (nowhere sub-case b).
+		domainTypes := []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}}
+		if m.emptyDomainTypes {
+			domainTypes = []map[string]string{}
+		}
 		payload := []map[string]any{
 			{
-				"id": "assignment-bt",
-				"domainTypes": []map[string]string{
-					{"id": glossaryTypeID, "name": glossaryTypeName},
-				},
+				"id":          "assignment-bt",
+				"domainTypes": domainTypes,
 				"assignedCharacteristicTypeReferences": []map[string]any{
 					{
 						"id": "ref-def",
@@ -593,10 +608,12 @@ func TestCreateAsset_AttributeFailure_PreservesAssetSuccess(t *testing.T) {
 	}
 }
 
-func TestCreateAsset_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *testing.T) {
+// nowhere sub-case (a): no assignment located anywhere in the type's
+// hierarchy → "can't be created in any domain on this instance."
+func TestCreateAsset_NoAssignmentAnywhere_NowhereBranch(t *testing.T) {
 	m := newMockDGC(t)
 	m.noAssignments = true
-	c, _ := newClient(t, m)
+	c, m := newClient(t, m)
 
 	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
 		Name:      "Test",
@@ -606,9 +623,84 @@ func TestCreateAsset_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *te
 	if out.Status != create_asset.StatusValidationError {
 		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
 	}
-	if !strings.Contains(out.Message, "No compatible domains") {
-		t.Errorf("expected factual no-compatible-domains message, got %q", out.Message)
+	if !strings.Contains(out.Message, "can't be created in any domain") {
+		t.Errorf("expected nowhere-branch message, got %q", out.Message)
 	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted when the type is not creatable, got %d", len(m.createdAssets))
+	}
+}
+
+// nowhere sub-case (b): a level is located but every assignment on it has empty
+// domainTypes → the same "can't be created in any domain" verdict.
+func TestCreateAsset_AllEmptyDomainTypes_NowhereBranch(t *testing.T) {
+	m := newMockDGC(t)
+	m.emptyDomainTypes = true
+	c, m := newClient(t, m)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:      "Test",
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, "can't be created in any domain") {
+		t.Errorf("expected nowhere-branch message, got %q", out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted, got %d", len(m.createdAssets))
+	}
+}
+
+// The two nowhere sub-cases (no assignment anywhere; all-empty domainTypes at
+// the located level) are deliberately collapsed into ONE message.
+func TestCreateAsset_BothNowhereSubcases_IdenticalMessage(t *testing.T) {
+	run := func(configure func(*mockDGC)) string {
+		m := newMockDGC(t)
+		configure(m)
+		c, _ := newClient(t, m)
+		out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+			Name: "Test", AssetType: btTypeName, Domain: glossaryDomain,
+		})
+		return out.Message
+	}
+	noAssignment := run(func(m *mockDGC) { m.noAssignments = true })
+	allEmpty := run(func(m *mockDGC) { m.emptyDomainTypes = true })
+	if noAssignment != allEmpty {
+		t.Errorf("nowhere sub-cases must produce identical messages:\n  no-assignment: %q\n  all-empty:     %q", noAssignment, allEmpty)
+	}
+}
+
+// not-here branch: the domain's type is not governed by the type's assignment,
+// but the type IS creatable somewhere → "isn't allowed in domain ...". No
+// create is attempted, and the allowed-type list must not leak into the text.
+func TestCreateAsset_NotHereBranch_NoCreate(t *testing.T) {
+	m := newMockDGC(t)
+	m.domainTypeOther = true
+	c, m := newClient(t, m)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:      "Customer",
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, "isn't allowed in domain") {
+		t.Errorf("expected not-here-branch message, got %q", out.Message)
+	}
+	if !strings.Contains(out.Message, "Pick a different asset type, or a different domain") {
+		t.Errorf("expected not-here recovery hint, got %q", out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted for a not-allowed type, got %d", len(m.createdAssets))
+	}
+	// (No-list-leak is asserted in TestNotAllowedMessage_ParityAcrossCallers,
+	// which uses a distinctive allowed-type name; here "Glossary" collides with
+	// the domain name "My Glossary".)
 }
 
 const (
@@ -618,12 +710,10 @@ const (
 )
 
 // newAcronymSubtypeClient boots a mock DGC for the Acronym → BusinessTerm
-// subtype world: Acronym's own assignment has empty domainTypes
-// (inherit-sentinel), no attributes, and one extra relation ("has acronym");
-// the parent BusinessTerm assignment has the explicit Glossary domain type
-// and the required (min:1) Definition attribute. We mock both nodes to
-// mirror the live shape. Shared by the subtype-union and
-// parent-required-attribute tests.
+// subtype world: Acronym has NO assignment of its own, so resolution walks up
+// to the parent BusinessTerm, whose assignment lists the Glossary domain type
+// and the required (min:1) Definition attribute. We mock both nodes to mirror
+// the live shape. Shared by the walk-up and parent-required-attribute tests.
 func newAcronymSubtypeClient(t *testing.T) *http.Client {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /rest/2.0/assetTypes/", func(w http.ResponseWriter, r *http.Request) {
@@ -879,5 +969,96 @@ func TestCreateAsset_ScopedAssignmentElsewhere_DoesNotBlockCreate(t *testing.T) 
 	}
 	if len(m.createdAssets) != 1 {
 		t.Fatalf("expected 1 POST /assets, got %d", len(m.createdAssets))
+	}
+}
+
+// Core regression: the asset type's OWN located assignment does not list the
+// target domain type (it lists a different one), while an ANCESTOR's assignment
+// does. Creatability must be judged against the own located level — the create
+// is refused and NOT resolved by climbing to the ancestor that would allow it.
+// This is the central defect the single-assignment-selection PR fixes.
+func TestCreateAsset_OwnLevelDoesNotGovernTarget_RefusedNotClimbed(t *testing.T) {
+	const otherTypeID = "00000000-0000-0000-0000-0000000100aa"
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assetTypes/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/rest/2.0/assetTypes/")
+		switch path {
+		case "publicId/" + acronymTypePublicID, acronymTypeID:
+			writeJSON(w, http.StatusOK, map[string]any{
+				"id": acronymTypeID, "publicId": acronymTypePublicID, "name": acronymTypeName,
+				"parent": map[string]any{"id": btTypeID, "name": btTypeName},
+			})
+		case "publicId/" + btTypePublicID, btTypeID:
+			writeJSON(w, http.StatusOK, map[string]any{"id": btTypeID, "publicId": btTypePublicID, "name": btTypeName})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	mux.HandleFunc("GET /rest/2.0/assetTypes", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}, "total": 0})
+	})
+	mux.HandleFunc("GET /rest/2.0/domains/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/domains/")
+		if id == glossaryDomainID {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"id": glossaryDomainID, "name": glossaryDomain,
+				"type": map[string]string{"id": glossaryTypeID, "name": glossaryTypeName},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	})
+	mux.HandleFunc("GET /rest/2.0/domains", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{
+			map[string]any{"id": glossaryDomainID, "name": glossaryDomain,
+				"type": map[string]string{"id": glossaryTypeID, "name": glossaryTypeName}},
+		}, "total": 1})
+	})
+	// Acronym's OWN assignment lists "Other Domain Type", not Glossary. Its
+	// parent BusinessTerm lists Glossary — the target domain's type.
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/assignments/assetType/")
+		switch id {
+		case acronymTypeID:
+			writeJSON(w, http.StatusOK, []map[string]any{{
+				"id":          "asgn-acronym-own",
+				"domainTypes": []map[string]string{{"id": otherTypeID, "name": "Other Domain Type"}},
+			}})
+		case btTypeID:
+			writeJSON(w, http.StatusOK, []map[string]any{{
+				"id":          "asgn-bt",
+				"domainTypes": []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}},
+			}})
+		default:
+			writeJSON(w, http.StatusOK, []any{})
+		}
+	})
+	created := 0
+	mux.HandleFunc("/rest/2.0/assets", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			created++
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}, "total": 0})
+	})
+	mux.HandleFunc("GET /rest/2.0/statuses", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}, "total": 0})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	c := testutil.NewClient(srv)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name: "MRR", AssetType: acronymTypeName, Domain: glossaryDomain,
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("create must be refused on the own level's coverage, got %q (%s)", out.Status, out.Message)
+	}
+	// The own level lists a domain type (Other), so the type IS creatable
+	// somewhere — the not-here branch, not nowhere.
+	if !strings.Contains(out.Message, "isn't allowed in domain") {
+		t.Errorf("expected not-here-branch message, got %q", out.Message)
+	}
+	if created != 0 {
+		t.Errorf("no create must be attempted; the ancestor's Glossary assignment must NOT be climbed to, got %d creates", created)
 	}
 }

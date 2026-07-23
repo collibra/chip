@@ -415,6 +415,79 @@ func TestResolveCoveredScopes(t *testing.T) {
 	}
 }
 
+// ListAllowedDomainTypesForAssetType stops at the first level with ANY
+// assignment. When the asset type's own assignment level has assignments but
+// every one lists empty domainTypes, the result is empty (creatable nowhere) —
+// it must NOT fall through to a parent level that does list domain types. This
+// guards the removal of the old levelHasExplicit "inherit-sentinel" walk-through.
+func TestListAllowedDomainTypes_StopsAtFirstAssignedLevel_AllEmptyIsNowhere(t *testing.T) {
+	const (
+		childID    = "at-child"
+		parentID   = "at-parent"
+		domainType = "dt-glossary"
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assetTypes/"+childID, func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(t, w, map[string]any{
+			"id": childID, "name": "Child", "parent": map[string]string{"id": parentID, "name": "Parent"},
+		})
+	})
+	mux.HandleFunc("GET /rest/2.0/assetTypes/"+parentID, func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(t, w, map[string]any{"id": parentID, "name": "Parent"})
+	})
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+childID, func(w http.ResponseWriter, _ *http.Request) {
+		// Own level: an assignment with EMPTY domainTypes.
+		writeTestJSON(t, w, []map[string]any{{"id": "asgn-child", "domainTypes": []any{}}})
+	})
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+parentID, func(w http.ResponseWriter, _ *http.Request) {
+		// Parent level DOES list a domain type — but the walk must never reach
+		// it, because the child's own level already carried an assignment.
+		writeTestJSON(t, w, []map[string]any{{
+			"id": "asgn-parent", "domainTypes": []map[string]string{{"id": domainType, "name": "Glossary"}},
+		}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := ListAllowedDomainTypesForAssetType(t.Context(), client, childID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("all-empty own level must be creatable nowhere (empty result), got %+v", got)
+	}
+}
+
+// When the located level DOES list domain types, they are returned — the
+// non-empty result is the "creatable somewhere" verdict.
+func TestListAllowedDomainTypes_LocatedLevelListsTypes(t *testing.T) {
+	const (
+		assetID    = "at-x"
+		domainType = "dt-glossary"
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assetTypes/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(t, w, map[string]any{"id": assetID, "name": "X"})
+	})
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		writeTestJSON(t, w, []map[string]any{{
+			"id": "asgn-x", "domainTypes": []map[string]string{{"id": domainType, "name": "Glossary"}},
+		}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := ListAllowedDomainTypesForAssetType(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != domainType {
+		t.Errorf("expected the located level's domain type, got %+v", got)
+	}
+}
+
 func writeTestJSON(t *testing.T, w http.ResponseWriter, v any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
