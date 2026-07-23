@@ -655,15 +655,30 @@ func fetchRawAssignments(ctx context.Context, client *http.Client, assetTypeID s
 	return raws, nil
 }
 
-// resolveCoveredScopes returns the IDs of the scopes — among the chain's
-// scoped assignments — that cover the target domain: the domain is listed
-// on the scope directly, or one of the communities the domain sits under
-// (its own community or any ancestor) is. The assignment listing usually
-// embeds the scope's membership; when both lists come back empty the scope
-// is re-fetched from /scopes/{id} before concluding anything. Community
-// ancestry is fetched lazily, so the common global-only case costs no
-// extra calls.
-func resolveCoveredScopes(ctx context.Context, client *http.Client, chain []assignmentChainNode, domainID string) (map[string]struct{}, error) {
+// scopeTier records how a scope covers the target domain. The platform's
+// selection priority is domain-direct > community > global; carrying the tier
+// (rather than a bare "covered" flag) is what lets a later change teach the
+// selection step that ordering. Today's selection still treats any covered
+// scope equally — only the result shape carries the tier so far.
+type scopeTier int
+
+const (
+	// scopeTierDomainDirect: the scope lists the target domain directly.
+	scopeTierDomainDirect scopeTier = iota
+	// scopeTierCommunity: the scope lists the domain's own community or any
+	// ancestor community of it.
+	scopeTierCommunity
+)
+
+// resolveCoveredScopes returns, for each scope — among the chain's scoped
+// assignments — that covers the target domain, the tier by which it covers:
+// domain-direct (the scope lists the domain directly) or community (the scope
+// lists the domain's own community or any ancestor). The tier is carried so a
+// later change to the selection step can prefer domain-direct over community
+// coverage; selection does not yet consult it. The assignment listing embeds
+// each scope's membership; community ancestry is fetched lazily, so the common
+// global-only case costs no extra calls.
+func resolveCoveredScopes(ctx context.Context, client *http.Client, chain []assignmentChainNode, domainID string) (map[string]scopeTier, error) {
 	scopes := make(map[string]*rawAssignmentScope)
 	for _, node := range chain {
 		for _, a := range node.raws {
@@ -672,26 +687,18 @@ func resolveCoveredScopes(ctx context.Context, client *http.Client, chain []assi
 			}
 		}
 	}
-	covered := make(map[string]struct{})
+	covered := make(map[string]scopeTier)
 	if len(scopes) == 0 {
 		return covered, nil
 	}
 
 	var ancestorCommunities map[string]struct{}
 	for id, scope := range scopes {
-		s := scope
-		if len(s.Domains) == 0 && len(s.Communities) == 0 {
-			full, err := getScopeByID(ctx, client, id)
-			if err != nil {
-				return nil, fmt.Errorf("resolving scope %q (%s): %w", scope.Name, id, err)
-			}
-			s = full
-		}
-		if containsResourceRef(s.Domains, domainID) {
-			covered[id] = struct{}{}
+		if containsResourceRef(scope.Domains, domainID) {
+			covered[id] = scopeTierDomainDirect
 			continue
 		}
-		if len(s.Communities) == 0 {
+		if len(scope.Communities) == 0 {
 			continue
 		}
 		if ancestorCommunities == nil {
@@ -701,24 +708,14 @@ func resolveCoveredScopes(ctx context.Context, client *http.Client, chain []assi
 				return nil, err
 			}
 		}
-		for _, c := range s.Communities {
+		for _, c := range scope.Communities {
 			if _, ok := ancestorCommunities[c.ID]; ok {
-				covered[id] = struct{}{}
+				covered[id] = scopeTierCommunity
 				break
 			}
 		}
 	}
 	return covered, nil
-}
-
-// getScopeByID fetches a scope's full definition, including the domains
-// and communities it covers.
-func getScopeByID(ctx context.Context, client *http.Client, scopeID string) (*rawAssignmentScope, error) {
-	var scope rawAssignmentScope
-	if err := getJSON(ctx, client, fmt.Sprintf("/rest/2.0/scopes/%s", url.PathEscape(scopeID)), &scope); err != nil {
-		return nil, err
-	}
-	return &scope, nil
 }
 
 // maxCommunityAncestryDepth bounds the walk from a domain's community up
@@ -786,7 +783,7 @@ func getJSON(ctx context.Context, client *http.Client, reqURL string, out any) e
 // domain. A covering scoped assignment then replaces the global one
 // outright — exactly one assignment governs a (type, domain) pair in
 // Collibra; scoped and global are never merged.
-func governingAssignments(raws []rawScopedAssignment, coveredScopes map[string]struct{}) []rawScopedAssignment {
+func governingAssignments(raws []rawScopedAssignment, coveredScopes map[string]scopeTier) []rawScopedAssignment {
 	var global, scoped []rawScopedAssignment
 	for _, a := range raws {
 		if a.Scope == nil {
@@ -819,7 +816,7 @@ func governingAssignments(raws []rawScopedAssignment, coveredScopes map[string]s
 //
 // At least one level must contain the target domain type explicitly, or we
 // return "not allowed". Characteristics are deduped by ID (child-first wins).
-func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID string, coveredScopes map[string]struct{}) (*PrepareCreateScopedAssignment, error) {
+func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID string, coveredScopes map[string]scopeTier) (*PrepareCreateScopedAssignment, error) {
 	if len(chain) == 0 {
 		return nil, fmt.Errorf("no assignments found")
 	}

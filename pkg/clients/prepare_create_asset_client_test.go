@@ -213,7 +213,7 @@ func TestReduceScopedAssignmentChain_CoveringScopedAssignmentWinsOverGlobal(t *t
 		}},
 	}
 
-	covered := map[string]struct{}{"scope-pricebooks": {}}
+	covered := map[string]scopeTier{"scope-pricebooks": scopeTierDomainDirect}
 	got, err := reduceScopedAssignmentChain(chain, domainType, covered)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -230,10 +230,10 @@ func TestReduceScopedAssignmentChain_CoveringScopedAssignmentWinsOverGlobal(t *t
 }
 
 // resolveCoveredScopes must recognise every way a scope can cover the target
-// domain: the domain listed directly, an ancestor community listed (walking
-// domain → community → parent community), and membership lists omitted from
-// the assignment payload (re-fetched from /scopes/{id}). A scope covering
-// only other domains stays uncovered.
+// domain and tag each with its tier: the domain listed directly (domain-direct
+// tier), and an ancestor community listed (community tier, walking domain →
+// community → parent community). A scope covering only other domains stays
+// uncovered.
 func TestResolveCoveredScopes(t *testing.T) {
 	const (
 		targetDomain   = "dom-target"
@@ -255,12 +255,6 @@ func TestResolveCoveredScopes(t *testing.T) {
 	mux.HandleFunc("GET /rest/2.0/communities/"+rootCommunity, func(w http.ResponseWriter, _ *http.Request) {
 		writeTestJSON(t, w, map[string]any{"id": rootCommunity})
 	})
-	mux.HandleFunc("GET /rest/2.0/scopes/scope-lazy", func(w http.ResponseWriter, _ *http.Request) {
-		writeTestJSON(t, w, map[string]any{
-			"id": "scope-lazy", "name": "Lazy",
-			"domains": []map[string]string{{"id": targetDomain}},
-		})
-	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	client := testutil.NewClient(srv)
@@ -275,8 +269,6 @@ func TestResolveCoveredScopes(t *testing.T) {
 		{ID: "a-elsewhere", Scope: &rawAssignmentScope{
 			ID: "scope-elsewhere", Domains: []rawAssignmentResourceRef{{ID: "dom-other"}},
 		}},
-		// Membership omitted on the wire — forces the /scopes/{id} fetch.
-		{ID: "a-lazy", Scope: &rawAssignmentScope{ID: "scope-lazy", Name: "Lazy"}},
 		{ID: "a-global"},
 	}}}
 
@@ -284,9 +276,18 @@ func TestResolveCoveredScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	for _, want := range []string{"scope-direct", "scope-community", "scope-lazy"} {
-		if _, ok := covered[want]; !ok {
-			t.Errorf("scope %q must cover the target domain, covered=%v", want, covered)
+	wantTiers := map[string]scopeTier{
+		"scope-direct":    scopeTierDomainDirect,
+		"scope-community": scopeTierCommunity,
+	}
+	for id, want := range wantTiers {
+		got, ok := covered[id]
+		if !ok {
+			t.Errorf("scope %q must cover the target domain, covered=%v", id, covered)
+			continue
+		}
+		if got != want {
+			t.Errorf("scope %q covered at tier %v, want %v", id, got, want)
 		}
 	}
 	if _, ok := covered["scope-elsewhere"]; ok {
