@@ -110,7 +110,7 @@ type AttributeSchemaEntry struct {
 
 // RelationSchemaEntry is one relation slot in the scoped assignment.
 type RelationSchemaEntry struct {
-	RelationTypeID string `json:"relationTypeId" jsonschema:"UUID of the relation type."`
+	RelationTypeID string `json:"relationTypeId" jsonschema:"UUID of the relation type. A relation type assigned in both directions appears once per direction, so the same relationTypeId may occur in two entries that differ by direction/role/coRole."`
 	Role           string `json:"role" jsonschema:"Forward role name of the relation (e.g. 'is synonym of')."`
 	CoRole         string `json:"coRole,omitempty" jsonschema:"Reverse role name."`
 	Direction      string `json:"direction,omitempty" jsonschema:"Direction of the relation as defined in the assignment."`

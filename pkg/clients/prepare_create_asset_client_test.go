@@ -534,6 +534,130 @@ func TestSelectScopedAssignment_BidirectionalRelation_BothDirectionsKept(t *test
 	}
 }
 
+// Relation role / co-role / direction / target are joined from characteristicTypes
+// on the reference's own top-level LINE id (not the resource id), while the emitted
+// RelationTypeID stays the resource id. No prior pure-selection fixture set
+// characteristicTypes, so this guards the join-key fix.
+func TestSelectScopedAssignment_RelationMetadataJoinedByLineID(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{{
+		ID:          "asgn",
+		DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+		AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{{
+			ID: "line-1", // the assignment-characteristic LINE id — the join key
+			AssignedResourceReference: rawAssignmentResourceRef{
+				ID:           "rel-resource-1", // the relation-type RESOURCE id — the emitted RelationTypeID
+				ResourceType: "RelationType", ResourceDiscriminator: "RelationType",
+			},
+			RoleDirection: "TO_TARGET",
+		}},
+		CharacteristicTypes: []rawAssignmentCharacteristicTypeMetadata{{
+			ID:         "line-1", // shares the reference's line id — NOT the resource id
+			Role:       "is grouped by",
+			CoRole:     "groups",
+			Direction:  "SOURCE_TO_TARGET",
+			TargetType: &rawAssignmentResourceRef{ID: "at-target", Name: "Business Term"},
+		}},
+	}}}}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Relations) != 1 {
+		t.Fatalf("expected exactly one relation, got %+v", got.Relations)
+	}
+	rel := got.Relations[0]
+	if rel.RelationTypeID != "rel-resource-1" {
+		t.Errorf("emitted RelationTypeID must be the resource id, got %q", rel.RelationTypeID)
+	}
+	if rel.Role != "is grouped by" || rel.CoRole != "groups" || rel.Direction != "SOURCE_TO_TARGET" {
+		t.Errorf("relation metadata must be joined via the line id, got %+v", rel)
+	}
+	if rel.TargetType == nil || rel.TargetType.ID != "at-target" {
+		t.Errorf("relation target must be joined via the line id, got %+v", rel.TargetType)
+	}
+}
+
+// The platform-bug discriminator "DateTimeAttributeType" is normalized to
+// "DateAttributeType" (what the frozen deprecated resourceType enum collapses it
+// to) and never surfaced verbatim. This is the only such normalization.
+func TestSelectScopedAssignment_DateTimeAttributeType_NormalizedToDate(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{{
+		ID:          "asgn",
+		DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+		AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{{
+			ID: "ref-dt",
+			AssignedResourceReference: rawAssignmentResourceRef{
+				ID: "attr-dt", Name: "Effective Date",
+				ResourceType: "DateAttributeType", ResourceDiscriminator: "DateTimeAttributeType",
+			},
+			MinimumOccurrences: 1,
+		}},
+	}}}}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	attr, ok := attrByID(got.Attributes, "attr-dt")
+	if !ok {
+		t.Fatalf("date attribute must be present, got %+v", got.Attributes)
+	}
+	if attr.Kind != "DateAttributeType" {
+		t.Errorf("DateTimeAttributeType must be normalized to DateAttributeType, got %q", attr.Kind)
+	}
+}
+
+// Derived relation types are non-creatable and must never be offered. An explicit
+// guard skips reference discriminator "DerivedRelationType" while an explicit
+// ("RelationType") sibling is kept.
+func TestSelectScopedAssignment_DerivedRelationType_Excluded(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{{
+		ID:          "asgn",
+		DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+		AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+			{
+				ID: "ref-explicit",
+				AssignedResourceReference: rawAssignmentResourceRef{
+					ID:           "rel-explicit",
+					ResourceType: "RelationType", ResourceDiscriminator: "RelationType",
+				},
+				RoleDirection: "TO_TARGET",
+			},
+			{
+				ID: "ref-derived",
+				AssignedResourceReference: rawAssignmentResourceRef{
+					ID:           "rel-derived",
+					ResourceType: "RelationType", ResourceDiscriminator: "DerivedRelationType",
+				},
+				RoleDirection: "TO_TARGET",
+			},
+			{
+				// Empty discriminator: classification falls to the resourceType
+				// fallback, which matches "DerivedRelationType" on suffix. The guard
+				// must still skip it — otherwise the fallback reintroduces the DRT.
+				ID: "ref-derived-nodisc",
+				AssignedResourceReference: rawAssignmentResourceRef{
+					ID:           "rel-derived-nodisc",
+					ResourceType: "DerivedRelationType", ResourceDiscriminator: "",
+				},
+				RoleDirection: "TO_TARGET",
+			},
+		},
+	}}}}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ids := relTypeIDs(got.Relations); len(ids) != 1 || ids[0] != "rel-explicit" {
+		t.Errorf("only the explicit relation type must be kept, got %+v", ids)
+	}
+}
+
 // resolveCoveredScopes must recognise every way a scope can cover the target
 // domain and tag each with its tier: the domain listed directly (domain-direct
 // tier), and an ancestor community listed (community tier, walking domain →

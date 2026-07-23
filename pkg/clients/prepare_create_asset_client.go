@@ -957,6 +957,8 @@ func emitAssignmentCharacteristics(a rawScopedAssignment, fromOwn bool) *Prepare
 	out := &PrepareCreateScopedAssignment{AssignmentID: a.ID}
 	seen := make(map[characteristicKey]struct{})
 	for _, src := range characteristicSources(a) {
+		// Key the relation-metadata sidecar by its top-level LINE id, which the
+		// reference's own top-level id joins against (see the join note below).
 		metaByID := make(map[string]rawAssignmentCharacteristicTypeMetadata, len(src.meta))
 		for _, m := range src.meta {
 			metaByID[m.ID] = m
@@ -964,6 +966,16 @@ func emitAssignmentCharacteristics(a rawScopedAssignment, fromOwn bool) *Prepare
 		for _, ref := range src.refs {
 			disc := ref.AssignedResourceReference.ResourceDiscriminator
 			rt := ref.AssignedResourceReference.ResourceType
+			// Derived relation types (DRTs) are computed/transitive relations the
+			// user cannot create — never offer them. Guard explicitly on the
+			// reference discriminator (the reliable signal). The empty-disc branch
+			// covers the same case for the fallback path in isRelationTypeDiscriminator
+			// (HasSuffix(rt, "RelationType")), which would otherwise match
+			// "DerivedRelationType" and silently reintroduce them. Applies at every
+			// source, including trait-inherited relations.
+			if disc == "DerivedRelationType" || (disc == "" && rt == "DerivedRelationType") {
+				continue
+			}
 			switch {
 			case isAttributeTypeDiscriminator(disc, rt):
 				// Attributes dedup on the resource id alone (no direction).
@@ -976,7 +988,7 @@ func emitAssignmentCharacteristics(a rawScopedAssignment, fromOwn bool) *Prepare
 					AttributeTypeID:       ref.AssignedResourceReference.ID,
 					AttributeTypeName:     ref.AssignedResourceReference.Name,
 					AttributeTypePublicID: ref.AssignedResourcePublicID,
-					Kind:                  disc,
+					Kind:                  normalizeAttributeKind(disc),
 					Required:              ref.MinimumOccurrences > 0,
 					Min:                   ref.MinimumOccurrences,
 					Max:                   ref.MaximumOccurrences,
@@ -993,7 +1005,12 @@ func emitAssignmentCharacteristics(a rawScopedAssignment, fromOwn bool) *Prepare
 					continue
 				}
 				seen[key] = struct{}{}
-				meta := metaByID[ref.AssignedResourceReference.ID]
+				// Join on the reference's own top-level LINE id (ref.ID ↔
+				// characteristicTypes[].id) — the two lists correlate 1:1 on that
+				// line id. AssignedResourceReference.ID is the relation-type resource
+				// id (a different value): right for the emitted RelationTypeID, wrong
+				// as the join key.
+				meta := metaByID[ref.ID]
 				rel := PrepareCreateScopedRelation{
 					RelationTypeID: ref.AssignedResourceReference.ID,
 					Role:           meta.Role,
@@ -1031,6 +1048,19 @@ func isAttributeTypeDiscriminator(disc, resourceType string) bool {
 		return strings.HasSuffix(resourceType, "AttributeType")
 	}
 	return strings.HasSuffix(disc, "AttributeType")
+}
+
+// normalizeAttributeKind corrects a single platform bug in the attribute-kind
+// discriminator: "DateTimeAttributeType" is a mistake — an attribute type that
+// shouldn't exist, lingering from a years-old error. The frozen deprecated
+// resourceType enum already collapses it to "DateAttributeType", so we surface
+// that instead of leaking the bug to the model. This is the ONLY kind
+// normalization — do not generalise it.
+func normalizeAttributeKind(disc string) string {
+	if disc == "DateTimeAttributeType" {
+		return "DateAttributeType"
+	}
+	return disc
 }
 
 // isRelationTypeDiscriminator recognises the assignment-side discriminator

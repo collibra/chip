@@ -24,6 +24,7 @@ const (
 	defAttrName      = "Definition"
 	noteAttrID       = "00000000-0000-0000-0000-0000000003116"
 	noteAttrName     = "Note"
+	groupsRelID      = "00000000-0000-0000-0000-000000004201"
 )
 
 // Mock fixture for the consolidated /assignments shape. Kept local rather
@@ -47,6 +48,7 @@ type mockDGC struct {
 	domainTypeOther  bool // domain returns a non-Glossary type
 	noAssignments    bool // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
 	emptyDomainTypes bool // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
+	bidiRelation     bool // the assignment carries one relation type assigned in BOTH directions
 }
 
 func (m *mockDGC) server() *httptest.Server {
@@ -139,6 +141,36 @@ func (m *mockDGC) server() *httptest.Server {
 		domainTypes := []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}}
 		if m.emptyDomainTypes {
 			domainTypes = []map[string]string{}
+		}
+		if m.bidiRelation {
+			// One relation type assigned in both directions: two characteristic
+			// lines sharing the resource id but with distinct roleDirection, each
+			// with its own characteristicTypes metadata joined by the line id.
+			writeJSON(w, http.StatusOK, []map[string]any{{
+				"id":          "asgn-1",
+				"domainTypes": domainTypes,
+				"assignedCharacteristicTypeReferences": []map[string]any{
+					{
+						"id": "rel-line-fwd",
+						"assignedResourceReference": map[string]string{
+							"id": groupsRelID, "resourceType": "RelationType", "resourceDiscriminator": "RelationType",
+						},
+						"roleDirection": "TO_TARGET",
+					},
+					{
+						"id": "rel-line-rev",
+						"assignedResourceReference": map[string]string{
+							"id": groupsRelID, "resourceType": "RelationType", "resourceDiscriminator": "RelationType",
+						},
+						"roleDirection": "TO_SOURCE",
+					},
+				},
+				"characteristicTypes": []map[string]any{
+					{"id": "rel-line-fwd", "role": "groups", "coRole": "is grouped by", "direction": "SOURCE_TO_TARGET"},
+					{"id": "rel-line-rev", "role": "is grouped by", "coRole": "groups", "direction": "TARGET_TO_SOURCE"},
+				},
+			}})
+			return
 		}
 		writeJSON(w, http.StatusOK, []map[string]any{{
 			"id":          "asgn-1",
@@ -415,6 +447,38 @@ func TestPrepare_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *testin
 	}
 	if !strings.Contains(out.Message, "No compatible domains") {
 		t.Errorf("expected factual no-compatible-domains message, got %q", out.Message)
+	}
+}
+
+// A relation type assigned in both directions is surfaced as TWO distinct
+// RelationSchemaEntry items — same relationTypeId, each with its own
+// direction / role / coRole — not one arbitrary direction.
+func TestPrepare_BidirectionalRelation_BothDirectionsAsSeparateEntries(t *testing.T) {
+	c := client(t, &mockDGC{t: t, bidiRelation: true})
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+	})
+	if out.Status != prepare_create_asset.StatusReady {
+		t.Fatalf("want ready, got %q (%s)", out.Status, out.Message)
+	}
+	if len(out.RelationTypes) != 2 {
+		t.Fatalf("expected both directions as 2 separate entries, got %d: %+v", len(out.RelationTypes), out.RelationTypes)
+	}
+	dirs := map[string]prepare_create_asset.RelationSchemaEntry{}
+	for _, r := range out.RelationTypes {
+		if r.RelationTypeID != groupsRelID {
+			t.Errorf("both entries must carry the same relationTypeId %q, got %q", groupsRelID, r.RelationTypeID)
+		}
+		dirs[r.Direction] = r
+	}
+	fwd, okFwd := dirs["SOURCE_TO_TARGET"]
+	rev, okRev := dirs["TARGET_TO_SOURCE"]
+	if !okFwd || !okRev {
+		t.Fatalf("expected one entry per direction, got directions %v", dirs)
+	}
+	if fwd.Role != "groups" || rev.Role != "is grouped by" {
+		t.Errorf("each direction must carry its own role/coRole, got fwd=%+v rev=%+v", fwd, rev)
 	}
 }
 
