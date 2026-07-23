@@ -85,6 +85,7 @@ func TestServer_InitializeResponseIncludesInstructions(t *testing.T) {
 	init := chipSession.InitializeResult()
 	if init == nil {
 		t.Fatal("expected non-nil InitializeResult")
+		return
 	}
 	if init.Instructions == "" {
 		t.Fatal("expected non-empty instructions in initialize response")

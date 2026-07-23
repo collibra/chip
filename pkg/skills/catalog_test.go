@@ -33,6 +33,7 @@ content
 	lineage := cat.Get("collibra/lineage")
 	if lineage == nil {
 		t.Fatal("expected collibra/lineage skill")
+		return
 	}
 	if lineage.Description != "Trace lineage." {
 		t.Errorf("description = %q", lineage.Description)
@@ -232,6 +233,7 @@ func TestLoadWith_externalOverridesEmbedded(t *testing.T) {
 	lineage := cat.Get("collibra/lineage")
 	if lineage == nil {
 		t.Fatal("expected collibra/lineage skill")
+		return
 	}
 	if lineage.Description != "Overridden lineage." {
 		t.Errorf("description not overridden: %q", lineage.Description)
