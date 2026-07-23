@@ -61,6 +61,13 @@ type mockDGC struct {
 	// extraAssignments are appended to the default Business Term assignment
 	// in the /assignments/assetType/{id} response (e.g. a scoped assignment).
 	extraAssignments []map[string]any
+
+	// traitInheritances / ancestorTraitInheritances inject Trait-inherited
+	// characteristics onto the selected Business Term assignment: Traits applied
+	// directly to the type (traitAssignmentInheritances) and Traits applied to an
+	// ancestor type (assignmentInheritances, one level deeper), respectively.
+	traitInheritances         []map[string]any
+	ancestorTraitInheritances []map[string]any
 }
 
 type assetTypeRow struct {
@@ -183,31 +190,36 @@ func (m *mockDGC) server() *httptest.Server {
 		if m.emptyDomainTypes {
 			domainTypes = []map[string]string{}
 		}
-		payload := []map[string]any{
-			{
-				"id":          "assignment-bt",
-				"domainTypes": domainTypes,
-				"assignedCharacteristicTypeReferences": []map[string]any{
-					{
-						"id": "ref-def",
-						"assignedResourceReference": map[string]string{
-							"id": defAttrID, "name": defAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
-						},
-						"assignedResourcePublicId": defAttrPublicID,
-						"minimumOccurrences":       1,
+		assignment := map[string]any{
+			"id":          "assignment-bt",
+			"domainTypes": domainTypes,
+			"assignedCharacteristicTypeReferences": []map[string]any{
+				{
+					"id": "ref-def",
+					"assignedResourceReference": map[string]string{
+						"id": defAttrID, "name": defAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
 					},
-					{
-						"id": "ref-note",
-						"assignedResourceReference": map[string]string{
-							"id": noteAttrID, "name": noteAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
-						},
-						"assignedResourcePublicId": "Note",
-						"minimumOccurrences":       0,
-					},
+					"assignedResourcePublicId": defAttrPublicID,
+					"minimumOccurrences":       1,
 				},
-				"characteristicTypes": []any{},
+				{
+					"id": "ref-note",
+					"assignedResourceReference": map[string]string{
+						"id": noteAttrID, "name": noteAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
+					},
+					"assignedResourcePublicId": "Note",
+					"minimumOccurrences":       0,
+				},
 			},
+			"characteristicTypes": []any{},
 		}
+		if len(m.traitInheritances) > 0 {
+			assignment["traitAssignmentInheritances"] = m.traitInheritances
+		}
+		if len(m.ancestorTraitInheritances) > 0 {
+			assignment["assignmentInheritances"] = m.ancestorTraitInheritances
+		}
+		payload := []map[string]any{assignment}
 		payload = append(payload, m.extraAssignments...)
 		writeJSON(w, http.StatusOK, payload)
 	})
@@ -863,27 +875,32 @@ func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 	}
 }
 
-// An attribute required only on a PARENT asset type's assignment must not
-// block the create: Definition is required (min:1) on
-// BusinessTerm, but Acronym's own assignment doesn't list it, so creating
-// an Acronym without it succeeds — matching the Core API and the UI.
-func TestCreateAsset_ParentRequiredAttribute_DoesNotBlockCreate(t *testing.T) {
+// A required attribute that enters via a WALK-UP ANCESTOR's assignment must
+// block the create when unsupplied. Acronym has no assignment of its own, so
+// resolution walks up to BusinessTerm, whose assignment requires Definition
+// (min:1). The selected assignment is that ancestor level used whole, so its
+// required attributes are enforced just like the type's own would be — the
+// former own/ancestor distinction (FromOwnAssignment) is gone.
+func TestCreateAsset_WalkUpAncestorRequiredAttribute_BlocksCreate(t *testing.T) {
 	c := newAcronymSubtypeClient(t)
 
 	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
 		Name:      "MRR",
 		AssetType: acronymTypeName,
 		Domain:    glossaryDomain,
-		// No attributes: the parent's required Definition is omitted.
+		// No attributes: the ancestor's required Definition is omitted.
 	})
-	if out.Status != create_asset.StatusSuccess {
-		t.Fatalf("parent-required attribute must not block create, got %q (%s)", out.Status, out.Message)
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("walk-up ancestor required attribute must block create, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, defAttrName) {
+		t.Errorf("expected missing attribute name %q in message, got %q", defAttrName, out.Message)
 	}
 }
 
-// Definition is required (min:1) on BusinessTerm's OWN assignment, so the
-// gate applies. Contrast with TestCreateAsset_ParentRequiredAttribute_
-// DoesNotBlockCreate, where the requirement lives on a parent type only.
+// Definition is required (min:1) on BusinessTerm's own selected assignment, so
+// the gate applies. This is the baseline entry path; the walk-up ancestor and
+// Trait-inherited paths have their own Blocks-Create tests in this file.
 func TestCreateAsset_MissingRequiredAttribute_ReturnsValidationError(t *testing.T) {
 	c, _ := newClient(t, newMockDGC(t))
 	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
@@ -897,6 +914,90 @@ func TestCreateAsset_MissingRequiredAttribute_ReturnsValidationError(t *testing.
 	}
 	if !strings.Contains(out.Message, "Definition") {
 		t.Errorf("expected missing attribute name in message, got %q", out.Message)
+	}
+}
+
+const (
+	traitAttrID   = "00000000-0000-0000-0000-000000000440"
+	traitAttrName = "Steward"
+)
+
+// traitRequiredAttrRefs is one required (min:1) attribute characteristic in the
+// shape a Trait contributes it — a single assignedCharacteristicTypeReference,
+// read and joined exactly like the top-level assignment's.
+func traitRequiredAttrRefs() []map[string]any {
+	return []map[string]any{
+		{
+			"id": "ref-trait-steward",
+			"assignedResourceReference": map[string]string{
+				"id": traitAttrID, "name": traitAttrName,
+				"resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
+			},
+			"assignedResourcePublicId": "Steward",
+			"minimumOccurrences":       1,
+		},
+	}
+}
+
+// A required attribute that enters via a Trait applied DIRECTLY to the type
+// (traitAssignmentInheritances) is part of the selected assignment's resolved
+// set and must block the create when unsupplied. Definition (the own required
+// attribute) is supplied to isolate the Trait requirement as the sole cause.
+func TestCreateAsset_DirectTraitRequiredAttribute_BlocksCreate(t *testing.T) {
+	m := newMockDGC(t)
+	m.traitInheritances = []map[string]any{{
+		"assignedCharacteristicTypeReferences": traitRequiredAttrRefs(),
+		"characteristicTypes":                  []any{},
+	}}
+	c, m := newClient(t, m)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:       "Customer",
+		AssetType:  btTypeName,
+		Domain:     glossaryDomain,
+		Attributes: []create_asset.InputAttribute{{Name: defAttrName, Value: "A buyer."}},
+		// The directly-inherited Trait's required Steward is omitted.
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("direct-Trait required attribute must block create, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, traitAttrName) {
+		t.Errorf("expected missing Trait attribute name %q in message, got %q", traitAttrName, out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted when a required attribute is missing, got %d", len(m.createdAssets))
+	}
+}
+
+// A required attribute that enters via a Trait applied to an ANCESTOR type
+// (assignmentInheritances → nested traitAssignmentInheritances, one level
+// deeper) is equally part of the resolved set and must block the create when
+// unsupplied.
+func TestCreateAsset_IndirectTraitRequiredAttribute_BlocksCreate(t *testing.T) {
+	m := newMockDGC(t)
+	m.ancestorTraitInheritances = []map[string]any{{
+		"traitAssignmentInheritances": []map[string]any{{
+			"assignedCharacteristicTypeReferences": traitRequiredAttrRefs(),
+			"characteristicTypes":                  []any{},
+		}},
+	}}
+	c, m := newClient(t, m)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:       "Customer",
+		AssetType:  btTypeName,
+		Domain:     glossaryDomain,
+		Attributes: []create_asset.InputAttribute{{Name: defAttrName, Value: "A buyer."}},
+		// The ancestor-Trait's required Steward is omitted.
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("indirect-Trait required attribute must block create, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, traitAttrName) {
+		t.Errorf("expected missing Trait attribute name %q in message, got %q", traitAttrName, out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted when a required attribute is missing, got %d", len(m.createdAssets))
 	}
 }
 

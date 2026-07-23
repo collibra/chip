@@ -85,10 +85,8 @@ func TestSelectScopedAssignment_OwnAssignmentWins_DropsAncestorExtras(t *testing
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if a, ok := attrByID(got.Attributes, "own-1"); !ok {
+	if _, ok := attrByID(got.Attributes, "own-1"); !ok {
 		t.Errorf("own attribute must be present, got %+v", got.Attributes)
-	} else if !a.FromOwnAssignment {
-		t.Errorf("own-level attribute should have FromOwnAssignment=true")
 	}
 	if a, ok := attrByID(got.Attributes, "loc"); ok {
 		t.Errorf("ancestor-only attribute Location must NOT bleed in, got %+v", a)
@@ -102,8 +100,7 @@ func TestSelectScopedAssignment_OwnAssignmentWins_DropsAncestorExtras(t *testing
 }
 
 // An asset type with no assignment of its own resolves to the first ancestor
-// level that carries one, used whole — the Acronym → Business Term walk-up. The
-// ancestor level's slots carry FromOwnAssignment=false.
+// level that carries one, used whole — the Acronym → Business Term walk-up.
 func TestSelectScopedAssignment_NoOwnAssignment_WalksUpToFirstAssignedAncestor(t *testing.T) {
 	const domainType = "dt-glossary"
 	levels := []assignmentLevel{
@@ -126,12 +123,8 @@ func TestSelectScopedAssignment_NoOwnAssignment_WalksUpToFirstAssignedAncestor(t
 	if got.AssignmentID != "asgn-bt" {
 		t.Errorf("expected the first assigned ancestor to govern, got %q", got.AssignmentID)
 	}
-	def, ok := attrByID(got.Attributes, "def")
-	if !ok {
+	if _, ok := attrByID(got.Attributes, "def"); !ok {
 		t.Fatalf("ancestor Definition must be used, got %+v", got.Attributes)
-	}
-	if def.FromOwnAssignment {
-		t.Errorf("walk-up ancestor slot should have FromOwnAssignment=false")
 	}
 }
 

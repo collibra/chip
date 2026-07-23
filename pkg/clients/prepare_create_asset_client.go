@@ -321,13 +321,6 @@ type PrepareCreateScopedAttribute struct {
 	Min                   int
 	// Max is nil when there is no upper bound (i.e. unbounded).
 	Max *int
-	// FromOwnAssignment is true when the located level is the asset type's
-	// own assignment set, false when resolution walked up to an ancestor
-	// level (the type has no assignment of its own). Required-ness is only
-	// enforced at create time for the type's own assignment; walk-up ancestor
-	// Required flags are informational. (This own/ancestor distinction is
-	// slated for removal — see the create path's required-attribute gate.)
-	FromOwnAssignment bool
 }
 
 // PrepareCreateScopedRelation is one relation slot in a scoped assignment.
@@ -851,7 +844,7 @@ func selectScopedAssignment(levels []assignmentLevel, domainTypeID string, cover
 		return nil, fmt.Errorf("no scoped assignment found for asset type in this domain type %q", domainTypeID)
 	}
 
-	return emitAssignmentCharacteristics(selected, located == 0), nil
+	return emitAssignmentCharacteristics(selected), nil
 }
 
 // selectByTier picks the single governing assignment from one level's set,
@@ -950,10 +943,7 @@ func characteristicSources(a rawScopedAssignment) []characteristicSource {
 // field-level blending. The dedup key is the resource id for an attribute and
 // the resource id + roleDirection for a relation, so a relation type assigned in
 // both directions keeps both entries (each direction is a distinct key).
-//
-// fromOwn records whether the located level was the asset type's own (level 0) —
-// the required-attribute gate reads it (its removal is a follow-up ticket).
-func emitAssignmentCharacteristics(a rawScopedAssignment, fromOwn bool) *PrepareCreateScopedAssignment {
+func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAssignment {
 	out := &PrepareCreateScopedAssignment{AssignmentID: a.ID}
 	seen := make(map[characteristicKey]struct{})
 	for _, src := range characteristicSources(a) {
@@ -992,7 +982,6 @@ func emitAssignmentCharacteristics(a rawScopedAssignment, fromOwn bool) *Prepare
 					Required:              ref.MinimumOccurrences > 0,
 					Min:                   ref.MinimumOccurrences,
 					Max:                   ref.MaximumOccurrences,
-					FromOwnAssignment:     fromOwn,
 				})
 			case isRelationTypeDiscriminator(disc, rt):
 				// Relations dedup on resource id + direction, so a relation type

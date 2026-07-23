@@ -362,15 +362,15 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 	return resolved, nil
 }
 
-// validateRequiredAttributes checks that every attribute slot required on the
-// asset type's OWN assignment has a corresponding entry in the resolved list.
-// When resolution walked up to an ancestor level (the type has no assignment of
-// its own), those slots carry FromOwnAssignment=false and are skipped here — the
-// ancestor's requirements are treated as informational, matching the Core API
-// and the UI. The resolved assignment is a single selected assignment (see
-// selectScopedAssignment), so this gate only distinguishes own-level from
-// walk-up-ancestor slots. Returns a validation error output if any required
-// attribute is missing.
+// validateRequiredAttributes checks that every required attribute slot in the
+// selected assignment's resolved set has a corresponding entry in the resolved
+// list. The resolved set is a single selected assignment (see
+// selectScopedAssignment) — the type's own or a walk-up ancestor's, whichever
+// governs — together with its Trait-inherited characteristics (direct and
+// indirect). Every Required slot in that set is enforced without distinction:
+// the required-attribute (minimum-cardinality) gate is the sole guarantee that a
+// create is complete, since the REST create API validates maximum cardinality
+// only. Returns a validation error output if any required attribute is missing.
 func validateRequiredAttributes(resolved []resolvedAttribute, assignment *clients.PrepareCreateScopedAssignment) *Output {
 	supplied := make(map[string]struct{}, len(resolved))
 	for _, r := range resolved {
@@ -378,7 +378,7 @@ func validateRequiredAttributes(resolved []resolvedAttribute, assignment *client
 	}
 	var missing []string
 	for _, slot := range assignment.Attributes {
-		if !slot.Required || !slot.FromOwnAssignment {
+		if !slot.Required {
 			continue
 		}
 		if _, ok := supplied[slot.AttributeTypeID]; !ok {
