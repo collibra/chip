@@ -30,6 +30,29 @@ func attrRef(id, name string, min int) rawAssignedCharacteristicTypeReference {
 	}
 }
 
+// relRef builds a relation reference for a given relation-type resource id and
+// role direction ("TO_TARGET" / "TO_SOURCE"). The direction is what keeps the
+// two sides of a bidirectional relation distinct in the dedup key.
+func relRef(id, roleDirection string) rawAssignedCharacteristicTypeReference {
+	return rawAssignedCharacteristicTypeReference{
+		ID: "ref-" + id + "-" + roleDirection,
+		AssignedResourceReference: rawAssignmentResourceRef{
+			ID: id, ResourceType: "RelationType", ResourceDiscriminator: "RelationType",
+		},
+		RoleDirection: roleDirection,
+	}
+}
+
+// relTypeIDs collects the relation-type ids of the resolved relation slots, in
+// order, for assertions that care only about which relations survived.
+func relTypeIDs(rels []PrepareCreateScopedRelation) []string {
+	out := make([]string, len(rels))
+	for i, r := range rels {
+		out[i] = r.RelationTypeID
+	}
+	return out
+}
+
 // When the asset type has its own assignment set, that single located level is
 // used whole; characteristics from ancestor levels must NOT bleed in. This is
 // the DEV-204211 regression: Data Product Port's parent-only Descriptive
@@ -346,6 +369,168 @@ func TestSelectScopedAssignment_SameTierScopes_SingleFirstFound(t *testing.T) {
 	}
 	if len(got.Attributes) != 1 {
 		t.Errorf("a same-tier tie must select one assignment, not union both, got %+v", got.Attributes)
+	}
+}
+
+// Characteristics a Trait applies DIRECTLY to the asset type
+// (traitAssignmentInheritances) are merged into the selected assignment
+// alongside its own — both attributes and relations.
+func TestSelectScopedAssignment_DirectTraitCharacteristicsMerged(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{{
+		ID:          "asgn",
+		DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+		AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+			attrRef("own", "Own Attr", 1),
+		},
+		TraitAssignmentInheritances: []rawTraitAssignmentInheritance{{
+			AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+				attrRef("trait-attr", "Trait Attr", 1),
+				relRef("trait-rel", "TO_TARGET"),
+			},
+		}},
+	}}}}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := attrByID(got.Attributes, "own"); !ok {
+		t.Errorf("own attribute must be present, got %+v", got.Attributes)
+	}
+	if _, ok := attrByID(got.Attributes, "trait-attr"); !ok {
+		t.Errorf("directly-applied Trait attribute must be merged in, got %+v", got.Attributes)
+	}
+	if ids := relTypeIDs(got.Relations); len(ids) != 1 || ids[0] != "trait-rel" {
+		t.Errorf("directly-applied Trait relation must be merged in, got %+v", ids)
+	}
+}
+
+// Characteristics a Trait applies to an ANCESTOR asset type
+// (assignmentInheritances) sit under the entry's nested
+// traitAssignmentInheritances and must be merged in too.
+func TestSelectScopedAssignment_AncestorTraitCharacteristicsMerged(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{{
+		ID:          "asgn",
+		DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+		AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+			attrRef("own", "Own Attr", 1),
+		},
+		AssignmentInheritances: []rawAssignmentInheritance{{
+			TraitAssignmentInheritances: []rawTraitAssignmentInheritance{{
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("ancestor-attr", "Ancestor Trait Attr", 1),
+					relRef("ancestor-rel", "TO_TARGET"),
+				},
+			}},
+		}},
+	}}}}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := attrByID(got.Attributes, "ancestor-attr"); !ok {
+		t.Errorf("ancestor Trait attribute must be merged in, got %+v", got.Attributes)
+	}
+	if ids := relTypeIDs(got.Relations); len(ids) != 1 || ids[0] != "ancestor-rel" {
+		t.Errorf("ancestor Trait relation must be merged in, got %+v", ids)
+	}
+}
+
+// Closest wins: a characteristic on the selected assignment's own references
+// shadows the same characteristic (same resource id) inherited from a direct
+// Trait — one entry, carrying the own assignment's values.
+func TestSelectScopedAssignment_OwnShadowsDirectTrait(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{{
+		ID:          "asgn",
+		DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+		AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+			attrRef("shared", "Shared Attr", 2), // own: min 2
+		},
+		TraitAssignmentInheritances: []rawTraitAssignmentInheritance{{
+			AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+				attrRef("shared", "Shared Attr", 7), // direct trait: min 7 — shadowed
+			},
+		}},
+	}}}}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	shared, ok := attrByID(got.Attributes, "shared")
+	if !ok {
+		t.Fatalf("shared attribute must be present, got %+v", got.Attributes)
+	}
+	if len(got.Attributes) != 1 {
+		t.Errorf("shadowed duplicate must be dropped, got %d slots", len(got.Attributes))
+	}
+	if shared.Min != 2 {
+		t.Errorf("own assignment must win the whole characteristic (Min=2), got Min=%d", shared.Min)
+	}
+}
+
+// Closest wins: a characteristic on a directly-applied Trait shadows the same
+// one inherited from an ancestor Trait.
+func TestSelectScopedAssignment_DirectTraitShadowsAncestorTrait(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{{
+		ID:          "asgn",
+		DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+		TraitAssignmentInheritances: []rawTraitAssignmentInheritance{{
+			AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+				attrRef("shared", "Shared Attr", 3), // direct trait: min 3 — wins
+			},
+		}},
+		AssignmentInheritances: []rawAssignmentInheritance{{
+			TraitAssignmentInheritances: []rawTraitAssignmentInheritance{{
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("shared", "Shared Attr", 9), // ancestor trait: min 9 — shadowed
+				},
+			}},
+		}},
+	}}}}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	shared, ok := attrByID(got.Attributes, "shared")
+	if !ok {
+		t.Fatalf("shared attribute must be present, got %+v", got.Attributes)
+	}
+	if len(got.Attributes) != 1 {
+		t.Errorf("shadowed duplicate must be dropped, got %d slots", len(got.Attributes))
+	}
+	if shared.Min != 3 {
+		t.Errorf("direct Trait must win over ancestor Trait (Min=3), got Min=%d", shared.Min)
+	}
+}
+
+// A relation type assigned in both directions is two distinct characteristics
+// (same resource id, different roleDirection) and both must survive — the
+// direction-aware dedup key replaces the old resource-id-only dedup that dropped
+// the second direction.
+func TestSelectScopedAssignment_BidirectionalRelation_BothDirectionsKept(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{{
+		ID:          "asgn",
+		DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+		AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+			relRef("groups", "TO_TARGET"),
+			relRef("groups", "TO_SOURCE"),
+		},
+	}}}}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ids := relTypeIDs(got.Relations); len(ids) != 2 || ids[0] != "groups" || ids[1] != "groups" {
+		t.Errorf("both directions of the bidirectional relation must be kept, got %+v", ids)
 	}
 }
 

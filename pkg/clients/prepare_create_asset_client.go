@@ -367,12 +367,41 @@ type PrepareCreateAttributeTypeFull struct {
 
 // rawScopedAssignment mirrors the on-the-wire shape of a single assignment
 // returned from /assignments/assetType/{id}. Fields we don't use are omitted.
+//
+// The two inheritance fields carry characteristics the asset type gains through
+// Traits (orthogonal to the scope selection above — they enrich whichever
+// assignment was selected, they are not a cross-assignment union). Both are
+// merged into the resolved assignment; see emitAssignmentCharacteristics.
 type rawScopedAssignment struct {
 	ID                                   string                                    `json:"id"`
 	DomainTypes                          []rawAssignmentResourceRef                `json:"domainTypes"`
 	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference  `json:"assignedCharacteristicTypeReferences"`
 	CharacteristicTypes                  []rawAssignmentCharacteristicTypeMetadata `json:"characteristicTypes"`
 	Scope                                *rawAssignmentScope                       `json:"scope"`
+	// TraitAssignmentInheritances are Traits applied DIRECTLY to this asset
+	// type; each entry carries its own characteristics exactly like the
+	// top-level assignment does.
+	TraitAssignmentInheritances []rawTraitAssignmentInheritance `json:"traitAssignmentInheritances"`
+	// AssignmentInheritances are Traits applied to an ANCESTOR asset type; each
+	// entry carries no characteristics directly — they sit one level deeper
+	// under the entry's nested TraitAssignmentInheritances.
+	AssignmentInheritances []rawAssignmentInheritance `json:"assignmentInheritances"`
+}
+
+// rawTraitAssignmentInheritance is one Trait's contribution of characteristics:
+// its own assignedCharacteristicTypeReferences (membership + min/max) and its
+// own characteristicTypes (relation role / co-role / direction / target), read
+// and joined per entry exactly as the top-level assignment's are.
+type rawTraitAssignmentInheritance struct {
+	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference  `json:"assignedCharacteristicTypeReferences"`
+	CharacteristicTypes                  []rawAssignmentCharacteristicTypeMetadata `json:"characteristicTypes"`
+}
+
+// rawAssignmentInheritance is a Trait applied to an ancestor asset type. It
+// holds no characteristics of its own — its contribution sits under the nested
+// traitAssignmentInheritances list (one entry per Trait on that ancestor).
+type rawAssignmentInheritance struct {
+	TraitAssignmentInheritances []rawTraitAssignmentInheritance `json:"traitAssignmentInheritances"`
 }
 
 type rawAssignmentScope struct {
@@ -395,6 +424,11 @@ type rawAssignedCharacteristicTypeReference struct {
 	AssignedResourcePublicID  string                   `json:"assignedResourcePublicId"`
 	MinimumOccurrences        int                      `json:"minimumOccurrences"`
 	MaximumOccurrences        *int                     `json:"maximumOccurrences"`
+	// RoleDirection ("TO_TARGET" / "TO_SOURCE") distinguishes the two sides of a
+	// relation type assigned in both directions. It is part of the relation
+	// dedup key so both directions survive as distinct characteristics; it is
+	// empty for attributes.
+	RoleDirection string `json:"roleDirection,omitempty"`
 }
 
 // rawAssignmentCharacteristicTypeMetadata carries the relation-specific
@@ -861,46 +895,119 @@ func selectByTier(raws []rawScopedAssignment, coveredScopes map[string]scopeTier
 	}
 }
 
+// characteristicSource is one contributor of characteristics to the resolved
+// assignment: its assigned-characteristic references paired with the
+// characteristicTypes metadata sidecar that carries each relation's role /
+// co-role / direction / target. The selected assignment's own characteristics
+// and each Trait inheritance are one source apiece.
+type characteristicSource struct {
+	refs []rawAssignedCharacteristicTypeReference
+	meta []rawAssignmentCharacteristicTypeMetadata
+}
+
+// characteristicKey is the closest-wins shadowing key across merge sources: the
+// resource id for an attribute, and the resource id + role direction for a
+// relation (roleDirection empty for attributes). The two directions of a
+// bidirectional relation type are therefore distinct keys and both survive.
+type characteristicKey struct {
+	resourceID    string
+	roleDirection string
+}
+
+// characteristicSources ranks the selected assignment's characteristic
+// contributors in closest-wins order, so a duplicate found in a later source is
+// shadowed by the earlier one (see emitAssignmentCharacteristics):
+//
+//  1. the assignment's own characteristics;
+//  2. Traits applied directly to this asset type (traitAssignmentInheritances),
+//     each carrying its own references + metadata;
+//  3. Traits applied to an ancestor asset type (assignmentInheritances), whose
+//     characteristics sit one level deeper under each entry's nested
+//     traitAssignmentInheritances.
+func characteristicSources(a rawScopedAssignment) []characteristicSource {
+	sources := []characteristicSource{
+		{refs: a.AssignedCharacteristicTypeReferences, meta: a.CharacteristicTypes},
+	}
+	for _, ti := range a.TraitAssignmentInheritances {
+		sources = append(sources, characteristicSource{refs: ti.AssignedCharacteristicTypeReferences, meta: ti.CharacteristicTypes})
+	}
+	for _, ai := range a.AssignmentInheritances {
+		for _, ti := range ai.TraitAssignmentInheritances {
+			sources = append(sources, characteristicSource{refs: ti.AssignedCharacteristicTypeReferences, meta: ti.CharacteristicTypes})
+		}
+	}
+	return sources
+}
+
 // emitAssignmentCharacteristics decodes the selected assignment's attribute and
-// relation characteristics into the resolved shape. fromOwn records whether the
-// located level was the asset type's own (level 0) — the required-attribute
-// gate reads it (its removal is a follow-up ticket).
+// relation characteristics into the resolved shape, merging its own
+// characteristics with those inherited through Traits (directly and from
+// ancestor types).
+//
+// Precedence is closest-wins: the sources are walked own > direct-trait >
+// ancestor-trait, and the first occurrence of a characteristic's key supplies
+// the whole characteristic — later duplicates are dropped entire, with no
+// field-level blending. The dedup key is the resource id for an attribute and
+// the resource id + roleDirection for a relation, so a relation type assigned in
+// both directions keeps both entries (each direction is a distinct key).
+//
+// fromOwn records whether the located level was the asset type's own (level 0) —
+// the required-attribute gate reads it (its removal is a follow-up ticket).
 func emitAssignmentCharacteristics(a rawScopedAssignment, fromOwn bool) *PrepareCreateScopedAssignment {
 	out := &PrepareCreateScopedAssignment{AssignmentID: a.ID}
-	metaByID := make(map[string]rawAssignmentCharacteristicTypeMetadata, len(a.CharacteristicTypes))
-	for _, m := range a.CharacteristicTypes {
-		metaByID[m.ID] = m
-	}
-	for _, ref := range a.AssignedCharacteristicTypeReferences {
-		disc := ref.AssignedResourceReference.ResourceDiscriminator
-		rt := ref.AssignedResourceReference.ResourceType
-		switch {
-		case isAttributeTypeDiscriminator(disc, rt):
-			out.Attributes = append(out.Attributes, PrepareCreateScopedAttribute{
-				AttributeTypeID:       ref.AssignedResourceReference.ID,
-				AttributeTypeName:     ref.AssignedResourceReference.Name,
-				AttributeTypePublicID: ref.AssignedResourcePublicID,
-				Kind:                  disc,
-				Required:              ref.MinimumOccurrences > 0,
-				Min:                   ref.MinimumOccurrences,
-				Max:                   ref.MaximumOccurrences,
-				FromOwnAssignment:     fromOwn,
-			})
-		case isRelationTypeDiscriminator(disc, rt):
-			meta := metaByID[ref.AssignedResourceReference.ID]
-			rel := PrepareCreateScopedRelation{
-				RelationTypeID: ref.AssignedResourceReference.ID,
-				Role:           meta.Role,
-				CoRole:         meta.CoRole,
-				Direction:      meta.Direction,
-			}
-			if meta.TargetType != nil {
-				rel.TargetType = &PrepareCreateAssetType{
-					ID:   meta.TargetType.ID,
-					Name: meta.TargetType.Name,
+	seen := make(map[characteristicKey]struct{})
+	for _, src := range characteristicSources(a) {
+		metaByID := make(map[string]rawAssignmentCharacteristicTypeMetadata, len(src.meta))
+		for _, m := range src.meta {
+			metaByID[m.ID] = m
+		}
+		for _, ref := range src.refs {
+			disc := ref.AssignedResourceReference.ResourceDiscriminator
+			rt := ref.AssignedResourceReference.ResourceType
+			switch {
+			case isAttributeTypeDiscriminator(disc, rt):
+				// Attributes dedup on the resource id alone (no direction).
+				key := characteristicKey{resourceID: ref.AssignedResourceReference.ID}
+				if _, dup := seen[key]; dup {
+					continue
 				}
+				seen[key] = struct{}{}
+				out.Attributes = append(out.Attributes, PrepareCreateScopedAttribute{
+					AttributeTypeID:       ref.AssignedResourceReference.ID,
+					AttributeTypeName:     ref.AssignedResourceReference.Name,
+					AttributeTypePublicID: ref.AssignedResourcePublicID,
+					Kind:                  disc,
+					Required:              ref.MinimumOccurrences > 0,
+					Min:                   ref.MinimumOccurrences,
+					Max:                   ref.MaximumOccurrences,
+					FromOwnAssignment:     fromOwn,
+				})
+			case isRelationTypeDiscriminator(disc, rt):
+				// Relations dedup on resource id + direction, so a relation type
+				// assigned in both directions keeps both entries.
+				key := characteristicKey{
+					resourceID:    ref.AssignedResourceReference.ID,
+					roleDirection: ref.RoleDirection,
+				}
+				if _, dup := seen[key]; dup {
+					continue
+				}
+				seen[key] = struct{}{}
+				meta := metaByID[ref.AssignedResourceReference.ID]
+				rel := PrepareCreateScopedRelation{
+					RelationTypeID: ref.AssignedResourceReference.ID,
+					Role:           meta.Role,
+					CoRole:         meta.CoRole,
+					Direction:      meta.Direction,
+				}
+				if meta.TargetType != nil {
+					rel.TargetType = &PrepareCreateAssetType{
+						ID:   meta.TargetType.ID,
+						Name: meta.TargetType.Name,
+					}
+				}
+				out.Relations = append(out.Relations, rel)
 			}
-			out.Relations = append(out.Relations, rel)
 		}
 	}
 	return out
