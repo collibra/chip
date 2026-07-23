@@ -350,6 +350,13 @@ func GetEffectiveAssignmentForAsset(ctx context.Context, client *http.Client, as
 	return &merged, nil
 }
 
+// maxEditAssignmentChainDepth caps how far the edit path walks the asset
+// type's parent chain. The edit resolver keeps its own bound, decoupled from
+// the create path's maxAncestorDepth: its multi-level merge behaviour is
+// out of scope for the create-resolver rework, so its bound stays at its
+// established value.
+const maxEditAssignmentChainDepth = 5
+
 // GetAssignmentForAssetType resolves the assignment for an (asset type, domain
 // type) pair by walking the asset type's parent chain and merging each level,
 // filtering by domain type. A subtype inherits relation roles from a parent's
@@ -364,7 +371,7 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 	seenTypes := make(map[string]struct{})
 
 	currentID := assetTypeID
-	for depth := 0; depth < maxAssignmentChainDepth; depth++ {
+	for depth := 0; depth < maxEditAssignmentChainDepth; depth++ {
 		if _, looped := seenTypes[currentID]; looped {
 			break
 		}

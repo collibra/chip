@@ -372,14 +372,13 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 
 // validateRequiredAttributes checks that every attribute slot required on the
 // asset type's OWN assignment has a corresponding entry in the resolved list.
-// Slots inherited from a parent asset type's assignment are skipped even when
-// required there: the parent's requirement is not part of this type's own
-// assignment in the domain, and Collibra itself would accept the create
-// (matching the Core API and the UI). Foreign parent characteristics beyond
-// the asset type's own authoritative assignment are no longer surfaced at all
-// (see reduceScopedAssignmentChain), so this gate now only distinguishes
-// genuinely-inherited slots on sentinel subtypes. Returns a validation error
-// output if any required attribute is missing.
+// When resolution walked up to an ancestor level (the type has no assignment of
+// its own), those slots carry FromOwnAssignment=false and are skipped here — the
+// ancestor's requirements are treated as informational, matching the Core API
+// and the UI. The resolved assignment is a single selected assignment (see
+// selectScopedAssignment), so this gate only distinguishes own-level from
+// walk-up-ancestor slots. Returns a validation error output if any required
+// attribute is missing.
 func validateRequiredAttributes(resolved []resolvedAttribute, assignment *clients.PrepareCreateScopedAssignment) *Output {
 	supplied := make(map[string]struct{}, len(resolved))
 	for _, r := range resolved {

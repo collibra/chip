@@ -30,15 +30,14 @@ func attrRef(id, name string, min int) rawAssignedCharacteristicTypeReference {
 	}
 }
 
-// When the asset type has its own authoritative assignment (a level whose
-// domainTypes explicitly lists the target domain type), characteristics from
-// deeper ancestor levels must NOT be unioned in. This is the DEV-204211
-// regression: Data Product Port's parent-only Descriptive Example / Location
-// attributes were leaking into the schema as required.
-func TestReduceScopedAssignmentChain_OwnAssignmentWins_DropsParentExtras(t *testing.T) {
+// When the asset type has its own assignment set, that single located level is
+// used whole; characteristics from ancestor levels must NOT bleed in. This is
+// the DEV-204211 regression: Data Product Port's parent-only Descriptive
+// Example / Location attributes were leaking into the schema as required.
+func TestSelectScopedAssignment_OwnAssignmentWins_DropsAncestorExtras(t *testing.T) {
 	const domainType = "dt-contract"
-	chain := []assignmentChainNode{
-		// level 0 — the asset type's own assignment, explicitly scoped.
+	levels := []assignmentLevel{
+		// level 0 — the asset type's own assignment.
 		{raws: []rawScopedAssignment{{
 			ID:          "asgn-own",
 			DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Data Contract"}},
@@ -47,7 +46,8 @@ func TestReduceScopedAssignmentChain_OwnAssignmentWins_DropsParentExtras(t *test
 			},
 		}}},
 		// level 1 — a parent asset type that also lists the domain type and
-		// carries extra required attributes. These must be dropped.
+		// carries extra required attributes. These must be dropped: the own
+		// level is located, so level 1 is never consumed.
 		{raws: []rawScopedAssignment{{
 			ID:          "asgn-parent",
 			DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Data Contract"}},
@@ -58,41 +58,35 @@ func TestReduceScopedAssignmentChain_OwnAssignmentWins_DropsParentExtras(t *test
 		}}},
 	}
 
-	got, err := reduceScopedAssignmentChain(chain, domainType, nil)
+	got, err := selectScopedAssignment(levels, domainType, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, ok := attrByID(got.Attributes, "own-1"); !ok {
+	if a, ok := attrByID(got.Attributes, "own-1"); !ok {
 		t.Errorf("own attribute must be present, got %+v", got.Attributes)
+	} else if !a.FromOwnAssignment {
+		t.Errorf("own-level attribute should have FromOwnAssignment=true")
 	}
 	if a, ok := attrByID(got.Attributes, "loc"); ok {
-		t.Errorf("parent-only attribute Location must NOT be unioned in, got %+v", a)
+		t.Errorf("ancestor-only attribute Location must NOT bleed in, got %+v", a)
 	}
 	if a, ok := attrByID(got.Attributes, "desc"); ok {
-		t.Errorf("parent-only attribute Descriptive Example must NOT be unioned in, got %+v", a)
+		t.Errorf("ancestor-only attribute Descriptive Example must NOT bleed in, got %+v", a)
 	}
 	if len(got.Attributes) != 1 {
 		t.Errorf("expected exactly the own attribute, got %d slots", len(got.Attributes))
 	}
 }
 
-// A sentinel subtype (its own assignment has empty domainTypes) genuinely
-// inherits its parent's assignment. The parent's characteristics must still be
-// unioned in, but be marked FromOwnAssignment=false so create_asset does not
-// block on the parent's required attributes (DEV-202031). The subtype's own
-// characteristics stay FromOwnAssignment=true.
-func TestReduceScopedAssignmentChain_SentinelInheritsParent(t *testing.T) {
+// An asset type with no assignment of its own resolves to the first ancestor
+// level that carries one, used whole — the Acronym → Business Term walk-up. The
+// ancestor level's slots carry FromOwnAssignment=false.
+func TestSelectScopedAssignment_NoOwnAssignment_WalksUpToFirstAssignedAncestor(t *testing.T) {
 	const domainType = "dt-glossary"
-	chain := []assignmentChainNode{
-		// level 0 — sentinel: empty domainTypes, one own attribute.
-		{raws: []rawScopedAssignment{{
-			ID:          "asgn-acronym",
-			DomainTypes: []rawAssignmentResourceRef{},
-			AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
-				attrRef("acr-own", "Acronym Own", 0),
-			},
-		}}},
-		// level 1 — parent explicitly lists the domain type + a required attr.
+	levels := []assignmentLevel{
+		// level 0 — Acronym: no assignment of its own.
+		{raws: nil},
+		// level 1 — Business Term: the first ancestor with an assignment.
 		{raws: []rawScopedAssignment{{
 			ID:          "asgn-bt",
 			DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
@@ -102,39 +96,64 @@ func TestReduceScopedAssignmentChain_SentinelInheritsParent(t *testing.T) {
 		}}},
 	}
 
-	got, err := reduceScopedAssignmentChain(chain, domainType, nil)
+	got, err := selectScopedAssignment(levels, domainType, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	own, ok := attrByID(got.Attributes, "acr-own")
-	if !ok {
-		t.Fatalf("subtype's own attribute must be present, got %+v", got.Attributes)
-	}
-	if !own.FromOwnAssignment {
-		t.Errorf("own attribute should have FromOwnAssignment=true")
+	if got.AssignmentID != "asgn-bt" {
+		t.Errorf("expected the first assigned ancestor to govern, got %q", got.AssignmentID)
 	}
 	def, ok := attrByID(got.Attributes, "def")
 	if !ok {
-		t.Fatalf("inherited Definition must be unioned in for sentinel subtype, got %+v", got.Attributes)
+		t.Fatalf("ancestor Definition must be used, got %+v", got.Attributes)
 	}
 	if def.FromOwnAssignment {
-		t.Errorf("inherited Definition should have FromOwnAssignment=false so create does not block on it")
-	}
-	if !def.Required {
-		t.Errorf("inherited Definition should still carry Required=true")
+		t.Errorf("walk-up ancestor slot should have FromOwnAssignment=false")
 	}
 }
 
-// No chain level explicitly lists the target domain type → not allowed.
-func TestReduceScopedAssignmentChain_NoExplicitDomainType_NotAllowed(t *testing.T) {
-	chain := []assignmentChainNode{
+// The walk-up is not capped at one level: an intermediate ancestor that also
+// carries no assignment is skipped, and resolution continues to the next
+// ancestor that does.
+func TestSelectScopedAssignment_MultiLevelWalkUp_SkipsUnassignedIntermediate(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{
+		{raws: nil}, // level 0 — no assignment
+		{raws: nil}, // level 1 — intermediate ancestor, also no assignment
+		// level 2 — first ancestor that carries an assignment.
+		{raws: []rawScopedAssignment{{
+			ID:          "asgn-grandparent",
+			DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+			AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+				attrRef("def", "Definition", 1),
+			},
+		}}},
+	}
+
+	got, err := selectScopedAssignment(levels, domainType, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.AssignmentID != "asgn-grandparent" {
+		t.Errorf("expected the walk to skip the unassigned intermediate and reach asgn-grandparent, got %q", got.AssignmentID)
+	}
+	if _, ok := attrByID(got.Attributes, "def"); !ok {
+		t.Errorf("grandparent Definition must be used, got %+v", got.Attributes)
+	}
+}
+
+// The selected assignment does not list the target domain type → not allowed.
+// Selection itself never consults the domain type; this is the post-selection
+// creatability gate.
+func TestSelectScopedAssignment_SelectedAssignmentLacksDomainType_NotAllowed(t *testing.T) {
+	levels := []assignmentLevel{
 		{raws: []rawScopedAssignment{{
 			ID:          "asgn",
 			DomainTypes: []rawAssignmentResourceRef{{ID: "dt-other", Name: "Other"}},
 		}}},
 	}
-	if _, err := reduceScopedAssignmentChain(chain, "dt-glossary", nil); err == nil {
-		t.Fatal("expected 'not allowed' error when no level lists the target domain type")
+	if _, err := selectScopedAssignment(levels, "dt-glossary", nil); err == nil {
+		t.Fatal("expected 'not allowed' error when the selected assignment does not list the target domain type")
 	}
 }
 
@@ -143,9 +162,9 @@ func TestReduceScopedAssignmentChain_NoExplicitDomainType_NotAllowed(t *testing.
 // is the 2026-07-20 "Pricebooks" regression — a Business Term assignment
 // scoped elsewhere shared the Glossary domain type, and its required
 // Pricebook attributes blocked creates in every ordinary glossary domain.
-func TestReduceScopedAssignmentChain_ScopedAssignmentOutsideScope_Ignored(t *testing.T) {
+func TestSelectScopedAssignment_ScopedAssignmentOutsideScope_Ignored(t *testing.T) {
 	const domainType = "dt-glossary"
-	chain := []assignmentChainNode{
+	levels := []assignmentLevel{
 		{raws: []rawScopedAssignment{
 			{
 				ID:          "asgn-global",
@@ -170,7 +189,7 @@ func TestReduceScopedAssignmentChain_ScopedAssignmentOutsideScope_Ignored(t *tes
 	}
 
 	// No scope covers the target domain.
-	got, err := reduceScopedAssignmentChain(chain, domainType, nil)
+	got, err := selectScopedAssignment(levels, domainType, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -188,9 +207,9 @@ func TestReduceScopedAssignmentChain_ScopedAssignmentOutsideScope_Ignored(t *tes
 // When the target domain IS covered by an assignment's scope, that scoped
 // assignment replaces the global one outright — exactly one assignment
 // governs a (type, domain) pair; scoped and global are never merged.
-func TestReduceScopedAssignmentChain_CoveringScopedAssignmentWinsOverGlobal(t *testing.T) {
+func TestSelectScopedAssignment_CoveringScopedAssignmentWinsOverGlobal(t *testing.T) {
 	const domainType = "dt-glossary"
-	chain := []assignmentChainNode{
+	levels := []assignmentLevel{
 		{raws: []rawScopedAssignment{
 			{
 				ID:          "asgn-global",
@@ -214,7 +233,7 @@ func TestReduceScopedAssignmentChain_CoveringScopedAssignmentWinsOverGlobal(t *t
 	}
 
 	covered := map[string]scopeTier{"scope-pricebooks": scopeTierDomainDirect}
-	got, err := reduceScopedAssignmentChain(chain, domainType, covered)
+	got, err := selectScopedAssignment(levels, domainType, covered)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,6 +245,107 @@ func TestReduceScopedAssignmentChain_CoveringScopedAssignmentWinsOverGlobal(t *t
 	}
 	if got.AssignmentID != "asgn-pricebooks" {
 		t.Errorf("expected the scoped assignment to govern, got %q", got.AssignmentID)
+	}
+}
+
+// Two scopes cover the same target domain — one domain-direct, one community.
+// The domain-direct assignment must be selected whole; the community scope's
+// and the global's characteristics must NOT be merged in. This is the key
+// regression guard against residual over-collection.
+func TestSelectScopedAssignment_TwoCoveringScopes_DomainDirectWins(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{
+		{raws: []rawScopedAssignment{
+			{
+				ID:          "asgn-global",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("g", "Global Attr", 1),
+				},
+			},
+			{
+				ID:          "asgn-community",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				Scope:       &rawAssignmentScope{ID: "scope-community"},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("c", "Community Attr", 1),
+				},
+			},
+			{
+				ID:          "asgn-direct",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				Scope:       &rawAssignmentScope{ID: "scope-direct"},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("d", "Direct Attr", 1),
+				},
+			},
+		}},
+	}
+
+	covered := map[string]scopeTier{
+		"scope-direct":    scopeTierDomainDirect,
+		"scope-community": scopeTierCommunity,
+	}
+	got, err := selectScopedAssignment(levels, domainType, covered)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.AssignmentID != "asgn-direct" {
+		t.Errorf("domain-direct scope must win, got %q", got.AssignmentID)
+	}
+	if _, ok := attrByID(got.Attributes, "d"); !ok {
+		t.Errorf("domain-direct attribute must be present, got %+v", got.Attributes)
+	}
+	if len(got.Attributes) != 1 {
+		t.Errorf("only the domain-direct assignment's characteristics must be emitted (no union), got %+v", got.Attributes)
+	}
+}
+
+// Two scopes cover the target domain in the SAME tier. A single assignment is
+// selected first-found — never a union of both.
+func TestSelectScopedAssignment_SameTierScopes_SingleFirstFound(t *testing.T) {
+	const domainType = "dt-glossary"
+	levels := []assignmentLevel{
+		{raws: []rawScopedAssignment{
+			{
+				ID:          "asgn-global",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("g", "Global Attr", 1),
+				},
+			},
+			{
+				ID:          "asgn-a",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				Scope:       &rawAssignmentScope{ID: "scope-a"},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("a", "A Attr", 1),
+				},
+			},
+			{
+				ID:          "asgn-b",
+				DomainTypes: []rawAssignmentResourceRef{{ID: domainType, Name: "Glossary"}},
+				Scope:       &rawAssignmentScope{ID: "scope-b"},
+				AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{
+					attrRef("b", "B Attr", 1),
+				},
+			},
+		}},
+	}
+
+	covered := map[string]scopeTier{
+		"scope-a": scopeTierDomainDirect,
+		"scope-b": scopeTierDomainDirect,
+	}
+	got, err := selectScopedAssignment(levels, domainType, covered)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.AssignmentID != "asgn-a" {
+		t.Errorf("same-tier tie must resolve first-found (asgn-a), got %q", got.AssignmentID)
+	}
+	if len(got.Attributes) != 1 {
+		t.Errorf("a same-tier tie must select one assignment, not union both, got %+v", got.Attributes)
 	}
 }
 
@@ -259,7 +379,7 @@ func TestResolveCoveredScopes(t *testing.T) {
 	t.Cleanup(srv.Close)
 	client := testutil.NewClient(srv)
 
-	chain := []assignmentChainNode{{raws: []rawScopedAssignment{
+	levels := []assignmentLevel{{raws: []rawScopedAssignment{
 		{ID: "a-direct", Scope: &rawAssignmentScope{
 			ID: "scope-direct", Domains: []rawAssignmentResourceRef{{ID: targetDomain}},
 		}},
@@ -272,7 +392,7 @@ func TestResolveCoveredScopes(t *testing.T) {
 		{ID: "a-global"},
 	}}}
 
-	covered, err := resolveCoveredScopes(t.Context(), client, chain, targetDomain)
+	covered, err := resolveCoveredScopes(t.Context(), client, levels, targetDomain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

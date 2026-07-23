@@ -673,27 +673,15 @@ func newAcronymSubtypeClient(t *testing.T) *http.Client {
 			},
 		}, "total": 1})
 	})
-	// Acronym's own assignment: empty domainTypes, one extra relation slot.
-	// BusinessTerm's assignment: explicit Glossary domainType, the canonical
-	// "Definition" attribute. The chain reducer should union both.
+	// Acronym has no assignment of its own, so resolution walks up to its
+	// parent BusinessTerm, whose assignment lists the Glossary domainType and
+	// the canonical "Definition" attribute. That single ancestor level is used
+	// whole — there is no cross-level union.
 	mux.HandleFunc("GET /rest/2.0/assignments/assetType/", func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/assignments/assetType/")
 		switch id {
 		case acronymTypeID:
-			writeJSON(w, http.StatusOK, []map[string]any{{
-				"id":          "asgn-acronym",
-				"domainTypes": []any{},
-				"assignedCharacteristicTypeReferences": []map[string]any{
-					{
-						"id": "ref-has-acronym",
-						"assignedResourceReference": map[string]string{
-							"id": "00000000-0000-0000-0000-00000000aaaa", "name": "has acronym",
-							"resourceType": "RelationType", "resourceDiscriminator": "RelationType",
-						},
-					},
-				},
-				"characteristicTypes": []any{},
-			}})
+			writeJSON(w, http.StatusOK, []any{})
 		case btTypeID:
 			writeJSON(w, http.StatusOK, []map[string]any{{
 				"id":          "asgn-bt",
@@ -763,8 +751,9 @@ func newAcronymSubtypeClient(t *testing.T) *http.Client {
 	return testutil.NewClient(srv)
 }
 
-// Resolving Acronym + Glossary should walk the parent chain, find Glossary
-// in BusinessTerm's allowed types, and union the characteristics.
+// Resolving Acronym + Glossary should walk up to BusinessTerm (Acronym's
+// first assigned ancestor), find Glossary in its allowed types, and use that
+// level's characteristics whole.
 func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 	c := newAcronymSubtypeClient(t)
 
@@ -780,7 +769,7 @@ func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 		t.Fatalf("subtype Acronym in Glossary should succeed via parent walk, got status=%q msg=%q", out.Status, out.Message)
 	}
 	if len(out.AttributeResults) != 1 || out.AttributeResults[0].Status != "success" {
-		t.Errorf("expected the parent's Definition attribute to resolve via union, got %#v", out.AttributeResults)
+		t.Errorf("expected the ancestor's Definition attribute to resolve via walk-up, got %#v", out.AttributeResults)
 	}
 }
 
