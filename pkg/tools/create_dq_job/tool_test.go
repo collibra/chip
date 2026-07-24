@@ -1,6 +1,8 @@
 package create_dq_job_test
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -10,6 +12,89 @@ import (
 	tools "github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/testutil"
 )
+
+// jobsHandler mocks BOTH the PUBLIC search (GET /rest/dq/1.0/jobs → the given existing names) and the
+// PUBLIC create (POST → echoes the submitted jobName). Used to exercise client-side auto-naming.
+func jobsHandler(existing ...string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			results := make([]map[string]any, 0, len(existing))
+			for _, n := range existing {
+				results = append(results, map[string]any{"jobName": n})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": results})
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			JobName string `json:"jobName"`
+		}
+		_ = json.Unmarshal(body, &req)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"jobName":"` + req.JobName + `","jobType":"PULLUP","jobRunId":"run-1"}`))
+	}
+}
+
+func TestAutoNameResolvesViaSearch(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.Handle("/rest/dq/internal/v1/connections", connectionsHandler())
+	// The base sales.transactions and _1 already exist -> the tool should pick sales.transactions_2.
+	mux.HandleFunc("/rest/dq/1.0/jobs", jobsHandler("sales.transactions", "sales.transactions_1"))
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	in := baseInput() // no jobName -> auto-resolve
+	in.Confirm = true
+	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), in)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != tools.StatusCreated {
+		t.Fatalf("expected created, got %q (%s)", out.Status, out.Message)
+	}
+	if out.JobName != "sales.transactions_2" {
+		t.Errorf("expected auto-resolved name sales.transactions_2, got %q", out.JobName)
+	}
+}
+
+func TestAutoNamePreviewShowsResolvedName(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.Handle("/rest/dq/internal/v1/connections", connectionsHandler())
+	mux.HandleFunc("/rest/dq/1.0/jobs", jobsHandler("sales.transactions")) // base taken, no suffixes
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), baseInput()) // preview
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != tools.StatusPreview {
+		t.Fatalf("expected preview, got %q (%s)", out.Status, out.Message)
+	}
+	if out.JobName != "sales.transactions_1" {
+		t.Errorf("expected preview to show resolved name sales.transactions_1, got %q", out.JobName)
+	}
+}
+
+func TestExplicitNameUsedAsIs(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.Handle("/rest/dq/internal/v1/connections", connectionsHandler())
+	mux.HandleFunc("/rest/dq/1.0/jobs", jobsHandler("my-job")) // even if it exists, explicit name is kept
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	in := baseInput()
+	in.JobName = "my-job"
+	in.Confirm = true
+	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), in)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != tools.StatusCreated || out.JobName != "my-job" {
+		t.Fatalf("expected explicit name my-job used as-is, got status=%q name=%q", out.Status, out.JobName)
+	}
+}
 
 // muxWithPerms returns the base connections mux plus the GraphQL permissions endpoint, reporting the
 // given permission identifiers (e.g. DATA_QUALITY_JOB_CREATE) on the CONNECTION resource — the scope
@@ -69,8 +154,14 @@ func baseInput() tools.Input {
 func TestPreviewDoesNotCreate(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("/rest/dq/internal/v1/connections", connectionsHandler())
+	// GET is the name-resolution search (allowed in preview, returns no existing jobs); a POST here
+	// would be the actual create, which must NOT happen during preview.
 	mux.HandleFunc("/rest/dq/1.0/jobs", func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("create endpoint must NOT be called during preview")
+		if r.Method != http.MethodGet {
+			t.Fatalf("create endpoint must NOT be called during preview (method=%s)", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":[]}`))
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -90,10 +181,9 @@ func TestPreviewDoesNotCreate(t *testing.T) {
 	if dl.EdgeConnectionName != "POSTGRES-SOURCE" || dl.EdgeSiteName != "EDGE-1" || dl.DatabaseProductName != "POSTGRES" {
 		t.Errorf("dataLocation not resolved into request: %+v", dl)
 	}
-	// jobName is omitted from the request so the PUBLIC create auto-assigns a collision-free name;
-	// the preview surfaces the default display name.
-	if out.Request.JobType != "PULLUP" || out.Request.JobName != "" {
-		t.Errorf("unexpected request: jobType=%s jobName=%q (expected empty so the server auto-assigns)", out.Request.JobType, out.Request.JobName)
+	// jobName is now resolved client-side to the collision-free default (base is free here).
+	if out.Request.JobType != "PULLUP" || out.Request.JobName != "sales.transactions" {
+		t.Errorf("unexpected request: jobType=%s jobName=%q (expected resolved base sales.transactions)", out.Request.JobType, out.Request.JobName)
 	}
 	if out.JobName != "sales.transactions" {
 		t.Errorf("expected preview display name sales.transactions, got %q", out.JobName)

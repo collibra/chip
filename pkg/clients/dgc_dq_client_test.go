@@ -127,3 +127,25 @@ func TestBuildSchedulingSettingsMonthly(t *testing.T) {
 		t.Errorf("expected error: dayOfMonth 31 is out of range")
 	}
 }
+
+func TestNextAvailableDqJobName(t *testing.T) {
+	base := "public.customers"
+	cases := []struct {
+		name     string
+		existing []string
+		want     string
+	}{
+		{"base free", nil, base},
+		{"base free ignores unrelated", []string{"other.table", "public.customers_1"}, base}, // base itself absent -> base
+		{"base taken, no suffixes", []string{base}, base + "_1"},
+		{"base taken, _1 taken", []string{base, base + "_1"}, base + "_2"},
+		{"smallest free fills gap", []string{base, base + "_1", base + "_3"}, base + "_2"},
+		{"non-numeric suffix ignored", []string{base, base + "_abc"}, base + "_1"},
+		{"prefix-substring not a match", []string{base, "public.customersX"}, base + "_1"},
+	}
+	for _, c := range cases {
+		if got := NextAvailableDqJobName(base, c.existing); got != c.want {
+			t.Errorf("%s: NextAvailableDqJobName(%q, %v) = %q, want %q", c.name, base, c.existing, got, c.want)
+		}
+	}
+}

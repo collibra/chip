@@ -33,6 +33,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Status string
@@ -225,6 +226,16 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Postgres customers table for nulls and duplicates every day.\"",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
+		// Writes only on confirm=true (create + queue a run) — not read-only. Creating a monitoring
+		// job is additive, not destructive. Not idempotent: repeated calls auto-resolve to distinct
+		// "<schema>.<table>_N" jobs and queue new runs. Talks to a bounded Collibra instance, not an
+		// open world. Matches the create_asset / create_assessment convention.
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    false,
+			DestructiveHint: chip.Ptr(false),
+			IdempotentHint:  false,
+			OpenWorldHint:   chip.Ptr(false),
+		},
 	}
 }
 
@@ -380,10 +391,13 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 
 		// Job name: when the user supplies one, validate it client-side against the DQ server's rules;
-		// when omitted, leave it empty so the PUBLIC create auto-assigns a collision-free name
-		// (auto-incremented, e.g. "sales.orders_2"). The assigned name is read back from the response.
+		// Job name. A user-supplied name is validated and used as-is. When omitted, resolve a
+		// collision-free default the way the wizard does — mirror DatasetBll.getDatasetName over the
+		// public search endpoint: "<schema>.<table>", or "<...>_N" for the smallest free N. (The public
+		// create does not do this itself: an empty name is rejected and an existing name is re-run.)
 		jobName := strings.TrimSpace(input.JobName)
-		if jobName != "" && !clients.IsValidDqJobName(jobName) {
+		autoNamed := jobName == ""
+		if !autoNamed && !clients.IsValidDqJobName(jobName) {
 			return Output{
 				Status:       StatusNeedsInput,
 				AffectedStep: stepSelectData,
@@ -392,6 +406,15 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 					"Use only letters, numbers, '.', '-' and '_', and don't start with '-'. A valid default is %q.",
 					input.SchemaName+"."+input.TableName),
 			}, nil
+		}
+		if autoNamed {
+			resolved, nameErr := clients.ResolveAutoDqJobName(ctx, collibraClient, input.SchemaName, input.TableName)
+			if nameErr != nil || strings.TrimSpace(resolved) == "" {
+				// Fall back to the plain base name if the search is unavailable; the create will
+				// re-run any existing same-named job rather than fail.
+				resolved = input.SchemaName + "." + input.TableName
+			}
+			jobName = resolved
 		}
 
 		// Type-specific config must match the job type (sizing/Parallel JDBC are PULLUP-only; compute is PUSHDOWN-only).
@@ -480,9 +503,8 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 			previewName := jobName
 			nameClause := "job name is overridable via jobName"
-			if jobName == "" {
-				previewName = input.SchemaName + "." + input.TableName
-				nameClause = fmt.Sprintf("job name will be auto-assigned (default %q, with a numeric suffix if it already exists) and returned on create; set jobName to override", previewName)
+			if autoNamed {
+				nameClause = fmt.Sprintf("job name auto-resolved to %q (the next free name for this table, matching the wizard); set jobName to override", previewName)
 			}
 			return Output{
 				Status:             StatusPreview,
@@ -503,7 +525,8 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}, nil
 		}
 
-		// confirm=true -> submit to the PUBLIC endpoint POST /rest/dq/1.0/jobs.
+		// confirm=true -> submit to the PUBLIC endpoint POST /rest/dq/1.0/jobs. jobName is already
+		// resolved (a collision-free default when auto-named, or the user's validated name).
 		resp, err := clients.CreateDqJob(ctx, collibraClient, *req)
 		if err != nil {
 			return Output{

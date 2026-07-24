@@ -711,11 +711,14 @@ func GetDqDataDistribution(ctx context.Context, collibraHttpClient *http.Client,
 // =====================================================================================
 // Job-name validation (client-side).
 //
-// The job-creation flow no longer calls the internal /jobs/name, /jobs/{name}/exists, or
-// /jobs/{name}/validJobName endpoints. Collision-free naming is delegated to the PUBLIC create API:
-// omitting jobName makes the server auto-assign and auto-increment it (e.g. "sales.orders_2"), and
-// the assigned name is returned in the create response. A user-supplied name is validated here
-// against the same rules the server enforces before submit.
+// The internal /jobs/name, /jobs/{name}/exists, /jobs/{name}/validJobName endpoints are no longer
+// called — this flow stays on PUBLIC APIs. But the PUBLIC create does NOT generate a collision-free
+// default name (an empty jobName is rejected, and a concrete existing name is upserted/re-run, so
+// there is no "already exists" signal to react to). So the wizard's default-name algorithm
+// (DatasetBll.getDatasetName) is mirrored client-side over the PUBLIC search endpoint
+// (GET /rest/dq/1.0/jobs): validate the "<schema>.<table>" base, list existing job names, and pick the
+// base when free else "base_N" for the smallest free N (see ResolveAutoDqJobName / NextAvailableDqJobName).
+// A user-supplied name is validated here and used as-is (never auto-suffixed).
 // =====================================================================================
 
 // dqJobNamePattern mirrors the server's dataset-name constraint (@DatasetName,
@@ -726,6 +729,118 @@ var dqJobNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 // charset (letters, digits, '.', '-', '_') and no leading hyphen (the server's validJobName check).
 func IsValidDqJobName(jobName string) bool {
 	return jobName != "" && !strings.HasPrefix(jobName, "-") && dqJobNamePattern.MatchString(jobName)
+}
+
+// dqDatasetNameChar reports whether r is in the server's dataset-name charset ([a-zA-Z0-9_.-]).
+func dqDatasetNameChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+		r == '_' || r == '.' || r == '-'
+}
+
+// validatedDqDataset mirrors DatasetBll.getValidatedDataset: if the base isn't already valid, strip
+// every character outside the dataset charset; if nothing usable remains, fall back to
+// "data_quality_job"; finally cap the length at 252.
+func validatedDqDataset(base string) string {
+	if !dqJobNamePattern.MatchString(base) {
+		var b strings.Builder
+		for _, r := range base {
+			if dqDatasetNameChar(r) {
+				b.WriteRune(r)
+			}
+		}
+		base = b.String()
+		if base == "" || base == "." {
+			base = "data_quality_job"
+		}
+	}
+	if len(base) > 252 {
+		base = base[:252]
+	}
+	return base
+}
+
+// NextAvailableDqJobName mirrors DatasetBll.getDatasetName's suffixing: given the (validated) base
+// "<schema>.<table>" and the existing job names, it returns base when base itself is free, otherwise
+// "base_N" for the smallest positive N whose "base_N" is not taken. First duplicate -> "base_1".
+// Non-numeric "base_x" names are ignored, matching the server.
+func NextAvailableDqJobName(base string, existing []string) string {
+	baseExists := false
+	suffixes := map[int]bool{}
+	prefix := base + "_"
+	for _, ds := range existing {
+		if ds == base {
+			baseExists = true
+			continue
+		}
+		if strings.HasPrefix(ds, prefix) {
+			if n, err := strconv.Atoi(ds[len(prefix):]); err == nil {
+				suffixes[n] = true
+			}
+		}
+	}
+	if !baseExists {
+		return base
+	}
+	n := 1
+	for suffixes[n] {
+		n++
+	}
+	return fmt.Sprintf("%s_%d", base, n)
+}
+
+// ResolveAutoDqJobName produces the collision-free default job name for schema.table using PUBLIC APIs,
+// matching the wizard/server algorithm: validate the base, prefix-search existing jobs, pick the first
+// free name. Returns the resolved name (base or base_N).
+func ResolveAutoDqJobName(ctx context.Context, collibraHttpClient *http.Client, schemaName, tableName string) (string, error) {
+	base := validatedDqDataset(fmt.Sprintf("%s.%s", schemaName, tableName))
+	existing, err := SearchDqJobNames(ctx, collibraHttpClient, base)
+	if err != nil {
+		return "", err
+	}
+	return NextAvailableDqJobName(base, existing), nil
+}
+
+// dqJobSearchResult is the minimal shape of the PUBLIC GET /rest/dq/1.0/jobs (searchJobs) response —
+// only the job names are needed for collision-free naming.
+type dqJobSearchResult struct {
+	Results []struct {
+		JobName string `json:"jobName"`
+	} `json:"results"`
+}
+
+// SearchDqJobNames returns the job names matching the fuzzy, case-insensitive jobName filter via the
+// PUBLIC GET /rest/dq/1.0/jobs (searchJobs), paging until the results are exhausted. The filter uses
+// SQL LIKE %filter% semantics, so callers must still apply exact prefix logic to the result.
+func SearchDqJobNames(ctx context.Context, collibraHttpClient *http.Client, jobNameFilter string) ([]string, error) {
+	const pageSize = 500
+	var names []string
+	for offset := 0; offset <= 100000; offset += pageSize {
+		v := url.Values{}
+		if jobNameFilter != "" {
+			v.Set("jobName", jobNameFilter)
+		}
+		v.Set("limit", strconv.Itoa(pageSize))
+		v.Set("offset", strconv.Itoa(offset))
+		req, err := http.NewRequestWithContext(ctx, "GET", "/rest/dq/1.0/jobs?"+v.Encode(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create jobs-search request: %w", err)
+		}
+		body, err := executeRequest(collibraHttpClient, req)
+		if err != nil {
+			return nil, err
+		}
+		var page dqJobSearchResult
+		if err := json.Unmarshal(body, &page); err != nil {
+			return nil, fmt.Errorf("failed to parse jobs-search response: %w", err)
+		}
+		for _, r := range page.Results {
+			names = append(names, r.JobName)
+		}
+		if len(page.Results) < pageSize {
+			break
+		}
+	}
+	return names, nil
 }
 
 // =====================================================================================
