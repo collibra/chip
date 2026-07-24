@@ -143,15 +143,26 @@ type EditAssetAssignmentRelationType struct {
 // rawAssignmentResourceRef, rawAssignmentCharacteristicTypeMetadata) are reused
 // directly from the create resolver — both clients live in this package.
 //
-// (Trait-inherited characteristics — traitAssignmentInheritances /
-// assignmentInheritances — are folded in by a follow-up; this decode reads only
-// the assignment's own characteristics.)
+// Trait-inherited characteristics arrive on two more fields, both reused by
+// direct reference from the create resolver and both folded into the resolved
+// assignment (see mergeEditAssignments): traitAssignmentInheritances (Traits
+// applied directly to this asset type) and assignmentInheritances (Traits on an
+// ancestor asset type, whose characteristics nest one level deeper). Each level
+// is read the same references-primary way as the assignment's own.
 type rawAssignmentResponse struct {
 	ID                                   string                                    `json:"id"`
 	AssetType                            EditAssetTypeRef                          `json:"assetType"`
 	DomainTypes                          []EditAssetDomainTypeRef                  `json:"domainTypes"`
 	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference  `json:"assignedCharacteristicTypeReferences"`
 	CharacteristicTypes                  []rawAssignmentCharacteristicTypeMetadata `json:"characteristicTypes"`
+	// TraitAssignmentInheritances are Traits applied DIRECTLY to this asset type;
+	// each entry carries its own characteristics exactly like the top-level
+	// assignment does.
+	TraitAssignmentInheritances []rawTraitAssignmentInheritance `json:"traitAssignmentInheritances"`
+	// AssignmentInheritances are Traits applied to an ANCESTOR asset type; each
+	// entry carries no characteristics directly — they sit one level deeper under
+	// the entry's nested TraitAssignmentInheritances.
+	AssignmentInheritances []rawAssignmentInheritance `json:"assignmentInheritances"`
 }
 
 // EditAssetAssignmentAttributeType is an attribute type allowed by a scoped
@@ -298,89 +309,103 @@ func GetEffectiveAssignmentForAsset(ctx context.Context, client *http.Client, as
 }
 
 // mergeEditAssignments maps one per-asset assignment response into the public
-// EditAssetAssignment, reading it references-primary: iterate
-// assignedCharacteristicTypeReferences (membership, min/max, attribute kind, and
-// the explicit-vs-derived signal), and join the deprecated characteristicTypes on
-// the LINE id (ref.ID ↔ characteristicTypes[].id, never the resource id) for the
-// relation role / co-role / direction / target it alone carries.
+// EditAssetAssignment, merging the assignment's own characteristics with those
+// inherited through Traits (directly and from ancestor asset types). Each source
+// is read references-primary: iterate assignedCharacteristicTypeReferences
+// (membership, min/max, attribute kind, and the explicit-vs-derived signal), and
+// join the deprecated characteristicTypes on the LINE id (ref.ID ↔
+// characteristicTypes[].id, never the resource id) for the relation role /
+// co-role / direction / target it alone carries.
 //
-// Attributes dedup on the resource id; relations dedup on resource id +
-// direction, so a relation type assigned in both directions keeps both entries.
-// Derived relation types are excluded — the user cannot create them.
+// Precedence is closest-wins across three sources walked own > direct-trait
+// (traitAssignmentInheritances) > ancestor-trait (assignmentInheritances, whose
+// characteristics nest one level deeper): the first occurrence of a
+// characteristic's key supplies the whole characteristic, later duplicates are
+// dropped entire (no field-level blending). The dedup key is the resource id for
+// an attribute and the resource id + direction for a relation, so a relation type
+// assigned in both directions keeps both entries. The platform disallows the same
+// characteristic reaching an asset type via two Trait paths (the diamond case), so
+// a well-formed payload carries no duplicates — this is chip's defensive handling
+// for one that nonetheless does. Derived relation types are excluded at every
+// source — the user cannot create them.
 func mergeEditAssignments(merged *EditAssetAssignment, resp rawAssignmentResponse) {
 	if merged.DomainType == nil && len(resp.DomainTypes) > 0 {
 		dt := resp.DomainTypes[0]
 		merged.DomainType = &dt
 	}
-	// Key the relation-metadata sidecar by its top-level LINE id, which the
-	// reference's own top-level id joins against — never the resource id.
-	metaByID := make(map[string]rawAssignmentCharacteristicTypeMetadata, len(resp.CharacteristicTypes))
-	for _, m := range resp.CharacteristicTypes {
-		metaByID[m.ID] = m
-	}
 	seenAttrIDs := make(map[string]struct{})
 	seenRelKeys := make(map[string]struct{})
-	for _, ref := range resp.AssignedCharacteristicTypeReferences {
-		disc := ref.AssignedResourceReference.ResourceDiscriminator
-		rt := ref.AssignedResourceReference.ResourceType
-		// Derived relation types (DRTs) are computed/transitive relations the user
-		// cannot create — never offer them. Same guard as the create resolver; the
-		// empty-disc branch covers the fallback path in isRelationTypeDiscriminator,
-		// which would otherwise match "DerivedRelationType".
-		if disc == "DerivedRelationType" || (disc == "" && rt == "DerivedRelationType") {
-			continue
+	// Shared closest-wins source ranking with the create resolver (own >
+	// direct-trait > ancestor-trait); only the response type this unpacks differs.
+	for _, src := range characteristicSourcesFrom(resp.AssignedCharacteristicTypeReferences, resp.CharacteristicTypes, resp.TraitAssignmentInheritances, resp.AssignmentInheritances) {
+		// Key the relation-metadata sidecar by its top-level LINE id, which the
+		// reference's own top-level id joins against — never the resource id.
+		metaByID := make(map[string]rawAssignmentCharacteristicTypeMetadata, len(src.meta))
+		for _, m := range src.meta {
+			metaByID[m.ID] = m
 		}
-		switch {
-		case isAttributeTypeDiscriminator(disc, rt):
-			if _, dup := seenAttrIDs[ref.AssignedResourceReference.ID]; dup {
+		for _, ref := range src.refs {
+			disc := ref.AssignedResourceReference.ResourceDiscriminator
+			rt := ref.AssignedResourceReference.ResourceType
+			// Derived relation types (DRTs) are computed/transitive relations the user
+			// cannot create — never offer them. Same guard as the create resolver; the
+			// empty-disc branch covers the fallback path in isRelationTypeDiscriminator,
+			// which would otherwise match "DerivedRelationType".
+			if disc == "DerivedRelationType" || (disc == "" && rt == "DerivedRelationType") {
 				continue
 			}
-			seenAttrIDs[ref.AssignedResourceReference.ID] = struct{}{}
-			merged.AttributeTypes = append(merged.AttributeTypes, EditAssetAssignmentAttributeType{
-				ID:       ref.AssignedResourceReference.ID,
-				Name:     ref.AssignedResourceReference.Name,
-				Kind:     normalizeAttributeKind(disc),
-				Required: ref.MinimumOccurrences > 0,
-			})
-		case isRelationTypeDiscriminator(disc, rt):
-			// Collibra emits each relation type twice: once per direction. The live
-			// wire values are TO_TARGET (edited asset is the head/source) and
-			// TO_SOURCE (edited asset is the tail — the relation must be created in
-			// reverse). Empty means symmetric/unspecified, treated as forward. The
-			// longer SOURCE_TO_TARGET / TARGET_TO_SOURCE spellings are accepted
-			// defensively. Any other direction value is skipped.
-			var reversed bool
-			switch ref.RoleDirection {
-			case "", "TO_TARGET", "SOURCE_TO_TARGET":
-				reversed = false
-			case "TO_SOURCE", "TARGET_TO_SOURCE":
-				reversed = true
-			default:
-				continue
+			switch {
+			case isAttributeTypeDiscriminator(disc, rt):
+				if _, dup := seenAttrIDs[ref.AssignedResourceReference.ID]; dup {
+					continue
+				}
+				seenAttrIDs[ref.AssignedResourceReference.ID] = struct{}{}
+				merged.AttributeTypes = append(merged.AttributeTypes, EditAssetAssignmentAttributeType{
+					ID:       ref.AssignedResourceReference.ID,
+					Name:     ref.AssignedResourceReference.Name,
+					Kind:     normalizeAttributeKind(disc),
+					Required: ref.MinimumOccurrences > 0,
+				})
+			case isRelationTypeDiscriminator(disc, rt):
+				// Collibra emits each relation type twice: once per direction. The live
+				// wire values are TO_TARGET (edited asset is the head/source) and
+				// TO_SOURCE (edited asset is the tail — the relation must be created in
+				// reverse). Empty means symmetric/unspecified, treated as forward. The
+				// longer SOURCE_TO_TARGET / TARGET_TO_SOURCE spellings are accepted
+				// defensively. Any other direction value is skipped.
+				var reversed bool
+				switch ref.RoleDirection {
+				case "", "TO_TARGET", "SOURCE_TO_TARGET":
+					reversed = false
+				case "TO_SOURCE", "TARGET_TO_SOURCE":
+					reversed = true
+				default:
+					continue
+				}
+				relKey := ref.AssignedResourceReference.ID
+				if reversed {
+					relKey += ":reversed"
+				}
+				if _, dup := seenRelKeys[relKey]; dup {
+					continue
+				}
+				seenRelKeys[relKey] = struct{}{}
+				// Join on the reference's own top-level LINE id, never the resource id.
+				meta := metaByID[ref.ID]
+				rel := EditAssetAssignmentRelationType{
+					ID:       ref.AssignedResourceReference.ID,
+					Role:     meta.Role,
+					CoRole:   meta.CoRole,
+					Reversed: reversed,
+				}
+				if meta.SourceType != nil {
+					rel.SourceType = &EditAssetTypeRef{ID: meta.SourceType.ID, Name: meta.SourceType.Name}
+				}
+				if meta.TargetType != nil {
+					rel.TargetType = &EditAssetTypeRef{ID: meta.TargetType.ID, Name: meta.TargetType.Name}
+				}
+				merged.RelationTypes = append(merged.RelationTypes, rel)
 			}
-			relKey := ref.AssignedResourceReference.ID
-			if reversed {
-				relKey += ":reversed"
-			}
-			if _, dup := seenRelKeys[relKey]; dup {
-				continue
-			}
-			seenRelKeys[relKey] = struct{}{}
-			// Join on the reference's own top-level LINE id, never the resource id.
-			meta := metaByID[ref.ID]
-			rel := EditAssetAssignmentRelationType{
-				ID:       ref.AssignedResourceReference.ID,
-				Role:     meta.Role,
-				CoRole:   meta.CoRole,
-				Reversed: reversed,
-			}
-			if meta.SourceType != nil {
-				rel.SourceType = &EditAssetTypeRef{ID: meta.SourceType.ID, Name: meta.SourceType.Name}
-			}
-			if meta.TargetType != nil {
-				rel.TargetType = &EditAssetTypeRef{ID: meta.TargetType.ID, Name: meta.TargetType.Name}
-			}
-			merged.RelationTypes = append(merged.RelationTypes, rel)
 		}
 	}
 }

@@ -248,3 +248,282 @@ func TestGetEffectiveAssignmentForAsset_NormalizesDateTimeAttributeType(t *testi
 		t.Errorf("expected DateTimeAttributeType normalized to DateAttributeType, got %q", got.AttributeTypes[0].Kind)
 	}
 }
+
+// hasAttr reports whether the resolved assignment offers an attribute type with
+// the given resource id.
+func hasAttr(a *EditAssetAssignment, id string) bool {
+	for _, at := range a.AttributeTypes {
+		if at.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// findRel returns the resolved relation entry with the given resource id, or nil.
+func findRel(a *EditAssetAssignment, id string) *EditAssetAssignmentRelationType {
+	for i := range a.RelationTypes {
+		if a.RelationTypes[i].ID == id {
+			return &a.RelationTypes[i]
+		}
+	}
+	return nil
+}
+
+// TestGetEffectiveAssignmentForAsset_IncludesDirectTraitInheritances asserts that
+// characteristics contributed by a Trait applied directly to the asset type
+// (traitAssignmentInheritances) — both attributes AND relations — are folded into
+// the resolved assignment, each read the same references-primary way as the
+// top-level: membership from the reference, relation metadata joined from the
+// entry's OWN characteristicTypes on the line id.
+func TestGetEffectiveAssignmentForAsset_IncludesDirectTraitInheritances(t *testing.T) {
+	const (
+		assetID     = "019e027f-25b9-728f-9ed8-77c315ac377f"
+		traitAttrID = "attr-trait-tag"
+		traitRelID  = "cd000000-0000-0000-0000-0000000070aa"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "Acronym"},
+			"assignedCharacteristicTypeReferences": [{
+				"id": "line-own",
+				"minimumOccurrences": 1,
+				"assignedResourceReference": {"id": "attr-own", "name": "Definition", "resourceDiscriminator": "StringAttributeType"}
+			}],
+			"traitAssignmentInheritances": [{
+				"assignedCharacteristicTypeReferences": [{
+					"id": "line-trait-attr",
+					"minimumOccurrences": 0,
+					"assignedResourceReference": {"id": "` + traitAttrID + `", "name": "Tag", "resourceDiscriminator": "StringAttributeType"}
+				}, {
+					"id": "line-trait-rel",
+					"roleDirection": "TO_TARGET",
+					"assignedResourceReference": {"id": "` + traitRelID + `", "name": "governed by", "resourceDiscriminator": "RelationType"}
+				}],
+				"characteristicTypes": [
+					{"id": "line-trait-rel", "role": "governed by", "coRole": "governs"}
+				]
+			}]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+
+	if !hasAttr(got, "attr-own") {
+		t.Errorf("top-level attribute dropped: %+v", got.AttributeTypes)
+	}
+	if !hasAttr(got, traitAttrID) {
+		t.Errorf("direct-trait attribute not merged: %+v", got.AttributeTypes)
+	}
+	rel := findRel(got, traitRelID)
+	if rel == nil {
+		t.Fatalf("direct-trait relation not merged: %+v", got.RelationTypes)
+	}
+	// Role/coRole come only from the trait entry's own characteristicTypes; empty
+	// would mean the per-entry join key was wrong.
+	if rel.Role != "governed by" || rel.CoRole != "governs" {
+		t.Errorf("direct-trait relation metadata join failed: %+v", rel)
+	}
+}
+
+// TestGetEffectiveAssignmentForAsset_IncludesAncestorTraitInheritances asserts
+// characteristics contributed by a Trait on an ANCESTOR asset type
+// (assignmentInheritances) — whose characteristics nest one level deeper under
+// each entry's own traitAssignmentInheritances — are folded in, attributes AND
+// relations alike, with relation metadata joined from the nested entry's own
+// characteristicTypes.
+func TestGetEffectiveAssignmentForAsset_IncludesAncestorTraitInheritances(t *testing.T) {
+	const (
+		assetID   = "019e027f-25b9-728f-9ed8-77c315ac377f"
+		ancAttrID = "attr-anc-source"
+		ancRelID  = "cd000000-0000-0000-0000-0000000070bb"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "Acronym"},
+			"assignedCharacteristicTypeReferences": [{
+				"id": "line-own",
+				"minimumOccurrences": 1,
+				"assignedResourceReference": {"id": "attr-own", "name": "Definition", "resourceDiscriminator": "StringAttributeType"}
+			}],
+			"assignmentInheritances": [{
+				"traitAssignmentInheritances": [{
+					"assignedCharacteristicTypeReferences": [{
+						"id": "line-anc-attr",
+						"minimumOccurrences": 0,
+						"assignedResourceReference": {"id": "` + ancAttrID + `", "name": "Source System", "resourceDiscriminator": "StringAttributeType"}
+					}, {
+						"id": "line-anc-rel",
+						"roleDirection": "TO_SOURCE",
+						"assignedResourceReference": {"id": "` + ancRelID + `", "name": "classified by", "resourceDiscriminator": "RelationType"}
+					}],
+					"characteristicTypes": [
+						{"id": "line-anc-rel", "role": "classified by", "coRole": "classifies"}
+					]
+				}]
+			}]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+
+	if !hasAttr(got, ancAttrID) {
+		t.Errorf("ancestor-trait attribute not merged: %+v", got.AttributeTypes)
+	}
+	rel := findRel(got, ancRelID)
+	if rel == nil {
+		t.Fatalf("ancestor-trait relation not merged: %+v", got.RelationTypes)
+	}
+	if rel.Role != "classified by" || rel.CoRole != "classifies" {
+		t.Errorf("ancestor-trait relation metadata join failed: %+v", rel)
+	}
+	if !rel.Reversed {
+		t.Errorf("TO_SOURCE ancestor-trait relation should be reversed: %+v", rel)
+	}
+}
+
+// TestGetEffectiveAssignmentForAsset_ShadowsClosestSource asserts closest-wins
+// precedence: a characteristic present in more than one source appears once,
+// carrying the closest source's values (no field-level blending). It covers both
+// ranks — top-level over direct-trait, and direct-trait over ancestor-trait —
+// using the observable required flag (minimumOccurrences) as the differing field.
+func TestGetEffectiveAssignmentForAsset_ShadowsClosestSource(t *testing.T) {
+	const (
+		assetID = "019e027f-25b9-728f-9ed8-77c315ac377f"
+		attrTop = "attr-shared-top" // in top-level (required) + direct-trait (optional)
+		attrMid = "attr-shared-mid" // in direct-trait (required) + ancestor-trait (optional)
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "Acronym"},
+			"assignedCharacteristicTypeReferences": [{
+				"id": "line-top",
+				"minimumOccurrences": 1,
+				"assignedResourceReference": {"id": "` + attrTop + `", "name": "Shared Top", "resourceDiscriminator": "StringAttributeType"}
+			}],
+			"traitAssignmentInheritances": [{
+				"assignedCharacteristicTypeReferences": [{
+					"id": "line-top-trait",
+					"minimumOccurrences": 0,
+					"assignedResourceReference": {"id": "` + attrTop + `", "name": "Shared Top", "resourceDiscriminator": "StringAttributeType"}
+				}, {
+					"id": "line-mid-trait",
+					"minimumOccurrences": 1,
+					"assignedResourceReference": {"id": "` + attrMid + `", "name": "Shared Mid", "resourceDiscriminator": "StringAttributeType"}
+				}]
+			}],
+			"assignmentInheritances": [{
+				"traitAssignmentInheritances": [{
+					"assignedCharacteristicTypeReferences": [{
+						"id": "line-mid-anc",
+						"minimumOccurrences": 0,
+						"assignedResourceReference": {"id": "` + attrMid + `", "name": "Shared Mid", "resourceDiscriminator": "StringAttributeType"}
+					}]
+				}]
+			}]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+
+	var top, mid []EditAssetAssignmentAttributeType
+	for _, at := range got.AttributeTypes {
+		switch at.ID {
+		case attrTop:
+			top = append(top, at)
+		case attrMid:
+			mid = append(mid, at)
+		}
+	}
+	if len(top) != 1 {
+		t.Fatalf("expected shared-top attribute once, got %d: %+v", len(top), top)
+	}
+	if !top[0].Required {
+		t.Errorf("top-level should shadow direct-trait: expected required (top-level minOccurs=1), got %+v", top[0])
+	}
+	if len(mid) != 1 {
+		t.Fatalf("expected shared-mid attribute once, got %d: %+v", len(mid), mid)
+	}
+	if !mid[0].Required {
+		t.Errorf("direct-trait should shadow ancestor-trait: expected required (direct-trait minOccurs=1), got %+v", mid[0])
+	}
+}
+
+// TestGetEffectiveAssignmentForAsset_ExcludesDerivedRelationTypeFromTrait asserts
+// the DRT guard applies on the trait-inheritance fields too: a derived relation
+// type contributed by a Trait is not offered, while its explicit sibling is.
+func TestGetEffectiveAssignmentForAsset_ExcludesDerivedRelationTypeFromTrait(t *testing.T) {
+	const (
+		assetID       = "019e027f-25b9-728f-9ed8-77c315ac377f"
+		explicitRelID = "cd000000-0000-0000-0000-0000000070c1"
+		derivedRelID  = "cd000000-0000-0000-0000-0000000070c2"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "Acronym"},
+			"traitAssignmentInheritances": [{
+				"assignedCharacteristicTypeReferences": [{
+					"id": "line-trait-explicit",
+					"roleDirection": "TO_TARGET",
+					"assignedResourceReference": {"id": "` + explicitRelID + `", "name": "relates to", "resourceDiscriminator": "RelationType"}
+				}, {
+					"id": "line-trait-derived",
+					"roleDirection": "TO_TARGET",
+					"assignedResourceReference": {"id": "` + derivedRelID + `", "name": "derived from", "resourceDiscriminator": "DerivedRelationType"}
+				}],
+				"characteristicTypes": [
+					{"id": "line-trait-explicit", "role": "relates to", "coRole": "related from"},
+					{"id": "line-trait-derived", "role": "derived from", "coRole": "source of"}
+				]
+			}]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+	if findRel(got, derivedRelID) != nil {
+		t.Errorf("derived relation from trait inheritance should be excluded: %+v", got.RelationTypes)
+	}
+	if findRel(got, explicitRelID) == nil {
+		t.Errorf("explicit relation from trait inheritance should be kept: %+v", got.RelationTypes)
+	}
+}

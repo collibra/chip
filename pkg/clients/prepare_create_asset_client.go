@@ -907,24 +907,29 @@ type characteristicKey struct {
 	roleDirection string
 }
 
-// characteristicSources ranks the selected assignment's characteristic
-// contributors in closest-wins order, so a duplicate found in a later source is
-// shadowed by the earlier one (see emitAssignmentCharacteristics):
+// characteristicSourcesFrom ranks an assignment's characteristic contributors in
+// closest-wins order, so a duplicate found in a later source is shadowed by the
+// earlier one (see emitAssignmentCharacteristics on the create path and
+// mergeEditAssignments on the edit path — both share this ranking, differing only
+// in the response type they unpack the four arguments from):
 //
-//  1. the assignment's own characteristics;
-//  2. Traits applied directly to this asset type (traitAssignmentInheritances),
+//  1. the assignment's own characteristics (own refs + meta);
+//  2. Traits applied directly to this asset type (direct = traitAssignmentInheritances),
 //     each carrying its own references + metadata;
-//  3. Traits applied to an ancestor asset type (assignmentInheritances), whose
-//     characteristics sit one level deeper under each entry's nested
+//  3. Traits applied to an ancestor asset type (ancestor = assignmentInheritances),
+//     whose characteristics sit one level deeper under each entry's nested
 //     traitAssignmentInheritances.
-func characteristicSources(a rawScopedAssignment) []characteristicSource {
-	sources := []characteristicSource{
-		{refs: a.AssignedCharacteristicTypeReferences, meta: a.CharacteristicTypes},
-	}
-	for _, ti := range a.TraitAssignmentInheritances {
+func characteristicSourcesFrom(
+	refs []rawAssignedCharacteristicTypeReference,
+	meta []rawAssignmentCharacteristicTypeMetadata,
+	direct []rawTraitAssignmentInheritance,
+	ancestor []rawAssignmentInheritance,
+) []characteristicSource {
+	sources := []characteristicSource{{refs: refs, meta: meta}}
+	for _, ti := range direct {
 		sources = append(sources, characteristicSource{refs: ti.AssignedCharacteristicTypeReferences, meta: ti.CharacteristicTypes})
 	}
-	for _, ai := range a.AssignmentInheritances {
+	for _, ai := range ancestor {
 		for _, ti := range ai.TraitAssignmentInheritances {
 			sources = append(sources, characteristicSource{refs: ti.AssignedCharacteristicTypeReferences, meta: ti.CharacteristicTypes})
 		}
@@ -946,7 +951,7 @@ func characteristicSources(a rawScopedAssignment) []characteristicSource {
 func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAssignment {
 	out := &PrepareCreateScopedAssignment{AssignmentID: a.ID}
 	seen := make(map[characteristicKey]struct{})
-	for _, src := range characteristicSources(a) {
+	for _, src := range characteristicSourcesFrom(a.AssignedCharacteristicTypeReferences, a.CharacteristicTypes, a.TraitAssignmentInheritances, a.AssignmentInheritances) {
 		// Key the relation-metadata sidecar by its top-level LINE id, which the
 		// reference's own top-level id joins against (see the join note below).
 		metaByID := make(map[string]rawAssignmentCharacteristicTypeMetadata, len(src.meta))
