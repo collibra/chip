@@ -1024,7 +1024,7 @@ func dqPageQuery(values url.Values, limit, offset int) string {
 
 // UnsupportedWizardOptions lists the data-quality wizard configuration steps the
 // create-DQ-job tools do NOT expose yet, each paired with the default the server
-// applies. Shared by prepare_create_data_quality_job (to disclose proactively at the ready
+// applies. Shared by create_data_quality_job (to disclose proactively at the preview
 // step) and create_data_quality_job (to disclose again at preview), so the user is never
 // misled about scope. jobType selects the type-specific entry (Sizing for Pullup,
 // Compute for Pushdown).

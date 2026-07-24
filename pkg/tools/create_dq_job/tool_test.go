@@ -58,12 +58,11 @@ func createdJobHandler() http.Handler {
 
 func baseInput() tools.Input {
 	return tools.Input{
-		EdgeSiteName:       "EDGE-1",
-		EdgeConnectionName: "POSTGRES-SOURCE",
-		DataSourceName:     "postgres",
-		SchemaName:         "sales",
-		TableName:          "transactions",
-		JobType:            "PULLUP",
+		Connection:     "POSTGRES-SOURCE",
+		DataSourceName: "postgres",
+		SchemaName:     "sales",
+		TableName:      "transactions",
+		JobType:        "PULLUP",
 	}
 }
 
@@ -164,6 +163,26 @@ func TestRowFilterAndSliceCombineInQuery(t *testing.T) {
 	}
 	if !strings.Contains(q, " AND ") {
 		t.Errorf("expected predicates ANDed together: %q", q)
+	}
+}
+
+func TestRowFilterRejectsUnknownOperator(t *testing.T) {
+	server := httptest.NewServer(discoveryMux())
+	defer server.Close()
+
+	in := baseInput()
+	in.FilterColumn = "country"
+	in.FilterOperator = "= 1 OR 1=1 --" // injection attempt
+	in.FilterValue = "US"
+	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), in)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != tools.StatusNeedsInput {
+		t.Fatalf("expected needs_input for a disallowed operator, got %q (%s)", out.Status, out.Message)
+	}
+	if out.Request != nil {
+		t.Fatalf("no request should be built for a rejected operator")
 	}
 }
 
@@ -694,16 +713,87 @@ func TestConfirmCreatesAndReturnsRunID(t *testing.T) {
 	}
 }
 
-func TestMissingFieldsNeedsInput(t *testing.T) {
-	server := httptest.NewServer(http.NewServeMux())
+// discoveryMux mocks the internal browse endpoints (connections + data sources/schemas/tables) so the
+// folded-in discovery phase can enumerate options one field at a time.
+func discoveryMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/rest/dq/internal/v1/connections", connectionsHandler())
+	mux.Handle("/rest/dq/internal/v1/monitoring/edge/connections/conn-1/dataSources", testutil.JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+		return http.StatusOK, map[string]any{"total": 1, "results": []map[string]any{{"dataSourceName": "postgres", "supportsSchemas": true}}}
+	}))
+	mux.Handle("/rest/dq/internal/v1/monitoring/edge/site-1/connections/conn-1/schemas", testutil.JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+		return http.StatusOK, map[string]any{"total": 1, "results": []map[string]any{{"name": "sales"}}}
+	}))
+	mux.Handle("/rest/dq/internal/v1/monitoring/edge/site-1/connections/conn-1/tables", testutil.JsonHandlerOut(func(r *http.Request) (int, map[string]any) {
+		return http.StatusOK, map[string]any{"total": 1, "results": []map[string]any{{"name": "transactions", "type": "TABLE"}}}
+	}))
+	return mux
+}
+
+func TestDiscoveryNoConnectionEnumerates(t *testing.T) {
+	server := httptest.NewServer(discoveryMux())
 	defer server.Close()
 
-	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), tools.Input{EdgeSiteName: "EDGE-1", JobType: "PULLUP"})
+	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), tools.Input{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out.Status != tools.StatusNeedsInput {
-		t.Fatalf("expected needs_input, got %q (%s)", out.Status, out.Message)
+	if out.Status != tools.StatusIncomplete {
+		t.Fatalf("expected incomplete, got %q (%s)", out.Status, out.Message)
+	}
+	if len(out.ConnectionOptions) != 1 || out.ConnectionOptions[0].ConnectionName != "POSTGRES-SOURCE" {
+		t.Fatalf("expected one connection option POSTGRES-SOURCE, got %+v", out.ConnectionOptions)
+	}
+}
+
+func TestDiscoveryEnumeratesNextMissingField(t *testing.T) {
+	server := httptest.NewServer(discoveryMux())
+	defer server.Close()
+	tool := tools.NewTool(testutil.NewClient(server))
+
+	// connection only -> data source options
+	out, _ := tool.Handler(t.Context(), tools.Input{Connection: "POSTGRES-SOURCE"})
+	if out.Status != tools.StatusIncomplete || len(out.DataSourceOptions) != 1 || out.DataSourceOptions[0] != "postgres" {
+		t.Fatalf("expected dataSource options [postgres], got status=%q opts=%+v", out.Status, out.DataSourceOptions)
+	}
+	if out.JobType != "PULLUP" {
+		t.Errorf("expected detected jobType PULLUP carried in the incomplete response, got %q", out.JobType)
+	}
+
+	// + data source -> schema options
+	out, _ = tool.Handler(t.Context(), tools.Input{Connection: "POSTGRES-SOURCE", DataSourceName: "postgres"})
+	if out.Status != tools.StatusIncomplete || len(out.SchemaOptions) != 1 || out.SchemaOptions[0] != "sales" {
+		t.Fatalf("expected schema options [sales], got status=%q opts=%+v", out.Status, out.SchemaOptions)
+	}
+
+	// + schema -> table options
+	out, _ = tool.Handler(t.Context(), tools.Input{Connection: "POSTGRES-SOURCE", DataSourceName: "postgres", SchemaName: "sales"})
+	if out.Status != tools.StatusIncomplete || len(out.TableOptions) != 1 || out.TableOptions[0] != "transactions" {
+		t.Fatalf("expected table options [transactions], got status=%q opts=%+v", out.Status, out.TableOptions)
+	}
+}
+
+func TestPreviewSurfacesOptionCatalogs(t *testing.T) {
+	server := httptest.NewServer(discoveryMux())
+	defer server.Close()
+
+	// Fully-specified location -> preview, which now carries the monitor/notification catalogs so the
+	// caller can offer config choices (formerly the prepare tool's `ready` step).
+	out, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), baseInput())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != tools.StatusPreview {
+		t.Fatalf("expected preview, got %q (%s)", out.Status, out.Message)
+	}
+	if len(out.Monitors) != 9 {
+		t.Errorf("expected 9 monitors in preview catalog, got %d", len(out.Monitors))
+	}
+	if len(out.AdaptiveMonitorSettings) != 2 {
+		t.Errorf("expected 2 adaptive monitor settings, got %d", len(out.AdaptiveMonitorSettings))
+	}
+	if len(out.Notifications) != 7 {
+		t.Errorf("expected 7 notification options, got %d", len(out.Notifications))
 	}
 }
 

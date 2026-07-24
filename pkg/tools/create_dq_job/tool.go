@@ -1,12 +1,14 @@
-// Package create_data_quality_job implements the create_data_quality_job MCP tool — it creates a
-// Collibra data-quality job for a table and (per the wizard) queues a run.
+// Package create_data_quality_job implements the create_data_quality_job MCP tool — a single tool that
+// spans discovery, preview, and create of a Collibra data-quality job for a table (and, per the wizard,
+// queues a run). Discovery (connection / data source / schema / table enumeration) lives in discover.go
+// and uses the INTERNAL monitoring/edge browse endpoints; the create itself POSTs to the public DQ API.
 //
 // IT POSTS TO THE PUBLIC DQ API: POST /rest/dq/1.0/jobs (clients.CreateDqJob /
 // clients.CreateDqJobRequest, contract dq/udq-app-client/oas/dq-v1-public-oas-spec.yaml).
 // The public create accepts the full job definition — sourceQuery, runDate window, monitors,
 // schedule, back-runs, notifications, and pullup/pushdown settings — so the internal BFF
-// endpoint is no longer needed. (Discovery in prepare_create_data_quality_job still uses internal
-// endpoints; the public DQ API exposes no connection/edge metadata browse.)
+// endpoint is no longer needed. (The public DQ API exposes no connection/edge metadata browse, so
+// discovery uses the internal endpoints.)
 //
 // HOW SCHEDULING + TIME-SLICE + ${rd} FIT TOGETHER:
 // A scheduled job re-runs on a cadence; each run scans one date-column slice. The slice lives
@@ -36,32 +38,47 @@ import (
 type Status string
 
 const (
+	// StatusIncomplete means a required location field is missing; the response carries the
+	// pre-fetched options for the next field to choose (connection/dataSource/schema/table).
+	StatusIncomplete Status = "incomplete"
 	StatusPreview    Status = "preview"
 	StatusCreated    Status = "created"
 	StatusNeedsInput Status = "needs_input"
 	StatusError      Status = "error"
 )
 
-// Input — the five dataLocation fields are required (easiest via prepare_create_data_quality_job's
-// `resolved` block). Time-slice / schedule / back-run fields are optional and structured.
+// Input — the tool discovers the data location one field at a time: supply what you know and omit the
+// rest, and the response returns the options for the first missing field (status=incomplete) until the
+// location (connection + data source + schema + table) is complete, at which point it previews. Time-slice
+// / schedule / back-run fields are optional and structured.
 type Input struct {
-	EdgeSiteName       string `json:"edgeSiteName" jsonschema:"Edge site name. From prepare_create_data_quality_job resolved.edgeSiteName."`
-	EdgeConnectionName string `json:"edgeConnectionName" jsonschema:"Edge connection name, e.g. 'POSTGRES-SOURCE'. The tool resolves its databaseProductName + job type from the connection for the create request."`
-	DataSourceName     string `json:"dataSourceName" jsonschema:"Data source / database, e.g. 'postgres'."`
-	SchemaName         string `json:"schemaName" jsonschema:"Schema, e.g. 'sales'."`
-	TableName          string `json:"tableName" jsonschema:"Table, e.g. 'transactions'."`
+	// --- Catalog table-asset entry point (optional). Identify the source table by a DGC catalog Table
+	// asset instead of connection/data-source/schema/table names; the location is resolved from it (and
+	// the success result gets a catalog deep link). tableAssetId wins, then URL, then name. ---
+	TableAssetID     string `json:"tableAssetId,omitempty" jsonschema:"DGC catalog Table asset UUID. When set, connection/dataSource/schema/table are resolved from the asset (via the connection's systemAssetId mapping) and the success result includes a catalog deep link to it."`
+	TableAssetURL    string `json:"tableAssetUrl,omitempty" jsonschema:"Catalog Table asset URL (e.g. https://<instance>/asset/<uuid>). The asset UUID is extracted from it."`
+	TableAssetName   string `json:"tableAssetName,omitempty" jsonschema:"Catalog Table asset name (signifier, e.g. 'transactions'). Resolved via the public assets API; if multiple match, the options are returned to pick one (optionally narrow with tableAssetDomain)."`
+	TableAssetDomain string `json:"tableAssetDomain,omitempty" jsonschema:"Optional domain/path substring (e.g. 'sales') to disambiguate when tableAssetName matches multiple assets."`
 
-	JobType string `json:"jobType,omitempty" jsonschema:"PUSHDOWN or PULLUP. If omitted, resolved from the connection's capabilities."`
+	// --- Data location. Supply a connection (UUID or name) to begin; omit dataSource/schema/table to
+	// have the tool list the options for the next one (status=incomplete). All four resolved = the tool
+	// previews. ---
+	Connection     string `json:"connection,omitempty" jsonschema:"The data-quality edge connection — a connection UUID or its name (case-insensitive, e.g. 'POSTGRES-SOURCE'). Omit to list the available connections; or use tableAssetId/tableAssetName instead."`
+	DataSourceName string `json:"dataSourceName,omitempty" jsonschema:"Data source / database within the connection, e.g. 'postgres'. Omit to list the data sources on the resolved connection."`
+	SchemaName     string `json:"schemaName,omitempty" jsonschema:"Schema within the data source, e.g. 'sales'. Omit to list the schemas."`
+	TableName      string `json:"tableName,omitempty" jsonschema:"Table to monitor, e.g. 'transactions'. Omit to list the tables in the resolved schema."`
+
+	JobType string `json:"jobType,omitempty" jsonschema:"PUSHDOWN or PULLUP. If omitted, resolved from the connection's capabilities; required only when the connection advertises more than one."`
 	JobName string `json:"jobName,omitempty" jsonschema:"Job name to assign — offer the user the chance to set this. Defaults to '<schema>.<table>'."`
 
 	// --- Column selection. Omit to monitor ALL columns (the default). Provide a subset to
 	// scope profiling/monitoring to just those columns (each sent with selected=true). ---
-	SelectedColumns []string `json:"selectedColumns,omitempty" jsonschema:"Columns to monitor. Omit for ALL columns (default → the source query scans SELECT *). Provide a subset — exact names from prepare_create_data_quality_job's columns — to profile only those; the selected columns are projected into the source query (SELECT \"col1\", \"col2\", ...), so only they are scanned and profiled."`
+	SelectedColumns []string `json:"selectedColumns,omitempty" jsonschema:"Columns to monitor. Omit for ALL columns (default → the source query scans SELECT *). Provide a subset — exact names from the preview's columns — to profile only those; the selected columns are projected into the source query (SELECT \"col1\", \"col2\", ...), so only they are scanned and profiled."`
 
 	// --- Monitors. Omit to use the default set; provide an authoritative set of monitor keys
 	// to enable (anything not listed is turned off). descriptiveStatistics unmasks sensitive
 	// data — only include it after explicit user confirmation. ---
-	Monitors []string `json:"monitors,omitempty" jsonschema:"Monitor keys to enable — authoritative (anything omitted is turned OFF). Omit to use the defaults (rowCount, nullValues, emptyFields, uniqueness). Valid keys (see prepare_create_data_quality_job's monitors): rowCount, nullValues, emptyFields, uniqueness, min, mean, max, executionTime, descriptiveStatistics. descriptiveStatistics UNMASKS sensitive data — only include it after explicit user confirmation."`
+	Monitors []string `json:"monitors,omitempty" jsonschema:"Monitor keys to enable — authoritative (anything omitted is turned OFF). Omit to use the defaults (rowCount, nullValues, emptyFields, uniqueness). Valid keys (see the preview's monitors): rowCount, nullValues, emptyFields, uniqueness, min, mean, max, executionTime, descriptiveStatistics. descriptiveStatistics UNMASKS sensitive data — only include it after explicit user confirmation."`
 
 	// --- Advanced monitor settings (adaptive behavior). Omit both to use the wizard defaults
 	// (lookback 10, learning phase 4). Setting either sends a structured `settings` object. ---
@@ -71,7 +88,7 @@ type Input struct {
 	// --- Row filter (the wizard's single-column predicate). Scopes the job to rows matching
 	// "filterColumn filterOperator filterValue" (e.g. amount > 100). Omit to scan all rows.
 	// This is ONE predicate — not compound AND/OR or free-form SQL (mirrors the DQ wizard). ---
-	FilterColumn   string `json:"filterColumn,omitempty" jsonschema:"Column for a single-predicate row filter (the wizard's row filter). Use a name from prepare_create_data_quality_job's columns. Set filterColumn + filterOperator (+ filterValue) to scope the job to matching rows; omit to scan all rows."`
+	FilterColumn   string `json:"filterColumn,omitempty" jsonschema:"Column for a single-predicate row filter (the wizard's row filter). Use a name from the preview's columns. Set filterColumn + filterOperator (+ filterValue) to scope the job to matching rows; omit to scan all rows."`
 	FilterOperator string `json:"filterOperator,omitempty" jsonschema:"Comparison operator for the row filter: = != <> > >= < <= (the wizard's set) or LIKE; the value is treated as a single literal. For IS NULL / IS NOT NULL leave filterValue empty. Required when filterColumn is set."`
 	FilterValue    string `json:"filterValue,omitempty" jsonschema:"Right-hand value for the row filter, passed BARE — do NOT add quotes. The tool wraps it in single quotes for you (matching the DQ wizard), e.g. pass US (not 'US'), 100, 2024-01-01. Leave empty for valueless operators (IS NULL / IS NOT NULL). Applied by writing it into the job's source-query WHERE."`
 
@@ -82,7 +99,7 @@ type Input struct {
 	// --- Time slice (incremental scanning). Pick a DATE COLUMN; when set, the tool writes a
 	// "<col> >= '${rd}' AND <col> < '${rdEnd}'" predicate into the job SQL's WHERE. The scheduler
 	// substitutes ${rd}/${rdEnd} per run, so each run scans only that slice, not the whole table. ---
-	TimeSliceColumn string `json:"timeSliceColumn,omitempty" jsonschema:"Date/timestamp column to slice on (e.g. 'txn_ts'). When set, the tool adds a WHERE \"<col>\" >= '${rd}' AND \"<col>\" < '${rdEnd}' predicate to the job SQL so each scheduled/backrun run scans only that slice. REQUIRED for incremental scheduling — without it, every scheduled run rescans the whole table. Pick a real date/timestamp column from prepare_create_data_quality_job's columns."`
+	TimeSliceColumn string `json:"timeSliceColumn,omitempty" jsonschema:"Date/timestamp column to slice on (e.g. 'txn_ts'). When set, the tool adds a WHERE \"<col>\" >= '${rd}' AND \"<col>\" < '${rdEnd}' predicate to the job SQL so each scheduled/backrun run scans only that slice. REQUIRED for incremental scheduling — without it, every scheduled run rescans the whole table. Pick a real date/timestamp column from the preview's columns."`
 	TimeSliceSize   int    `json:"timeSliceSize,omitempty" jsonschema:"Time-slice window width (default 1 when timeSliceColumn set). Combined with timeSliceUnit, e.g. size=1 unit=DAYS = one day per run."`
 	TimeSliceUnit   string `json:"timeSliceUnit,omitempty" jsonschema:"HOURS | DAYS | WEEKS | MONTHS (default DAYS)."`
 
@@ -102,7 +119,7 @@ type Input struct {
 
 	// --- Notifications (optional). Configured when `notify` or `notifyRecipients` is set; otherwise
 	// no notifications. The invoking user is always the default recipient. ---
-	Notify                         []string `json:"notify,omitempty" jsonschema:"Notification keys to enable (authoritative; omit but set notifyRecipients to use the defaults jobFailed/rowsBelow/scoreBelow/runTimeAbove). Keys (see prepare_create_data_quality_job notifications): jobFailed, rowsBelow, scoreBelow, runTimeAbove, jobCompleted, runsWithoutData, daysWithoutData."`
+	Notify                         []string `json:"notify,omitempty" jsonschema:"Notification keys to enable (authoritative; omit but set notifyRecipients to use the defaults jobFailed/rowsBelow/scoreBelow/runTimeAbove). Keys (see the preview's notifications): jobFailed, rowsBelow, scoreBelow, runTimeAbove, jobCompleted, runsWithoutData, daysWithoutData."`
 	NotifyRowsBelow                int      `json:"notifyRowsBelow,omitempty" jsonschema:"Threshold for rowsBelow — alert when row count <= this. Default 1."`
 	NotifyScoreBelow               int      `json:"notifyScoreBelow,omitempty" jsonschema:"Threshold for scoreBelow — alert when score (0-100) <= this. Default 75."`
 	NotifyRunTimeAboveMinutes      int      `json:"notifyRunTimeAboveMinutes,omitempty" jsonschema:"Threshold for runTimeAbove — alert when run time minutes > this. Default 60."`
@@ -141,10 +158,6 @@ type Input struct {
 	PushdownConnections int `json:"pushdownConnections,omitempty" jsonschema:"PUSHDOWN compute: number of connections (1-50). Default 10 when omitted."`
 	PushdownThreads     int `json:"pushdownThreads,omitempty" jsonschema:"PUSHDOWN compute: number of threads (1-10). Default 2 when omitted."`
 
-	// --- Catalog linkage (optional). When set (e.g. from prepare_create_data_quality_job's resolved table
-	// asset), the success result includes a deep link to the catalog Table asset. ---
-	TableAssetID string `json:"tableAssetId,omitempty" jsonschema:"Catalog Table asset UUID this job monitors (from prepare_create_data_quality_job). When set, the success result includes a catalog deep link to the asset."`
-
 	// AcknowledgeDescriptiveStatistics must be true to enable the descriptiveStatistics monitor — it
 	// UNMASKS sensitive values. Without it the tool refuses to proceed (the wizard's explicit-confirm).
 	AcknowledgeDescriptiveStatistics bool `json:"acknowledgeDescriptiveStatistics,omitempty" jsonschema:"Required true when monitors includes descriptiveStatistics — confirms you accept that it UNMASKS sensitive values. Without it the tool refuses to proceed."`
@@ -153,8 +166,24 @@ type Input struct {
 }
 
 type Output struct {
-	Status             Status                      `json:"status" jsonschema:"preview | created | needs_input | error."`
-	Message            string                      `json:"message" jsonschema:"Human-readable outcome."`
+	Status  Status `json:"status" jsonschema:"incomplete (a location field is missing — options provided) | preview | created | needs_input | error."`
+	Message string `json:"message" jsonschema:"Human-readable outcome and what to do next."`
+
+	// --- Discovery (status=incomplete): options for the next location field to choose. ---
+	ConnectionOptions []ConnectionOption `json:"connectionOptions,omitempty" jsonschema:"Connections to choose from — returned when 'connection' was omitted or could not be resolved. Re-call with the chosen connection."`
+	TableAssetOptions []TableAssetOption `json:"tableAssetOptions,omitempty" jsonschema:"Returned when tableAssetName matched multiple Table assets. Re-call with the chosen asset's id as tableAssetId."`
+	DataSourceOptions []string           `json:"dataSourceOptions,omitempty" jsonschema:"Data source names to choose from — returned when 'dataSourceName' was omitted. Re-call with the chosen dataSourceName."`
+	SchemaOptions     []string           `json:"schemaOptions,omitempty" jsonschema:"Schema names to choose from — returned when 'schemaName' was omitted. Re-call with the chosen schemaName."`
+	TableOptions      []string           `json:"tableOptions,omitempty" jsonschema:"Table names to choose from — returned when 'tableName' was omitted. Re-call with the chosen tableName."`
+	OptionsTruncated  bool               `json:"optionsTruncated,omitempty" jsonschema:"True when an options list was truncated below the instance's true total."`
+
+	// --- Option catalogs (status=preview): surfaced so you can offer the config choices before confirm. ---
+	Columns                 []ColumnInfo                       `json:"columns,omitempty" jsonschema:"Columns of the resolved table. Offer these so the user can pick a subset to monitor via selectedColumns (omit selectedColumns to monitor all)."`
+	Monitors                []clients.DqMonitorInfo            `json:"monitors,omitempty" jsonschema:"Available profile monitors, each with a defaultEnabled flag. Offer these so the user can choose a set for the monitors input (omit to use the defaults). descriptiveStatistics unmasks sensitive data."`
+	AdaptiveMonitorSettings []clients.DqAdaptiveMonitorSetting `json:"adaptiveMonitorSettings,omitempty" jsonschema:"The 'Advanced monitor settings' (adaptive behavior) the user can tune, each with its default (dataLookback 10, learningPhase 4). Surface these with monitors; override via dataLookback / learningPhase."`
+	Notifications           []clients.DqNotificationInfo       `json:"notifications,omitempty" jsonschema:"Available notification alerts, each with a defaultEnabled flag and whether it takes a threshold. Offer these; pass chosen keys to notify (+ thresholds + notifyRecipients)."`
+
+	// --- Preview / create result. ---
 	Request            *clients.CreateDqJobRequest `json:"request,omitempty" jsonschema:"The exact public-API payload (POST /rest/dq/1.0/jobs) that will be / was submitted. Review on preview."`
 	JobName            string                      `json:"jobName,omitempty" jsonschema:"Final job name."`
 	JobID              string                      `json:"jobId,omitempty" jsonschema:"Created job id (the internal create returns jobId, not a run id)."`
@@ -173,24 +202,27 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title: "Create Data Quality Job",
 		Description: "Sets up automated data-quality monitoring on a database table in Collibra, and starts the first run. " +
 			"A 'data quality job' profiles a table and watches it over time for problems — sudden row-count drops, spikes in " +
-			"null or empty values, duplicates, and other anomalies. Use prepare_create_data_quality_job FIRST to discover and " +
-			"validate the inputs, then pass its `resolved` block here.\n\n" +
-			"Where the data lives (all required): edgeSiteName and edgeConnectionName identify the source — a 'connection' is a " +
-			"saved link to a source database, reached through a Collibra Edge site (the agent that runs the scan); dataSourceName " +
-			"is the database/catalog, plus schemaName and tableName.\n\n" +
-			"Optional tuning: selectedColumns (which columns to monitor; omit for all), monitors (which checks to run; omit for " +
-			"sensible defaults) with adaptive-baseline settings (dataLookback/learningPhase), sampleSize (scan a sample instead " +
-			"of every row), a single-column row filter (filterColumn/filterOperator/filterValue, e.g. amount > 100), a time slice " +
-			"(timeSliceColumn so each run only checks that period's new rows), a recurring schedule " +
-			"(scheduleRepeat/scheduleRunTime/… — pair it with a timeSliceColumn for incremental runs), historical back-runs " +
-			"(backrun*), and notifications (notify keys + thresholds + notifyRecipients — the requesting user is always notified).\n\n" +
-			"jobType is PUSHDOWN (the checks run inside the source database) or PULLUP (data is pulled into Spark to be checked); " +
-			"it is detected from the connection if you omit it. Leave jobName empty to let Collibra assign a unique name.\n\n" +
-			"Safety: this WRITES to Collibra, so it defaults to a PREVIEW — confirm=false returns the exact request without " +
-			"creating anything; review it with the user, then call again with confirm=true to create and run the job.\n\n" +
+			"null or empty values, duplicates, and other anomalies. This single tool spans discovery, preview, and create.\n\n" +
+			"DISCOVERY: point it at the source and it walks the location one field at a time. A 'connection' is a saved link to " +
+			"a source database, reached through a Collibra Edge site (the agent that runs the scan). Supply what you know — a " +
+			"connection (UUID or name), or a catalog Table asset (tableAssetId/tableAssetName) — and omit the rest; the tool " +
+			"returns status=incomplete with the options for the next field (connection -> dataSource -> schema -> table). Pick " +
+			"one per turn and re-call until the location is complete.\n\n" +
+			"PREVIEW: once the location resolves, the tool returns status=preview — the exact request plus the option catalogs " +
+			"(columns, monitors, adaptiveMonitorSettings, notifications) so you can offer config choices. Optional tuning: " +
+			"selectedColumns (omit for all), monitors (omit for sensible defaults) with adaptive-baseline settings " +
+			"(dataLookback/learningPhase), sampleSize, a single-column row filter (filterColumn/filterOperator/filterValue, " +
+			"e.g. amount > 100), a time slice (timeSliceColumn so each run only checks that period's new rows), a recurring " +
+			"schedule (scheduleRepeat/scheduleRunTime/… — pair with a timeSliceColumn for incremental runs), historical " +
+			"back-runs (backrun*), and notifications (notify keys + thresholds + notifyRecipients — the requesting user is " +
+			"always notified). jobType is PUSHDOWN (checks run inside the source database) or PULLUP (data is pulled into Spark); " +
+			"it is detected from the connection when unambiguous. Leave jobName empty to let Collibra assign a unique name.\n\n" +
+			"CREATE: this WRITES to Collibra, so it defaults to a PREVIEW — confirm=false returns the exact request without " +
+			"creating anything; review it with the user, then call again with confirm=true to create and run the job. Everything " +
+			"up to confirm=true is read-only.\n\n" +
 			"Example user requests: \"Set up data quality monitoring on the sales.orders table\"; \"Create a DQ job for orders " +
-			"and alert me if the row count drops\"; \"Watch my Postgres customers table for nulls and duplicates every day\"; " +
-			"\"Start checking data quality on this table.\"",
+			"and alert me if the row count drops\"; \"What tables can I run data quality on in my warehouse?\"; \"Watch my " +
+			"Postgres customers table for nulls and duplicates every day.\"",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 	}
@@ -198,22 +230,32 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
-		if missing := missingLocationFields(input); len(missing) > 0 {
-			return Output{
-				Status:   StatusNeedsInput,
-				Message:  fmt.Sprintf("Missing required field(s): %s.", strings.Join(missing, ", ")),
-				Guidance: "Call prepare_create_data_quality_job to resolve connection/data source/schema/table, then pass its `resolved` block here.",
-			}, nil
+		// Discovery: resolve the data location (connection -> data source -> schema -> table),
+		// enumerating options for the first missing field. Returns early (incomplete / needs_input)
+		// until the location is fully resolved; then conn + jobType are known and trusted.
+		conn, jobType, disco, done := discover(ctx, collibraClient, &input)
+		if done {
+			return disco, nil
 		}
 
 		// A row filter needs at least a column and an operator (value may be empty for
 		// valueless operators like IS NULL). Catch a half-specified filter before any API call.
 		if hasFilterFields(input) {
 			if strings.TrimSpace(input.FilterColumn) == "" {
-				return Output{Status: StatusNeedsInput, Message: "filterOperator/filterValue given without filterColumn.", Guidance: "Set filterColumn (a column from prepare_create_data_quality_job) to apply a row filter, or omit all filter fields."}, nil
+				return Output{Status: StatusNeedsInput, Message: "filterOperator/filterValue given without filterColumn.", Guidance: "Set filterColumn (a column from the preview's columns) to apply a row filter, or omit all filter fields."}, nil
 			}
 			if strings.TrimSpace(input.FilterOperator) == "" {
-				return Output{Status: StatusNeedsInput, Message: "filterColumn set but filterOperator is missing.", Guidance: "Provide filterOperator (e.g. =, >, <, LIKE, IN, IS NULL), plus filterValue unless the operator takes none."}, nil
+				return Output{Status: StatusNeedsInput, Message: "filterColumn set but filterOperator is missing.", Guidance: "Provide filterOperator (one of: " + strings.Join(clients.DqFilterOperators, " ") + "), plus filterValue unless the operator takes none."}, nil
+			}
+			// Allow-list the operator so it can't splice arbitrary SQL into the scan query. The value is
+			// escaped as a string literal in the query builder; the operator has no such escape, so it
+			// must be one of the known set.
+			if !clients.IsAllowedDqFilterOperator(input.FilterOperator) {
+				return Output{
+					Status:   StatusNeedsInput,
+					Message:  fmt.Sprintf("Unsupported filter operator %q.", input.FilterOperator),
+					Guidance: "Use one of: " + strings.Join(clients.DqFilterOperators, " ") + ".",
+				}, nil
 			}
 		}
 
@@ -223,7 +265,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				return Output{
 					Status:   StatusNeedsInput,
 					Message:  fmt.Sprintf("Unknown monitor(s): %s.", strings.Join(unknown, ", ")),
-					Guidance: "Use monitor keys from prepare_create_data_quality_job's `monitors`: " + strings.Join(clients.MonitorKeys(), ", ") + ".",
+					Guidance: "Use monitor keys from the preview's `monitors`: " + strings.Join(clients.MonitorKeys(), ", ") + ".",
 				}, nil
 			}
 		}
@@ -280,7 +322,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				return Output{
 					Status:   StatusNeedsInput,
 					Message:  fmt.Sprintf("Unknown notification(s): %s.", strings.Join(unknown, ", ")),
-					Guidance: "Use notification keys from prepare_create_data_quality_job's `notifications`: " + strings.Join(clients.NotificationKeys(), ", ") + ".",
+					Guidance: "Use notification keys from the preview's `notifications`: " + strings.Join(clients.NotificationKeys(), ", ") + ".",
 				}, nil
 			}
 			// Recipients: invoking user (always) + any additional usernames/emails, de-duped. The public
@@ -326,27 +368,15 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 		}
 
-		// Resolve connectionId + edgeSiteId (+ jobType fallback) from the connection — the
-		// internal request needs the IDs, not just names. findConnectionByName hits the
-		// INTERNAL connections list (clients.ListDqConnections); the public API has no
-		// equivalent that returns capabilityTypes/edgeSiteId.
-		conn, connErr := findConnectionByName(ctx, collibraClient, input.EdgeConnectionName)
-		jobType := strings.ToUpper(strings.TrimSpace(input.JobType))
-		if jobType == "" && connErr == nil && conn != nil {
-			switch len(conn.CapabilityTypes) {
-			case 1:
-				jobType = conn.CapabilityTypes[0]
-			case 0:
-				return Output{Status: StatusNeedsInput, Message: fmt.Sprintf("Connection %q advertises no DQ capability.", input.EdgeConnectionName), Guidance: "Confirm a Data Quality Pushdown/Pullup capability is enabled, or set jobType."}, nil
-			default:
-				return Output{Status: StatusNeedsInput, Message: fmt.Sprintf("Connection %q supports multiple job types (%s).", input.EdgeConnectionName, strings.Join(conn.CapabilityTypes, ", ")), Guidance: "Set jobType explicitly."}, nil
-			}
-		}
+		// jobType is required to build the request. discover() resolved it from the connection's single
+		// capability or the caller's jobType override; it comes back empty only when the connection
+		// advertises zero or multiple capabilities and no override was given.
 		if jobType == "" {
-			return Output{Status: StatusNeedsInput, Message: "Could not determine job type.", Guidance: "Set jobType to PUSHDOWN or PULLUP, or call prepare_create_data_quality_job."}, nil
-		}
-		if connErr != nil || conn == nil {
-			return Output{Status: StatusNeedsInput, Message: fmt.Sprintf("Could not resolve connection %q (needed for connectionId/edgeSiteId).", input.EdgeConnectionName), Guidance: "Verify the connection name via prepare_create_data_quality_job."}, nil
+			return Output{
+				Status:   StatusNeedsInput,
+				Message:  fmt.Sprintf("Connection %q advertises %d DQ capabilities (%s); set jobType explicitly.", conn.ConnectionName, len(conn.CapabilityTypes), strings.Join(conn.CapabilityTypes, ", ")),
+				Guidance: "Set jobType to PUSHDOWN or PULLUP.",
+			}, nil
 		}
 
 		// Job name: when the user supplies one, validate it client-side against the DQ server's rules;
@@ -461,6 +491,12 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				Request:            req,
 				Warnings:           warnings,
 				UnsupportedOptions: clients.UnsupportedWizardOptions(jobType),
+				// Option catalogs so the caller can offer config choices before confirm (formerly the
+				// prepare_create_data_quality_job `ready` step). Columns are advisory (nil on fetch error).
+				Columns:                 fetchColumns(ctx, collibraClient, conn, input),
+				Monitors:                clients.DqMonitorCatalog(),
+				AdaptiveMonitorSettings: clients.DqAdaptiveMonitorSettings(),
+				Notifications:           clients.DqNotificationCatalog(),
 				Message: fmt.Sprintf("Preview only — nothing created. Will create a %s job %q for %s.%s (columns=%s, rows=%s, filter=%q, monitors=[%s], adaptive=%s, timeSlice=%v, schedule=%s, backrun=%v, notifications=%s, %s). "+
 					"Review with the user (%s), then call again with confirm=true.%s%s%s",
 					jobType, previewName, input.SchemaName, input.TableName, columnsDesc, sampleDesc, filterDesc, strings.Join(enabledMonitors, ", "), adaptiveDesc, hasSlice, describeSchedule(req.SchedulingSettings), req.Backrun != nil, notifyDesc, describeCompute(req.JobSettings, jobType), nameClause, sensitiveWarning, rdNote, warnNote),
@@ -580,7 +616,7 @@ func buildPublicRequest(input Input, conn *clients.DqConnection, jobType, jobNam
 		JobType: jobType,
 		JobName: jobName,
 		DataLocation: clients.DqDataLocation{
-			EdgeSiteName:        input.EdgeSiteName,
+			EdgeSiteName:        conn.EdgeSiteName,
 			EdgeConnectionName:  conn.ConnectionName,
 			DataSourceName:      input.DataSourceName,
 			SchemaName:          input.SchemaName,
@@ -897,33 +933,4 @@ func hasFilterFields(in Input) bool {
 	return strings.TrimSpace(in.FilterColumn) != "" ||
 		strings.TrimSpace(in.FilterOperator) != "" ||
 		strings.TrimSpace(in.FilterValue) != ""
-}
-
-func missingLocationFields(in Input) []string {
-	var missing []string
-	for name, val := range map[string]string{
-		"edgeSiteName":       in.EdgeSiteName,
-		"edgeConnectionName": in.EdgeConnectionName,
-		"dataSourceName":     in.DataSourceName,
-		"schemaName":         in.SchemaName,
-		"tableName":          in.TableName,
-	} {
-		if strings.TrimSpace(val) == "" {
-			missing = append(missing, name)
-		}
-	}
-	return missing
-}
-
-func findConnectionByName(ctx context.Context, client *http.Client, name string) (*clients.DqConnection, error) {
-	conns, err := clients.ListDqConnections(ctx, client)
-	if err != nil {
-		return nil, err
-	}
-	for i := range conns {
-		if strings.EqualFold(conns[i].ConnectionName, name) {
-			return &conns[i], nil
-		}
-	}
-	return nil, fmt.Errorf("connection %q not found", name)
 }

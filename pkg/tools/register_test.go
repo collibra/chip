@@ -28,7 +28,7 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
-var dataQualityToolNames = []string{"prepare_create_data_quality_job", "create_data_quality_job"}
+var dataQualityToolNames = []string{"create_data_quality_job"}
 
 func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {
 	names := listToolNames(t, &chip.ServerToolConfig{})
