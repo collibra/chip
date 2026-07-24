@@ -134,6 +134,7 @@ func TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment(t *testing.T) {
 	}
 	if def == nil {
 		t.Fatalf("Definition attribute missing from effective assignment: %+v", got.AttributeTypes)
+		return
 	}
 	if !def.Required {
 		t.Errorf("Definition (minimumOccurrences=1) should be required")
