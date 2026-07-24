@@ -7,14 +7,17 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
+	"github.com/collibra/chip/pkg/tools/edit_assessment"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
 	"github.com/collibra/chip/pkg/tools/find_dq_rules"
 	"github.com/collibra/chip/pkg/tools/generate_dq_rule_sql"
+	"github.com/collibra/chip/pkg/tools/get_assessment"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
@@ -51,6 +54,12 @@ import (
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
 
+// DataQualityFeatureName gates the data-quality rule tools (create/validate/read rules,
+// rule templates, Text2SQL and catalog column search) behind --experimental. Some WRITE to
+// Collibra (create rules, deploy templates), so they stay opt-in until they graduate. Off by
+// default. Shared with the data-quality job-creation tools.
+const DataQualityFeatureName = "data-quality"
+
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
 // instead of the standard DGC API.
@@ -86,16 +95,21 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
-	toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
-	toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
-	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
+	toolRegister(server, toolConfig, get_assessment.NewTool(client))
+	toolRegister(server, toolConfig, create_assessment.NewTool(client))
+	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
+	if toolConfig.IsExperimentalEnabled(DataQualityFeatureName) {
+		toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
+		toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
+		toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
+		toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
+	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))

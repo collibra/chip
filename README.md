@@ -12,6 +12,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 - [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
 - [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
+- [`get_assessment`](pkg/tools/get_assessment/) - Retrieve conducted assessment(s) from the Assessments application (these are not catalog assets). Direct lookup of a single assessment by name or UUID (or by its linked Assessment Review asset), or a filtered lookup combining name (partial), status, template, conducted asset, and a last-modified range (paginated)
 - [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID, including the asset's assignable attribute schema (every attribute it can hold, including empty ones)
 - [`get_business_term_data`](pkg/tools/get_business_term_data/) - Trace a business term back to its connected physical data assets
 - [`get_column_semantics`](pkg/tools/get_column_semantics/) - Retrieve data attributes, measures, and business assets connected to a column
@@ -42,9 +43,17 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 ### Write Tools
 
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
+- [`create_assessment`](pkg/tools/create_assessment/) - Conduct a new assessment from a template (given by name or UUID) in the Assessments application. Returns the template's (unanswered) questions to fill in afterward with `edit_assessment` — no separate prepare step needed
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
-- [`create_dq_rule`](pkg/tools/create_dq_rule/) - Create a data quality rule (monitor) on an existing DQ job. `monitorType` is `FREEFORM_SQL` (full SQL query) or `SIMPLE_SQL` (single-column check); defaults to active and not suppressed. Confirm checkpoint: `confirm=false` (default) returns a preview of the rule + SQL without creating; `confirm=true` creates. Uses the DQ monitoring API and requires permission to create rules on the target job
-- [`deploy_dq_rule_template`](pkg/tools/deploy_dq_rule_template/) - Instantiate a rule template as concrete rules across one or more job/column targets (bulk). The DQ service resolves dialect-specific SQL and names each rule `{templateName}_{columnName}`. Confirm checkpoint: `confirm=false` (default) previews the template + targets without deploying; `confirm=true` deploys. Requires permission to deploy templates and create rules on the target jobs
+- [`create_dq_rule`](pkg/tools/create_dq_rule/) - Create a data quality rule (monitor) on an existing DQ job. `monitorType` is `FREEFORM_SQL` (full SQL query) or `SIMPLE_SQL` (single-column check); defaults to active and not suppressed. Confirm checkpoint: `confirm=false` (default) returns a preview of the rule + SQL without creating; `confirm=true` creates. Uses the DQ monitoring API and requires permission to create rules on the target job. **Experimental** (`data-quality` feature flag)
+- [`deploy_dq_rule_template`](pkg/tools/deploy_dq_rule_template/) - Instantiate a rule template as concrete rules across one or more job/column targets (bulk). The DQ service resolves dialect-specific SQL and names each rule `{templateName}_{columnName}`. Confirm checkpoint: `confirm=false` (default) previews the template + targets without deploying; `confirm=true` deploys. Requires permission to deploy templates and create rules on the target jobs. **Experimental** (`data-quality` feature flag)
+- [`edit_assessment`](pkg/tools/edit_assessment/) - Edit a conducted assessment (identified by name or UUID) via a list of typed operations, applied as a single atomic PATCH (all-or-nothing):
+    - `set_answer` - set a question's answer by `questionId`: TEXT/HTML/EXPRESSION/NUMBER/BOOLEAN/DATE via `value`, or ITEMS (choice) via `items`; supply `answerType` for a not-yet-answered question (an already-answered question's type is inferred). ASSETS/USERORGROUPS/ATTACHMENTS answer types are not yet supported
+    - `set_status` - move status (`DRAFT`, `SUBMITTED`, `OBSOLETE`)
+    - `set_name` - rename the assessment
+    - `set_owner` - set the owner by user UUID
+    - `set_assignees` - replace the assignee list with the given users/groups
+    - `set_visibility` - set whether the assessment is visible to everyone
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `set_attribute`, `add_attribute`, `remove_attribute` - set an attribute value (creates if empty, updates if present), append an extra value to a multi-valued attribute, or clear one (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)

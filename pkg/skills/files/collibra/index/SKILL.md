@@ -26,6 +26,21 @@ If a task is a single tool call with no chaining (e.g. `get_asset_details` by UU
 `list_asset_types`, `pull_data_contract_manifest`), no skill is needed — the tool's own
 description is sufficient.
 
+## Where to get each id / publicId
+
+`create_asset` and `edit_asset` accept types by UUID, publicId, or display name. When you need
+the authoritative UUID or publicId for a type, fetch it from:
+
+| Concept | Tool | Field |
+|---|---|---|
+| Asset type id / publicId | `list_asset_types` | `id` / `publicId` |
+| Attribute type id / publicId | `prepare_create_asset` | `attributeSchema[].attributeTypeId` / `attributeSchema[].publicId` |
+| Relation type id / publicId | `prepare_create_asset` | `relationTypes[].relationTypeId` / `relationTypes[].publicId` |
+
+`get_asset_details` returns attribute and relation **display names only** (via
+`assignableAttributes[].name` and the relation lists) — use `prepare_create_asset` to resolve
+those names to a type id or publicId.
+
 ## Hard rules that apply across skills
 
 1. **Lineage entity IDs are not DGC asset UUIDs.** Never pass a DGC UUID directly to
