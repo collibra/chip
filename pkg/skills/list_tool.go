@@ -37,7 +37,7 @@ func NewListTool(catalog *Catalog) *chip.Tool[listInput, listOutput] {
 			"Collibra domain, not after errors. Start with `collibra/index` if unsure.",
 		Handler:     listHandler(catalog),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

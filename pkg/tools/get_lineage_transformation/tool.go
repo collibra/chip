@@ -23,7 +23,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageTr
 					  Do NOT call search_lineage_transformations to find a transformation ID if you already have it from upstream/downstream results.`,
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

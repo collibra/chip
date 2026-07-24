@@ -27,7 +27,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageDi
 					  Do not call get_lineage_transformation unless the user explicitly asks about the SQL or transformation logic.`,
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 
