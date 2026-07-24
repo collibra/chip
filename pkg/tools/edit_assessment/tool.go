@@ -133,7 +133,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"The whole request is applied as a single atomic PATCH: every operation is validated first and if any fails, none are applied.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(true), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

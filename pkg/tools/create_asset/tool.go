@@ -120,7 +120,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Calling prepare_create_asset first is optional — only needed when the agent wants to enumerate options or inspect a type's full attribute schema.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

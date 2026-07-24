@@ -41,7 +41,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Retrieve a list of available Context Specifications. A Context Specification defines how to extract governed metadata from Collibra. Starting from an asset (e.g., a Data Product), it specifies which relations to traverse, what fields to pull (name, status, description), and what shape to return for a target system (Snowflake, Databricks, custom for AI agents). Use this to discover which Contexts are available for querying metadata about specific asset or asset type.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

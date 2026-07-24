@@ -32,7 +32,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Search for data classes in Collibra's classification service. Supports filtering by name, description, and whether they contain rules.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.data-classes-read"},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

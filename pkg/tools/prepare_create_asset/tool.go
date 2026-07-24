@@ -152,7 +152,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Use this tool when the agent needs to browse what's creatable on this instance or inspect an asset type's full schema before composing a create.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

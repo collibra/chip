@@ -58,7 +58,7 @@ func NewTool(collibraClient *http.Client, contextSpecsEnabled bool) *chip.Tool[I
 		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Also returns assignableAttributes: every attribute type the asset can hold, with required and isSet flags — use this to tell an empty-but-settable attribute (e.g. an unset Definition) apart from one that isn't valid for the asset. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page). Attributes and relations here carry display names only — for an attribute or relation type's UUID or publicId, call prepare_create_asset (attributeSchema[]/relationTypes[]). Optionally executes a Context Specification against the asset and returns the generated YAML context (requires the context-specifications experimental feature).",
 		Handler:     handler(collibraClient, contextSpecsEnabled),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 
