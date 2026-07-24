@@ -211,13 +211,19 @@ func dqTimeSlicePart(in DqSourceQueryInput, dialect string) string {
 
 // dqRowFilterPart mirrors the wizard's createRowFilterPart: `col op 'value'` (value single-quoted;
 // BIGQUERY bare for numeric). For valueless operators (IS NULL / IS NOT NULL) the value is omitted.
+//
+// The value is written as a SQL string literal with embedded single quotes escaped (doubled), so a
+// value like `x' OR '1'='1` becomes a harmless literal instead of breaking out of the quotes. The
+// operator is expected to be one of the allow-listed set (validated at the tool layer via
+// IsAllowedDqFilterOperator); the column is quoted by dqEscapeIdentifier. Together these keep the
+// row filter from injecting SQL into the scan query.
 func dqRowFilterPart(in DqSourceQueryInput, dialect string) string {
 	col := dqEscapeIdentifier(dialect, in.FilterColumn)
 	op := strings.TrimSpace(in.FilterOperator)
 	val := strings.TrimSpace(in.FilterValue)
 	// The value is meant to be BARE — the builder adds the surrounding single quotes (matching the
 	// wizard). Be forgiving if a caller already wrapped it, so 'US' doesn't become ''US'' (a syntax
-	// error). Only strips a matched outer pair; embedded quotes are left as-is.
+	// error). Only strips a matched outer pair.
 	if len(val) >= 2 && strings.HasPrefix(val, "'") && strings.HasSuffix(val, "'") {
 		val = val[1 : len(val)-1]
 	}
@@ -230,7 +236,31 @@ func dqRowFilterPart(in DqSourceQueryInput, dialect string) string {
 			return fmt.Sprintf("%s %s %s", col, op, val)
 		}
 	}
-	return fmt.Sprintf("%s %s '%s'", col, op, val)
+	return fmt.Sprintf("%s %s '%s'", col, op, dqEscapeStringLiteral(val))
+}
+
+// dqEscapeStringLiteral escapes a value for use inside a single-quoted SQL string literal by doubling
+// embedded single quotes (the standard SQL escape, honored by Postgres/Oracle/MySQL/etc.). This is the
+// last line of defense against a row-filter value breaking out of its quotes.
+func dqEscapeStringLiteral(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
+// DqFilterOperators is the allow-listed set of row-filter operators (the DQ wizard's set). Comparison
+// and LIKE take a value; IS NULL / IS NOT NULL are valueless.
+var DqFilterOperators = []string{"=", "!=", "<>", ">", ">=", "<", "<=", "LIKE", "IS NULL", "IS NOT NULL"}
+
+// IsAllowedDqFilterOperator reports whether op is one of the allow-listed row-filter operators
+// (case-insensitive, internal whitespace normalized). Anything else is rejected at the tool layer so it
+// can't be spliced into the scan query.
+func IsAllowedDqFilterOperator(op string) bool {
+	norm := strings.ToUpper(strings.Join(strings.Fields(op), " "))
+	for _, allowed := range DqFilterOperators {
+		if norm == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 // dqColumnsPart mirrors createColumnsPart: '*' when no subset, else the escaped selected columns.

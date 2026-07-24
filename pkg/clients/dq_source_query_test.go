@@ -91,3 +91,46 @@ func TestBuildDqSourceQueryPlainWhenNoOptions(t *testing.T) {
 		t.Errorf("unexpected plain query: %q", q)
 	}
 }
+
+func TestBuildDqSourceQueryEscapesFilterValueQuotes(t *testing.T) {
+	// A value carrying a single quote must NOT break out of the string literal — the quote is doubled.
+	q := BuildDqSourceQuery(DqSourceQueryInput{
+		DatabaseProduct: "POSTGRES",
+		SchemaName:      "sales",
+		TableName:       "customers",
+		FilterColumn:    "country",
+		FilterOperator:  "=",
+		FilterValue:     "x' OR '1'='1",
+	})
+	if !strings.Contains(q, `"country" = 'x'' OR ''1''=''1'`) {
+		t.Fatalf("filter value not escaped as a literal: %q", q)
+	}
+	// The raw un-escaped break-out form must be absent.
+	if strings.Contains(q, `'x' OR '1'='1'`) {
+		t.Fatalf("query contains an unescaped break-out: %q", q)
+	}
+}
+
+func TestBuildDqSourceQueryStripsWrappingThenEscapes(t *testing.T) {
+	// A caller-wrapped value has its outer pair stripped, then embedded quotes are escaped.
+	q := BuildDqSourceQuery(DqSourceQueryInput{
+		DatabaseProduct: "POSTGRES", SchemaName: "s", TableName: "t",
+		FilterColumn: "name", FilterOperator: "=", FilterValue: "'O'Brien'",
+	})
+	if !strings.Contains(q, `"name" = 'O''Brien'`) {
+		t.Fatalf("expected stripped-then-escaped literal, got %q", q)
+	}
+}
+
+func TestIsAllowedDqFilterOperator(t *testing.T) {
+	for _, ok := range []string{"=", "!=", "<>", ">", ">=", "<", "<=", "LIKE", "like", "IS NULL", "is null", "IS  NOT  NULL"} {
+		if !IsAllowedDqFilterOperator(ok) {
+			t.Errorf("expected %q to be allowed", ok)
+		}
+	}
+	for _, bad := range []string{"", "==", "= 1 OR 1=1", "IN", "; DROP TABLE t", "LIKE '%x%' OR 1=1"} {
+		if IsAllowedDqFilterOperator(bad) {
+			t.Errorf("expected %q to be rejected", bad)
+		}
+	}
+}
