@@ -74,8 +74,12 @@ func TestEditAssetAttributeInstance_ListPageDecodesMixedKinds(t *testing.T) {
 }
 
 // TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment checks parsing of
-// the per-asset endpoint's single Assignment object: required-ness from
-// minimumOccurrences and both relation directions (TO_TARGET / TO_SOURCE).
+// the per-asset endpoint's single Assignment object in the references-primary
+// orientation: attributes and required-ness come from
+// assignedCharacteristicTypeReferences, while a relation's role / co-role /
+// direction / target arrive via the deprecated characteristicTypes joined on the
+// LINE id (the reference's own top-level id ↔ characteristicTypes[].id). Both
+// relation directions (TO_TARGET / TO_SOURCE) resolve as distinct entries.
 func TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment(t *testing.T) {
 	const (
 		assetID   = "019e027f-25b9-728f-9ed8-77c315ac377f"
@@ -88,29 +92,29 @@ func TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment(t *testing.T) {
 			"id": "assignment-effective",
 			"assetType": {"id": "00000000-0000-0000-0000-000000011003", "name": "Acronym"},
 			"domainTypes": [{"id": "00000000-0000-0000-0000-000000010001", "name": "Glossary"}],
-			"characteristicTypes": [{
-				"id": "char-def",
+			"assignedCharacteristicTypeReferences": [{
+				"id": "line-def",
 				"minimumOccurrences": 1,
-				"assignedCharacteristicTypeDiscriminator": "AttributeType",
-				"attributeType": {"id": "attr-def", "name": "Definition", "resourceType": "StringAttributeType"}
+				"assignedResourceReference": {"id": "attr-def", "name": "Definition", "resourceDiscriminator": "StringAttributeType"}
 			}, {
-				"id": "char-note",
+				"id": "line-note",
 				"minimumOccurrences": 0,
-				"assignedCharacteristicTypeDiscriminator": "AttributeType",
-				"attributeType": {"id": "attr-note", "name": "Note", "resourceType": "StringAttributeType"}
+				"assignedResourceReference": {"id": "attr-note", "name": "Note", "resourceDiscriminator": "StringAttributeType"}
 			}, {
-				"id": "char-rel-fwd",
+				"id": "line-rel-fwd",
 				"minimumOccurrences": 0,
 				"roleDirection": "TO_TARGET",
-				"assignedCharacteristicTypeDiscriminator": "RelationType",
-				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
+				"assignedResourceReference": {"id": "` + relTypeID + `", "name": "calculated using", "resourceDiscriminator": "RelationType"}
 			}, {
-				"id": "char-rel-rev",
+				"id": "line-rel-rev",
 				"minimumOccurrences": 0,
 				"roleDirection": "TO_SOURCE",
-				"assignedCharacteristicTypeDiscriminator": "RelationType",
-				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
-			}]
+				"assignedResourceReference": {"id": "` + relTypeID + `", "name": "calculated using", "resourceDiscriminator": "RelationType"}
+			}],
+			"characteristicTypes": [
+				{"id": "line-rel-fwd", "role": "calculated using", "coRole": "used to calculate"},
+				{"id": "line-rel-rev", "role": "calculated using", "coRole": "used to calculate"}
+			]
 		}`))
 	})
 
@@ -143,8 +147,10 @@ func TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment(t *testing.T) {
 	}
 	var sawForward, sawReversed bool
 	for _, rt := range got.RelationTypes {
-		if rt.ID != relTypeID || rt.Role != "calculated using" {
-			t.Errorf("unexpected relation entry: %+v", rt)
+		// Role / co-role are carried only by the joined characteristicTypes; if the
+		// join key were wrong they'd be empty.
+		if rt.ID != relTypeID || rt.Role != "calculated using" || rt.CoRole != "used to calculate" {
+			t.Errorf("unexpected relation entry (role/coRole join failed?): %+v", rt)
 		}
 		if rt.Reversed {
 			sawReversed = true
@@ -157,81 +163,88 @@ func TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment(t *testing.T) {
 	}
 }
 
-// TestGetAssignmentForAssetType_InheritsParentChain guards the #74 relation
-// behavior: a subtype's relation types can live on a parent's assignment (empty
-// domainTypes = inherit), so the walk must merge parent levels, keeping both
-// directions (TO_TARGET / TO_SOURCE) and deduping repeats.
-func TestGetAssignmentForAssetType_InheritsParentChain(t *testing.T) {
+// TestGetEffectiveAssignmentForAsset_ExcludesDerivedRelationType asserts a
+// derived relation type (assignedResourceReference.resourceDiscriminator ==
+// "DerivedRelationType") is not offered, while its explicit "RelationType"
+// sibling is kept. The deprecated characteristicTypes list marks both as
+// ordinary relations, so only the references-primary discriminator distinguishes
+// them.
+func TestGetEffectiveAssignmentForAsset_ExcludesDerivedRelationType(t *testing.T) {
 	const (
-		kpiTypeID    = "00000000-0000-0000-0000-000000031107"
-		parentTypeID = "00000000-0000-0000-0000-000000031101"
-		domTypeID    = "00000000-0000-0000-0000-000000000001"
-		relTypeID    = "cd000000-0000-0000-0000-000000007002"
+		assetID       = "019e027f-25b9-728f-9ed8-77c315ac377f"
+		explicitRelID = "cd000000-0000-0000-0000-000000007001"
+		derivedRelID  = "cd000000-0000-0000-0000-000000007002"
 	)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+kpiTypeID, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`[{
-			"id": "assignment-kpi",
-			"domainTypes": [{"id": "` + domTypeID + `", "name": "Business Glossary"}],
-			"characteristicTypes": [{
-				"id": "char-attr",
-				"minimumOccurrences": 0,
-				"assignedCharacteristicTypeDiscriminator": "AttributeType",
-				"attributeType": {"id": "attr-1", "name": "Definition", "resourceType": "StringAttributeType"}
-			}]
-		}]`))
-	})
-	mux.HandleFunc("GET /rest/2.0/assetTypes/"+kpiTypeID, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"id": "` + kpiTypeID + `", "name": "KPI", "parent": {"id": "` + parentTypeID + `", "name": "Business Asset"}}`))
-	})
-	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+parentTypeID, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`[{
-			"id": "assignment-parent",
-			"domainTypes": [],
-			"characteristicTypes": [{
-				"id": "char-rel-fwd",
-				"minimumOccurrences": 0,
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "Acronym"},
+			"assignedCharacteristicTypeReferences": [{
+				"id": "line-explicit",
 				"roleDirection": "TO_TARGET",
-				"assignedCharacteristicTypeDiscriminator": "RelationType",
-				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
+				"assignedResourceReference": {"id": "` + explicitRelID + `", "name": "relates to", "resourceDiscriminator": "RelationType"}
 			}, {
-				"id": "char-rel-rev",
-				"minimumOccurrences": 0,
-				"roleDirection": "TO_SOURCE",
-				"assignedCharacteristicTypeDiscriminator": "RelationType",
-				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
-			}]
-		}]`))
-	})
-	mux.HandleFunc("GET /rest/2.0/assetTypes/"+parentTypeID, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"id": "` + parentTypeID + `", "name": "Business Asset"}`))
+				"id": "line-derived",
+				"roleDirection": "TO_TARGET",
+				"assignedResourceReference": {"id": "` + derivedRelID + `", "name": "derived from", "resourceDiscriminator": "DerivedRelationType"}
+			}],
+			"characteristicTypes": [
+				{"id": "line-explicit", "role": "relates to", "coRole": "related from"},
+				{"id": "line-derived", "role": "derived from", "coRole": "source of"}
+			]
+		}`))
 	})
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	client := testutil.NewClient(srv)
 
-	got, err := GetAssignmentForAssetType(t.Context(), client, kpiTypeID, domTypeID)
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
 	if err != nil {
-		t.Fatalf("GetAssignmentForAssetType: %v", err)
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
 	}
 
-	if len(got.RelationTypes) != 2 {
-		t.Fatalf("expected forward+reversed relation entries from parent assignment, got %d: %+v", len(got.RelationTypes), got.RelationTypes)
+	if len(got.RelationTypes) != 1 {
+		t.Fatalf("expected only the explicit relation type, got %d: %+v", len(got.RelationTypes), got.RelationTypes)
 	}
-	var sawForward, sawReversed bool
-	for _, rt := range got.RelationTypes {
-		if rt.ID != relTypeID || rt.Role != "calculated using" {
-			t.Errorf("unexpected relation entry: %+v", rt)
-		}
-		if rt.Reversed {
-			sawReversed = true
-		} else {
-			sawForward = true
-		}
+	if got.RelationTypes[0].ID != explicitRelID {
+		t.Errorf("expected explicit relation %q, got %+v", explicitRelID, got.RelationTypes[0])
 	}
-	if !sawForward || !sawReversed {
-		t.Errorf("expected both directions inherited from parent, forward=%v reversed=%v", sawForward, sawReversed)
+}
+
+// TestGetEffectiveAssignmentForAsset_NormalizesDateTimeAttributeType asserts the
+// platform-bug kind "DateTimeAttributeType" is surfaced to the model as
+// "DateAttributeType".
+func TestGetEffectiveAssignmentForAsset_NormalizesDateTimeAttributeType(t *testing.T) {
+	const assetID = "019e027f-25b9-728f-9ed8-77c315ac377f"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "Acronym"},
+			"assignedCharacteristicTypeReferences": [{
+				"id": "line-dt",
+				"minimumOccurrences": 0,
+				"assignedResourceReference": {"id": "attr-dt", "name": "Last Reviewed", "resourceDiscriminator": "DateTimeAttributeType"}
+			}]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+	if len(got.AttributeTypes) != 1 {
+		t.Fatalf("expected 1 attribute type, got %d: %+v", len(got.AttributeTypes), got.AttributeTypes)
+	}
+	if got.AttributeTypes[0].Kind != "DateAttributeType" {
+		t.Errorf("expected DateTimeAttributeType normalized to DateAttributeType, got %q", got.AttributeTypes[0].Kind)
 	}
 }

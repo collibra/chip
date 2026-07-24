@@ -265,31 +265,15 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		return nil, fmt.Errorf("fetching current attributes: %w", err)
 	}
 
-	// Attributes from the per-asset endpoint; relations from the type-chain walk
-	// (see the respective client functions for why they differ).
+	// The edit assignment — attributes and relations — is resolved server-side
+	// from the per-asset endpoint and enriched with trait-inherited
+	// characteristics; it is the single source for both.
 	effective, err := clients.GetEffectiveAssignmentForAsset(ctx, client, assetID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching effective assignment: %w", err)
 	}
 
-	domain, err := clients.GetDomainDetails(ctx, client, asset.Domain.ID)
-	if err != nil {
-		return nil, fmt.Errorf("fetching domain for relation assignment: %w", err)
-	}
-	var domainTypeID string
-	if domain.Type != nil {
-		domainTypeID = domain.Type.ID
-	}
-	relationAssignment, err := clients.GetAssignmentForAssetType(ctx, client, asset.Type.ID, domainTypeID)
-	if err != nil {
-		return nil, fmt.Errorf("fetching relation assignment: %w", err)
-	}
-
-	assignment := &clients.EditAssetAssignment{
-		AssetType:      effective.AssetType,
-		AttributeTypes: effective.AttributeTypes,
-		RelationTypes:  relationAssignment.RelationTypes,
-	}
+	assignment := effective
 
 	byName := make(map[string]clients.EditAssetAssignmentAttributeType, len(assignment.AttributeTypes))
 	for _, at := range assignment.AttributeTypes {

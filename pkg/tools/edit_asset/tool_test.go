@@ -218,19 +218,21 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	// characteristicTypes shared by both assignment endpoints (attributes are read
-	// from the per-asset one, relations from the assetType one).
-	buildChars := func() []map[string]any {
-		chars := []map[string]any{}
+	// The per-asset endpoint is the single source for attributes AND relations,
+	// read references-primary: assignedCharacteristicTypeReferences carries
+	// membership + kind + direction, while characteristicTypes supplies each
+	// relation's role / co-role / target, joined on the line id.
+	buildAssignment := func() map[string]any {
+		refs := []map[string]any{}
+		meta := []map[string]any{}
 		for _, v := range s.attrTypesByID {
-			chars = append(chars, map[string]any{
-				"id":                 "attr-char-" + v.ID,
+			refs = append(refs, map[string]any{
+				"id":                 "attr-line-" + v.ID,
 				"minimumOccurrences": 0,
-				"assignedCharacteristicTypeDiscriminator": "AttributeType",
-				"attributeType": map[string]any{
-					"id":           v.ID,
-					"name":         v.Name,
-					"resourceType": "StringAttributeType",
+				"assignedResourceReference": map[string]any{
+					"id":                    v.ID,
+					"name":                  v.Name,
+					"resourceDiscriminator": "StringAttributeType",
 				},
 			})
 		}
@@ -239,50 +241,36 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 			if rt.Reversed {
 				direction = "TO_SOURCE"
 			}
-			chars = append(chars, map[string]any{
-				"id":                 "rel-char-" + rt.ID,
-				"minimumOccurrences": 0,
-				"roleDirection":      direction,
-				"assignedCharacteristicTypeDiscriminator": "RelationType",
-				"relationType": map[string]any{
-					"id":         rt.ID,
-					"role":       rt.Role,
-					"coRole":     rt.CoRole,
-					"sourceType": rt.SourceType,
-					"targetType": rt.TargetType,
+			lineID := "rel-line-" + rt.ID + ":" + direction
+			refs = append(refs, map[string]any{
+				"id":            lineID,
+				"roleDirection": direction,
+				"assignedResourceReference": map[string]any{
+					"id":                    rt.ID,
+					"name":                  rt.Role,
+					"resourceDiscriminator": "RelationType",
 				},
 			})
+			meta = append(meta, map[string]any{
+				"id":         lineID,
+				"role":       rt.Role,
+				"coRole":     rt.CoRole,
+				"sourceType": rt.SourceType,
+				"targetType": rt.TargetType,
+			})
 		}
-		return chars
+		return map[string]any{
+			"id":                                   "assignment-asset-1",
+			"assetType":                            map[string]any{"id": testAssetTypeID, "name": "Business Term"},
+			"domainTypes":                          []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
+			"assignedCharacteristicTypeReferences": refs,
+			"characteristicTypes":                  meta,
+		}
 	}
 
-	// Per-asset effective assignment (single object) — source of attributes.
+	// Per-asset effective assignment (single object) — the single edit-path source.
 	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+testAssetID, func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":                  "assignment-asset-1",
-			"assetType":           map[string]any{"id": testAssetTypeID, "name": "Business Term"},
-			"domainTypes":         []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
-			"characteristicTypes": buildChars(),
-		})
-	})
-
-	// Domain details — used to scope the relation (assetType) assignment lookup.
-	mux.HandleFunc("GET /rest/2.0/domains/"+testDomainID, func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(clients.EditAssetDomainDetails{
-			ID:   testDomainID,
-			Name: "Marketing Glossary",
-			Type: &clients.EditAssetDomainTypeRef{ID: testDomainTypeID, Name: "Business Glossary"},
-		})
-	})
-
-	// Per-asset-type assignment (top-level array) — edit_asset uses its relations.
-	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+testAssetTypeID, func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"id":                  "assignment-type-1",
-			"assetType":           map[string]any{"id": testAssetTypeID, "name": "Business Term"},
-			"domainTypes":         []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
-			"characteristicTypes": buildChars(),
-		}})
+		_ = json.NewEncoder(w).Encode(buildAssignment())
 	})
 
 	mux.HandleFunc("POST /rest/2.0/relations", func(w http.ResponseWriter, r *http.Request) {
