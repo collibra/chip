@@ -1,0 +1,5 @@
+inspect-ai
+mcp
+anthropic
+httpx
+pyyaml
