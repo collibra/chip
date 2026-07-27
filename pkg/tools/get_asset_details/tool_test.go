@@ -302,9 +302,9 @@ func TestGetAssetDetailsSurfacesEmptyAssignableAttribute(t *testing.T) {
 		_, _ = w.Write([]byte(`{
 			"id": "assignment-effective",
 			"assetType": {"id": "acr", "name": "Acronym"},
-			"characteristicTypes": [
-				{"id": "c1", "minimumOccurrences": 1, "assignedCharacteristicTypeDiscriminator": "AttributeType", "attributeType": {"id": "def", "name": "Definition", "resourceType": "StringAttributeType"}},
-				{"id": "c2", "minimumOccurrences": 0, "assignedCharacteristicTypeDiscriminator": "AttributeType", "attributeType": {"id": "note", "name": "Note", "resourceType": "StringAttributeType"}}
+			"assignedCharacteristicTypeReferences": [
+				{"id": "c1", "minimumOccurrences": 1, "assignedResourceReference": {"id": "def", "name": "Definition", "resourceDiscriminator": "StringAttributeType"}},
+				{"id": "c2", "minimumOccurrences": 0, "assignedResourceReference": {"id": "note", "name": "Note", "resourceDiscriminator": "StringAttributeType"}}
 			]
 		}`))
 	})

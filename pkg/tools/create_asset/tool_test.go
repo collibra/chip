@@ -172,7 +172,7 @@ func (m *mockDGC) server() *httptest.Server {
 					{
 						"id": "ref-def",
 						"assignedResourceReference": map[string]string{
-							"id": defAttrID, "name": defAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
+							"id": defAttrID, "name": defAttrName, "resourceDiscriminator": "StringAttributeType",
 						},
 						"assignedResourcePublicId": defAttrPublicID,
 						"minimumOccurrences":       1,
@@ -180,7 +180,7 @@ func (m *mockDGC) server() *httptest.Server {
 					{
 						"id": "ref-note",
 						"assignedResourceReference": map[string]string{
-							"id": noteAttrID, "name": noteAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
+							"id": noteAttrID, "name": noteAttrName, "resourceDiscriminator": "StringAttributeType",
 						},
 						"assignedResourcePublicId": "Note",
 						"minimumOccurrences":       0,
@@ -611,13 +611,6 @@ const (
 	acronymTypePublicID = "Acronym"
 )
 
-// newAcronymSubtypeClient boots a mock DGC for the Acronym → BusinessTerm
-// subtype world: Acronym's own assignment has empty domainTypes
-// (inherit-sentinel), no attributes, and one extra relation ("has acronym");
-// the parent BusinessTerm assignment has the explicit Glossary domain type
-// and the required (min:1) Definition attribute. We mock both nodes to
-// mirror the live shape. Shared by the subtype-union and
-// parent-required-attribute tests.
 func newAcronymSubtypeClient(t *testing.T) *http.Client {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /rest/2.0/assetTypes/", func(w http.ResponseWriter, r *http.Request) {
@@ -682,7 +675,7 @@ func newAcronymSubtypeClient(t *testing.T) *http.Client {
 						"id": "ref-has-acronym",
 						"assignedResourceReference": map[string]string{
 							"id": "00000000-0000-0000-0000-00000000aaaa", "name": "has acronym",
-							"resourceType": "RelationType", "resourceDiscriminator": "RelationType",
+							"resourceDiscriminator": "RelationType",
 						},
 					},
 				},
@@ -697,7 +690,7 @@ func newAcronymSubtypeClient(t *testing.T) *http.Client {
 						"id": "ref-def",
 						"assignedResourceReference": map[string]string{
 							"id": defAttrID, "name": defAttrName,
-							"resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
+							"resourceDiscriminator": "StringAttributeType",
 						},
 						"assignedResourcePublicId": "Definition",
 						"minimumOccurrences":       1,
@@ -757,8 +750,6 @@ func newAcronymSubtypeClient(t *testing.T) *http.Client {
 	return testutil.NewClient(srv)
 }
 
-// Resolving Acronym + Glossary should walk the parent chain, find Glossary
-// in BusinessTerm's allowed types, and union the characteristics.
 func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 	c := newAcronymSubtypeClient(t)
 

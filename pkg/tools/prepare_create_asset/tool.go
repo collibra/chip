@@ -234,9 +234,6 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 		}
 
-		// role/coRole are not in the assignment payload, so always hydrate them
-		// from the relation type resource — an empty role would otherwise break
-		// the RelationSchemaEntry contract.
 		if err := hydrateRelationDetails(ctx, collibraClient, out.RelationTypes); err != nil {
 			out.Message += " (relation details could not be fully hydrated: " + err.Error() + ")"
 		}

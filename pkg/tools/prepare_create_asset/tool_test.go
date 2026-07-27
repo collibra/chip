@@ -151,7 +151,7 @@ func (m *mockDGC) server() *httptest.Server {
 				{
 					"id": "ref-def",
 					"assignedResourceReference": map[string]string{
-						"id": defAttrID, "name": defAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
+						"id": defAttrID, "name": defAttrName, "resourceDiscriminator": "StringAttributeType",
 					},
 					"assignedResourcePublicId": "Definition",
 					"minimumOccurrences":       1,
@@ -159,7 +159,7 @@ func (m *mockDGC) server() *httptest.Server {
 				{
 					"id": "ref-note",
 					"assignedResourceReference": map[string]string{
-						"id": noteAttrID, "name": noteAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
+						"id": noteAttrID, "name": noteAttrName, "resourceDiscriminator": "StringAttributeType",
 					},
 					"assignedResourcePublicId": "Note",
 					"minimumOccurrences":       0,
@@ -167,7 +167,7 @@ func (m *mockDGC) server() *httptest.Server {
 				{
 					"id": "ref-rel",
 					"assignedResourceReference": map[string]string{
-						"id": relTypeID, "name": relTypePublicID, "resourceType": "RelationType", "resourceDiscriminator": "RelationType",
+						"id": relTypeID, "name": relTypePublicID, "resourceDiscriminator": "RelationType",
 					},
 					"assignedResourcePublicId": relTypePublicID,
 					"minimumOccurrences":       0,
@@ -181,7 +181,7 @@ func (m *mockDGC) server() *httptest.Server {
 				{
 					"id": "ref-cxrel",
 					"assignedResourceReference": map[string]string{
-						"id": cxRelTypeID, "name": cxRelPublicID, "resourceType": "ComplexRelationType", "resourceDiscriminator": "ComplexRelationType",
+						"id": cxRelTypeID, "name": cxRelPublicID, "resourceDiscriminator": "ComplexRelationType",
 					},
 					"assignedResourcePublicId": cxRelPublicID,
 					"minimumOccurrences":       0,

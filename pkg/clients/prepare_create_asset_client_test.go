@@ -17,7 +17,7 @@ func attrRef(id, name string, min int) rawAssignedCharacteristicTypeReference {
 		ID: "ref-" + id,
 		AssignedResourceReference: rawAssignmentResourceRef{
 			ID: id, Name: name,
-			ResourceType: "StringAttributeType", ResourceDiscriminator: "StringAttributeType",
+			ResourceDiscriminator: "StringAttributeType",
 		},
 		MinimumOccurrences: min,
 	}

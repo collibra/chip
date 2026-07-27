@@ -374,14 +374,16 @@ type PrepareCreateAttributeTypeFull struct {
 }
 
 // PrepareCreateRelationTypeFull is the subset of the /relationTypes/{id}
-// response we need. role/coRole are the human-readable leg names; they only
-// exist on the relation type resource, not on the assignment, so relation
+// response we need. role/coRole and the two leg types only exist on the
+// relation type resource, not on the assignment reference, so relation
 // slots are hydrated with them separately.
 type PrepareCreateRelationTypeFull struct {
-	ID       string `json:"id"`
-	PublicID string `json:"publicId"`
-	Role     string `json:"role"`
-	CoRole   string `json:"coRole"`
+	ID         string                  `json:"id"`
+	PublicID   string                  `json:"publicId"`
+	Role       string                  `json:"role"`
+	CoRole     string                  `json:"coRole"`
+	SourceType *PrepareCreateAssetType `json:"sourceType"`
+	TargetType *PrepareCreateAssetType `json:"targetType"`
 }
 
 // rawScopedAssignment mirrors the on-the-wire shape of a single assignment
@@ -392,10 +394,17 @@ type rawScopedAssignment struct {
 	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference `json:"assignedCharacteristicTypeReferences"`
 }
 
+type rawTraitAssignmentInheritance struct {
+	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference `json:"assignedCharacteristicTypeReferences"`
+}
+
+type rawAssignmentInheritance struct {
+	TraitAssignmentInheritances []rawTraitAssignmentInheritance `json:"traitAssignmentInheritances"`
+}
+
 type rawAssignmentResourceRef struct {
 	ID                    string `json:"id"`
 	Name                  string `json:"name"`
-	ResourceType          string `json:"resourceType"`
 	ResourceDiscriminator string `json:"resourceDiscriminator"`
 }
 
@@ -705,9 +714,8 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 			}
 			for _, ref := range a.AssignedCharacteristicTypeReferences {
 				disc := ref.AssignedResourceReference.ResourceDiscriminator
-				rt := ref.AssignedResourceReference.ResourceType
 				switch {
-				case isAttributeTypeDiscriminator(disc, rt):
+				case isAttributeTypeDiscriminator(disc):
 					if _, dup := seenAttrIDs[ref.AssignedResourceReference.ID]; dup {
 						continue
 					}
@@ -725,7 +733,7 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 						// (level 0) origin. Level > 0 means inherited.
 						FromOwnAssignment: level == 0,
 					})
-				case isRelationTypeDiscriminator(disc, rt):
+				case isRelationTypeDiscriminator(disc):
 					if _, dup := seenRelIDs[ref.AssignedResourceReference.ID]; dup {
 						continue
 					}
@@ -734,14 +742,10 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 					// reference itself. Role/coRole are not in the assignment
 					// payload — hydrateRelationDetails fills them from the
 					// relation type resource.
-					kind := disc
-					if kind == "" {
-						kind = rt
-					}
 					rel := PrepareCreateScopedRelation{
 						RelationTypeID:       ref.AssignedResourceReference.ID,
 						RelationTypePublicID: ref.AssignedResourcePublicID,
-						Kind:                 kind,
+						Kind:                 disc,
 						Direction:            ref.RelationTypeDirection,
 					}
 					if ref.RelationTypeRestriction != nil {
@@ -767,25 +771,48 @@ func containsDomainType(refs []rawAssignmentResourceRef, id string) bool {
 	return false
 }
 
+// characteristicSourcesFrom flattens an assignment's own characteristic
+// references with those inherited from Traits applied directly to the asset
+// type and from Traits on ancestor assignments, in closest-first order.
+func characteristicSourcesFrom(
+	refs []rawAssignedCharacteristicTypeReference,
+	direct []rawTraitAssignmentInheritance,
+	ancestor []rawAssignmentInheritance,
+) [][]rawAssignedCharacteristicTypeReference {
+	sources := [][]rawAssignedCharacteristicTypeReference{refs}
+	for _, ti := range direct {
+		sources = append(sources, ti.AssignedCharacteristicTypeReferences)
+	}
+	for _, ai := range ancestor {
+		for _, ti := range ai.TraitAssignmentInheritances {
+			sources = append(sources, ti.AssignedCharacteristicTypeReferences)
+		}
+	}
+	return sources
+}
+
 // isAttributeTypeDiscriminator recognises the assignment-side discriminator
 // for attribute-style characteristics. Collibra returns values like
 // "StringAttributeType", "BooleanAttributeType", "DateAttributeType",
 // "NumericAttributeType", "ScriptAttributeType", and "SingleValueListAttributeType".
-func isAttributeTypeDiscriminator(disc, resourceType string) bool {
-	if disc == "" {
-		return strings.HasSuffix(resourceType, "AttributeType")
-	}
+func isAttributeTypeDiscriminator(disc string) bool {
 	return strings.HasSuffix(disc, "AttributeType")
+}
+
+// normalizeAttributeKind maps the platform-bug discriminator
+// DateTimeAttributeType to the canonical DateAttributeType.
+func normalizeAttributeKind(disc string) string {
+	if disc == "DateTimeAttributeType" {
+		return "DateAttributeType"
+	}
+	return disc
 }
 
 // isRelationTypeDiscriminator recognises the assignment-side discriminator
 // for relation-style characteristics. ComplexRelationType is included
 // because Collibra surfaces it through the same code path even though we
 // don't currently wire it through to the agent.
-func isRelationTypeDiscriminator(disc, resourceType string) bool {
-	if disc == "" {
-		return strings.HasSuffix(resourceType, "RelationType")
-	}
+func isRelationTypeDiscriminator(disc string) bool {
 	return disc == "RelationType" || disc == "ComplexRelationType"
 }
 
