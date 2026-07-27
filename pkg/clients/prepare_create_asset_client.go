@@ -20,11 +20,9 @@ const (
 	StatusDuplicateFound     PrepareCreateAssetStatus = "duplicate_found"
 )
 
-// PrepareCreateAssetType represents an asset type from the API. Parent
-// is populated by /assetTypes/{id} for subtypes (e.g. Acronym → Business
-// Term) and is the key for walking the inheritance chain when the
-// subtype's own scoped-assignment record has empty domainTypes (which
-// Collibra uses as the "inherit from parent" sentinel).
+// PrepareCreateAssetType represents an asset type from the API. Parent is
+// populated by /assetTypes/{id} and drives the walk up the type hierarchy
+// when locating the level that carries assignments.
 type PrepareCreateAssetType struct {
 	ID       string                  `json:"id"`
 	PublicID string                  `json:"publicId"`
@@ -321,39 +319,22 @@ type PrepareCreateScopedAttribute struct {
 	Min                   int
 	// Max is nil when there is no upper bound (i.e. unbounded).
 	Max *int
-	// FromOwnAssignment is true when the slot comes from the asset type's
-	// own assignment (chain level 0), false when it was inherited from a
-	// parent level (a sentinel subtype whose own assignment has empty
-	// domainTypes still inherits its parent's characteristics). Required-ness
-	// is only enforced at create time for the type's own assignment —
-	// parent-level Required flags are informational, matching Core API/UI.
-	FromOwnAssignment bool
 }
 
 // PrepareCreateScopedRelation is one relation slot in a scoped assignment.
 type PrepareCreateScopedRelation struct {
 	RelationTypeID       string
 	RelationTypePublicID string
-	// Kind is the assignment discriminator, e.g. "RelationType" or
-	// "ComplexRelationType". It selects which resource endpoint hydrates the
-	// leg detail (role/coRole live on different resources for the two).
-	Kind   string
-	Role   string
-	CoRole string
+	Kind                 string
+	Role                 string
+	CoRole               string
 	// Direction is "TO_TARGET" or "TO_SOURCE" — describing which side of the
 	// relation the asset being created sits on (TO_TARGET means it is the
 	// source leg and the relation points out to the target).
-	Direction string
-	// TargetType is the asset type on the other side of the relation. It is
-	// only populated when the assignment restricts the other leg to a
-	// specific type (relationTypeRestriction); many assignments do not.
+	Direction  string
 	TargetType *PrepareCreateAssetType
 }
 
-// PrepareCreateScopedAssignment is the effective assignment for a given
-// (assetType, domainType) pair: the union of the assignment's attribute
-// slots and the relation slots that apply to assets of this type when
-// created in domains of this type.
 type PrepareCreateScopedAssignment struct {
 	AssignmentID string
 	Attributes   []PrepareCreateScopedAttribute
@@ -373,25 +354,15 @@ type PrepareCreateAttributeTypeFull struct {
 	AllowedValues []string `json:"allowedValues,omitempty"`
 }
 
-// PrepareCreateRelationTypeFull is the subset of the /relationTypes/{id}
-// response we need. role/coRole and the two leg types only exist on the
-// relation type resource, not on the assignment reference, so relation
-// slots are hydrated with them separately.
-type PrepareCreateRelationTypeFull struct {
-	ID         string                  `json:"id"`
-	PublicID   string                  `json:"publicId"`
-	Role       string                  `json:"role"`
-	CoRole     string                  `json:"coRole"`
-	SourceType *PrepareCreateAssetType `json:"sourceType"`
-	TargetType *PrepareCreateAssetType `json:"targetType"`
-}
-
 // rawScopedAssignment mirrors the on-the-wire shape of a single assignment
 // returned from /assignments/assetType/{id}. Fields we don't use are omitted.
 type rawScopedAssignment struct {
 	ID                                   string                                   `json:"id"`
 	DomainTypes                          []rawAssignmentResourceRef               `json:"domainTypes"`
 	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference `json:"assignedCharacteristicTypeReferences"`
+	Scope                                *rawAssignmentScope                      `json:"scope"`
+	TraitAssignmentInheritances          []rawTraitAssignmentInheritance          `json:"traitAssignmentInheritances"`
+	AssignmentInheritances               []rawAssignmentInheritance               `json:"assignmentInheritances"`
 }
 
 type rawTraitAssignmentInheritance struct {
@@ -402,27 +373,27 @@ type rawAssignmentInheritance struct {
 	TraitAssignmentInheritances []rawTraitAssignmentInheritance `json:"traitAssignmentInheritances"`
 }
 
+type rawAssignmentScope struct {
+	ID          string                     `json:"id"`
+	Name        string                     `json:"name"`
+	Domains     []rawAssignmentResourceRef `json:"domains"`
+	Communities []rawAssignmentResourceRef `json:"communities"`
+}
+
 type rawAssignmentResourceRef struct {
 	ID                    string `json:"id"`
 	Name                  string `json:"name"`
 	ResourceDiscriminator string `json:"resourceDiscriminator"`
 }
 
-// rawAssignedCharacteristicTypeReference is one assigned-characteristic entry
-// from the assignment payload. For relation slots it also carries the
-// assignment-scoped direction and the type restriction on the other leg
-// (relationTypeRestriction) — these live here, on the reference, not on a
-// separate metadata list. Role and coRole are NOT in the assignment payload
-// at all; they live on the relation type resource and are hydrated separately
-// via GetRelationTypeFull.
 type rawAssignedCharacteristicTypeReference struct {
 	ID                        string                    `json:"id"`
 	AssignedResourceReference rawAssignmentResourceRef  `json:"assignedResourceReference"`
 	AssignedResourcePublicID  string                    `json:"assignedResourcePublicId"`
 	MinimumOccurrences        int                       `json:"minimumOccurrences"`
 	MaximumOccurrences        *int                      `json:"maximumOccurrences"`
-	RelationTypeDirection     string                    `json:"relationTypeDirection"`
-	RelationTypeRestriction   *rawAssignmentResourceRef `json:"relationTypeRestriction"`
+	RelationTypeDirection     string                    `json:"relationTypeDirection,omitempty"`
+	RelationTypeRestriction   *rawAssignmentResourceRef `json:"relationTypeRestriction,omitempty"`
 }
 
 // GetAssetTypeByID resolves an asset type by its UUID. Used as the first
@@ -556,60 +527,43 @@ func ListStatusesAll(ctx context.Context, client *http.Client) ([]PrepareCreateS
 	return result.Results, nil
 }
 
-// maxAssignmentChainDepth caps how far we'll walk the asset type's parent
-// chain when resolving inherited assignments. Defensive: in OOTB Collibra
-// the chain is rarely deeper than 2-3 levels, but a misconfigured or
-// cyclic instance shouldn't be able to spin us forever.
-const maxAssignmentChainDepth = 5
+const maxAncestorDepth = 50
 
-// GetScopedAssignment returns the effective scoped assignment for an
-// (assetType, domainType) pair, walking the asset type's parent chain
-// when needed. Collibra's data model lets a subtype omit domainTypes on
-// its own assignment (signalling "inherit from parent") and contribute
-// its own characteristics on top — see Acronym → Business Term in OOTB
-// glossary. The result here is the union of all chain levels'
-// applicable characteristics, where applicable means the assignment
-// either explicitly lists the target domainTypeID or has empty
-// domainTypes (the inherit-sentinel). At least one level in the chain
-// must explicitly include the target domain type, otherwise we return
-// "not allowed" — empty-domainTypes-everywhere is not the same as
-// "creatable everywhere".
-func GetScopedAssignment(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) (*PrepareCreateScopedAssignment, error) {
-	chain, err := fetchAssignmentChain(ctx, client, assetTypeID)
+// GetScopedAssignment resolves the single assignment that governs creating
+// an asset of the given type in the given domain: walk up to the first
+// asset-type level that has assignments, select one by scope tier
+// (domain-direct > community > global), then gate on the domain type.
+func GetScopedAssignment(ctx context.Context, client *http.Client, assetTypeID, domainTypeID, domainID string) (*PrepareCreateScopedAssignment, error) {
+	levels, err := fetchAssignmentLevels(ctx, client, assetTypeID)
 	if err != nil {
 		return nil, err
 	}
-	return reduceScopedAssignmentChain(chain, domainTypeID)
+	coveredScopes, err := resolveCoveredScopes(ctx, client, levels, domainID)
+	if err != nil {
+		return nil, err
+	}
+	return selectScopedAssignment(levels, domainTypeID, coveredScopes)
 }
 
-// assignmentChainNode is one level of the asset type's parent chain — the
-// type itself plus its raw assignments. Splitting the fetch (impure)
-// from the reduction (pure) lets us unit-test the union/inheritance
-// logic without an HTTP server.
-type assignmentChainNode struct {
+type assignmentLevel struct {
 	assetType *PrepareCreateAssetType
 	raws      []rawScopedAssignment
 }
 
-// fetchAssignmentChain walks parent → grandparent → … fetching each
-// level's /assetTypes/{id} (for parent info) and /assignments/assetType/{id}.
-// Stops at the root (no parent) or at maxAssignmentChainDepth.
-func fetchAssignmentChain(ctx context.Context, client *http.Client, assetTypeID string) ([]assignmentChainNode, error) {
-	var chain []assignmentChainNode
+func fetchAssignmentLevels(ctx context.Context, client *http.Client, assetTypeID string) ([]assignmentLevel, error) {
+	var levels []assignmentLevel
 	currentID := assetTypeID
 	seen := make(map[string]struct{})
-	for depth := 0; depth < maxAssignmentChainDepth; depth++ {
+	for depth := 0; depth < maxAncestorDepth; depth++ {
 		if _, looped := seen[currentID]; looped {
 			break
 		}
 		seen[currentID] = struct{}{}
 
+		// Ancestor-level fetch errors are tolerated: resolution proceeds
+		// with the levels collected so far.
 		at, err := GetAssetTypeByID(ctx, client, currentID)
 		if err != nil {
-			// Tolerate parent-fetch errors: if we can't get the parent's
-			// info we still return what we have so far. Discovery falls
-			// back to "no compatible domains" only if the entire chain
-			// yielded nothing useful.
 			if depth == 0 {
 				return nil, err
 			}
@@ -622,19 +576,16 @@ func fetchAssignmentChain(ctx context.Context, client *http.Client, assetTypeID 
 			}
 			break
 		}
-		chain = append(chain, assignmentChainNode{assetType: at, raws: raws})
+		levels = append(levels, assignmentLevel{assetType: at, raws: raws})
 
 		if at.Parent == nil || at.Parent.ID == "" {
 			break
 		}
 		currentID = at.Parent.ID
 	}
-	return chain, nil
+	return levels, nil
 }
 
-// fetchRawAssignments is the bare /assignments/assetType/{id} fetch,
-// extracted from GetScopedAssignment so the chain walker can call it
-// per level without re-implementing HTTP plumbing.
 func fetchRawAssignments(ctx context.Context, client *http.Client, assetTypeID string) ([]rawScopedAssignment, error) {
 	reqURL := fmt.Sprintf("/rest/2.0/assignments/assetType/%s", url.PathEscape(assetTypeID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -661,114 +612,166 @@ func fetchRawAssignments(ctx context.Context, client *http.Client, assetTypeID s
 	return raws, nil
 }
 
-// reduceScopedAssignmentChain resolves the effective assignment for the
-// target domain type, honouring Collibra's all-or-nothing inheritance: an
-// asset type inherits its parent's assignment only until it defines its own.
-// Walking child (level 0) → parents, we locate the "authoritative" level —
-// the lowest level whose assignment explicitly lists the target domain type.
-// Characteristics are unioned only across levels 0..authoritativeLevel
-// inclusive; deeper (further-ancestor) levels are ignored, so a child's own
-// assignment is never polluted by a parent's extra characteristics.
-//
-// Levels above the authoritative one carry empty-domainTypes assignments (the
-// inherit-sentinel, e.g. Acronym → Business Term): they contribute their own
-// characteristics on top of the inherited scope, which is why those levels are
-// still unioned in rather than replaced outright.
-//
-// At least one level must contain the target domain type explicitly, or we
-// return "not allowed". Characteristics are deduped by ID (child-first wins).
-func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID string) (*PrepareCreateScopedAssignment, error) {
-	if len(chain) == 0 {
-		return nil, fmt.Errorf("no assignments found")
+type scopeTier int
+
+const (
+	scopeTierDomainDirect scopeTier = iota
+	scopeTierCommunity
+)
+
+func resolveCoveredScopes(ctx context.Context, client *http.Client, levels []assignmentLevel, domainID string) (map[string]scopeTier, error) {
+	scopes := make(map[string]*rawAssignmentScope)
+	for _, level := range levels {
+		for _, a := range level.raws {
+			if a.Scope != nil && a.Scope.ID != "" {
+				scopes[a.Scope.ID] = a.Scope
+			}
+		}
+	}
+	covered := make(map[string]scopeTier)
+	if len(scopes) == 0 {
+		return covered, nil
 	}
 
-	authoritativeLevel := -1
-	for level, node := range chain {
-		for _, a := range node.raws {
-			if containsDomainType(a.DomainTypes, domainTypeID) {
-				authoritativeLevel = level
+	var ancestorCommunities map[string]struct{}
+	for id, scope := range scopes {
+		if containsResourceRef(scope.Domains, domainID) {
+			covered[id] = scopeTierDomainDirect
+			continue
+		}
+		if len(scope.Communities) == 0 {
+			continue
+		}
+		if ancestorCommunities == nil {
+			var err error
+			ancestorCommunities, err = fetchDomainCommunityAncestors(ctx, client, domainID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		for _, c := range scope.Communities {
+			if _, ok := ancestorCommunities[c.ID]; ok {
+				covered[id] = scopeTierCommunity
 				break
 			}
 		}
-		if authoritativeLevel >= 0 {
+	}
+	return covered, nil
+}
+
+func fetchDomainCommunityAncestors(ctx context.Context, client *http.Client, domainID string) (map[string]struct{}, error) {
+	var domain struct {
+		Community *rawAssignmentResourceRef `json:"community"`
+	}
+	if err := getJSON(ctx, client, fmt.Sprintf("/rest/2.0/domains/%s", url.PathEscape(domainID)), &domain); err != nil {
+		return nil, fmt.Errorf("getting domain %q for scope coverage: %w", domainID, err)
+	}
+
+	ancestors := make(map[string]struct{})
+	current := domain.Community
+	for depth := 0; current != nil && current.ID != "" && depth < maxAncestorDepth; depth++ {
+		if _, looped := ancestors[current.ID]; looped {
+			break
+		}
+		ancestors[current.ID] = struct{}{}
+		var community struct {
+			Parent *rawAssignmentResourceRef `json:"parent"`
+		}
+		if err := getJSON(ctx, client, fmt.Sprintf("/rest/2.0/communities/%s", url.PathEscape(current.ID)), &community); err != nil {
+			return nil, fmt.Errorf("getting community %q for scope coverage: %w", current.ID, err)
+		}
+		current = community.Parent
+	}
+	return ancestors, nil
+}
+
+func getJSON(ctx context.Context, client *http.Client, reqURL string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("building request for %s: %w", reqURL, err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("getting %s: %w", reqURL, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("getting %s: status %d: %s", reqURL, resp.StatusCode, string(body))
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decoding %s response: %w", reqURL, err)
+	}
+	return nil
+}
+
+func selectScopedAssignment(levels []assignmentLevel, domainTypeID string, coveredScopes map[string]scopeTier) (*PrepareCreateScopedAssignment, error) {
+	located := -1
+	for i := range levels {
+		if len(levels[i].raws) > 0 {
+			located = i
 			break
 		}
 	}
-	if authoritativeLevel < 0 {
+	if located < 0 {
+		return nil, fmt.Errorf("no assignments found")
+	}
+
+	selected, ok := selectByTier(levels[located].raws, coveredScopes)
+	if !ok {
+		return nil, fmt.Errorf("no assignments found")
+	}
+
+	if !containsResourceRef(selected.DomainTypes, domainTypeID) {
 		return nil, fmt.Errorf("no scoped assignment found for asset type in this domain type %q", domainTypeID)
 	}
 
-	out := &PrepareCreateScopedAssignment{}
-	seenAttrIDs := make(map[string]struct{})
-	seenRelIDs := make(map[string]struct{})
-
-	for level := 0; level <= authoritativeLevel; level++ {
-		node := chain[level]
-		for _, a := range node.raws {
-			applicable := len(a.DomainTypes) == 0 || containsDomainType(a.DomainTypes, domainTypeID)
-			if !applicable {
-				continue
-			}
-			if out.AssignmentID == "" {
-				out.AssignmentID = a.ID
-			}
-			for _, ref := range a.AssignedCharacteristicTypeReferences {
-				disc := ref.AssignedResourceReference.ResourceDiscriminator
-				switch {
-				case isAttributeTypeDiscriminator(disc):
-					if _, dup := seenAttrIDs[ref.AssignedResourceReference.ID]; dup {
-						continue
-					}
-					seenAttrIDs[ref.AssignedResourceReference.ID] = struct{}{}
-					out.Attributes = append(out.Attributes, PrepareCreateScopedAttribute{
-						AttributeTypeID:       ref.AssignedResourceReference.ID,
-						AttributeTypeName:     ref.AssignedResourceReference.Name,
-						AttributeTypePublicID: ref.AssignedResourcePublicID,
-						Kind:                  disc,
-						Required:              ref.MinimumOccurrences > 0,
-						Min:                   ref.MinimumOccurrences,
-						Max:                   ref.MaximumOccurrences,
-						// Child-first iteration + dedup means a slot present on
-						// both the type and a parent keeps the type's own
-						// (level 0) origin. Level > 0 means inherited.
-						FromOwnAssignment: level == 0,
-					})
-				case isRelationTypeDiscriminator(disc):
-					if _, dup := seenRelIDs[ref.AssignedResourceReference.ID]; dup {
-						continue
-					}
-					seenRelIDs[ref.AssignedResourceReference.ID] = struct{}{}
-					// Direction and the other-leg type restriction come from the
-					// reference itself. Role/coRole are not in the assignment
-					// payload — hydrateRelationDetails fills them from the
-					// relation type resource.
-					rel := PrepareCreateScopedRelation{
-						RelationTypeID:       ref.AssignedResourceReference.ID,
-						RelationTypePublicID: ref.AssignedResourcePublicID,
-						Kind:                 disc,
-						Direction:            ref.RelationTypeDirection,
-					}
-					if ref.RelationTypeRestriction != nil {
-						rel.TargetType = &PrepareCreateAssetType{
-							ID:   ref.RelationTypeRestriction.ID,
-							Name: ref.RelationTypeRestriction.Name,
-						}
-					}
-					out.Relations = append(out.Relations, rel)
-				}
-			}
-		}
-	}
-	return out, nil
+	return emitAssignmentCharacteristics(selected), nil
 }
 
-func containsDomainType(refs []rawAssignmentResourceRef, id string) bool {
-	for _, r := range refs {
-		if r.ID == id {
-			return true
+func selectByTier(raws []rawScopedAssignment, coveredScopes map[string]scopeTier) (rawScopedAssignment, bool) {
+	var global, domainDirect, community *rawScopedAssignment
+	for i := range raws {
+		a := &raws[i]
+		if a.Scope == nil {
+			if global == nil {
+				global = a
+			}
+			continue
+		}
+		tier, ok := coveredScopes[a.Scope.ID]
+		if !ok {
+			continue
+		}
+		switch tier {
+		case scopeTierDomainDirect:
+			if domainDirect == nil {
+				domainDirect = a
+			}
+		case scopeTierCommunity:
+			if community == nil {
+				community = a
+			}
 		}
 	}
-	return false
+	switch {
+	case domainDirect != nil:
+		return *domainDirect, true
+	case community != nil:
+		return *community, true
+	case global != nil:
+		return *global, true
+	default:
+		return rawScopedAssignment{}, false
+	}
+}
+
+type characteristicKey struct {
+	resourceID string
+	direction  string
 }
 
 // characteristicSourcesFrom flattens an assignment's own characteristic
@@ -789,6 +792,68 @@ func characteristicSourcesFrom(
 		}
 	}
 	return sources
+}
+
+func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAssignment {
+	out := &PrepareCreateScopedAssignment{AssignmentID: a.ID}
+	seen := make(map[characteristicKey]struct{})
+	for _, refs := range characteristicSourcesFrom(a.AssignedCharacteristicTypeReferences, a.TraitAssignmentInheritances, a.AssignmentInheritances) {
+		for _, ref := range refs {
+			disc := ref.AssignedResourceReference.ResourceDiscriminator
+			if disc == "DerivedRelationType" {
+				continue
+			}
+			switch {
+			case isAttributeTypeDiscriminator(disc):
+				key := characteristicKey{resourceID: ref.AssignedResourceReference.ID}
+				if _, dup := seen[key]; dup {
+					continue
+				}
+				seen[key] = struct{}{}
+				out.Attributes = append(out.Attributes, PrepareCreateScopedAttribute{
+					AttributeTypeID:       ref.AssignedResourceReference.ID,
+					AttributeTypeName:     ref.AssignedResourceReference.Name,
+					AttributeTypePublicID: ref.AssignedResourcePublicID,
+					Kind:                  normalizeAttributeKind(disc),
+					Required:              ref.MinimumOccurrences > 0,
+					Min:                   ref.MinimumOccurrences,
+					Max:                   ref.MaximumOccurrences,
+				})
+			case isRelationTypeDiscriminator(disc):
+				key := characteristicKey{
+					resourceID: ref.AssignedResourceReference.ID,
+					direction:  ref.RelationTypeDirection,
+				}
+				if _, dup := seen[key]; dup {
+					continue
+				}
+				seen[key] = struct{}{}
+				rel := PrepareCreateScopedRelation{
+					RelationTypeID:       ref.AssignedResourceReference.ID,
+					RelationTypePublicID: ref.AssignedResourcePublicID,
+					Kind:                 disc,
+					Direction:            ref.RelationTypeDirection,
+				}
+				if ref.RelationTypeRestriction != nil {
+					rel.TargetType = &PrepareCreateAssetType{
+						ID:   ref.RelationTypeRestriction.ID,
+						Name: ref.RelationTypeRestriction.Name,
+					}
+				}
+				out.Relations = append(out.Relations, rel)
+			}
+		}
+	}
+	return out
+}
+
+func containsResourceRef(refs []rawAssignmentResourceRef, id string) bool {
+	for _, r := range refs {
+		if r.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // isAttributeTypeDiscriminator recognises the assignment-side discriminator
@@ -816,34 +881,30 @@ func isRelationTypeDiscriminator(disc string) bool {
 	return disc == "RelationType" || disc == "ComplexRelationType"
 }
 
-// PrepareCreateAllowedDomainType is one domain type an asset type can
-// be created in. The set is deduped across all of an asset type's
-// assignments (an asset type may be allowed in multiple domain types).
+// PrepareCreateAllowedDomainType is one domain type an asset type can be
+// created in.
 type PrepareCreateAllowedDomainType struct {
 	ID   string
 	Name string
 }
 
-// ListAllowedDomainTypesForAssetType returns the deduped list of domain
-// type IDs the asset type can be created in. Honouring Collibra's
-// all-or-nothing inheritance, we stop at the first chain level that defines
-// any explicit domain type: that level's own assignment governs the allowed
-// domain types, and a parent's are not merged in. Subtypes whose own
-// assignments have only empty domainTypes (inherit-sentinel) fall through to
-// the parent — e.g. Acronym → Business Term → Glossary, Business Asset Domain.
+// ListAllowedDomainTypesForAssetType returns the deduped domain types of the
+// first hierarchy level that has any assignment — the same level
+// GetScopedAssignment resolves against.
 func ListAllowedDomainTypesForAssetType(ctx context.Context, client *http.Client, assetTypeID string) ([]PrepareCreateAllowedDomainType, error) {
-	chain, err := fetchAssignmentChain(ctx, client, assetTypeID)
+	levels, err := fetchAssignmentLevels(ctx, client, assetTypeID)
 	if err != nil {
 		return nil, err
 	}
 
 	seen := make(map[string]struct{})
 	out := make([]PrepareCreateAllowedDomainType, 0)
-	for _, node := range chain {
-		levelHasExplicit := false
-		for _, a := range node.raws {
+	for _, level := range levels {
+		if len(level.raws) == 0 {
+			continue
+		}
+		for _, a := range level.raws {
 			for _, dt := range a.DomainTypes {
-				levelHasExplicit = true
 				if _, ok := seen[dt.ID]; ok {
 					continue
 				}
@@ -851,14 +912,25 @@ func ListAllowedDomainTypesForAssetType(ctx context.Context, client *http.Client
 				out = append(out, PrepareCreateAllowedDomainType{ID: dt.ID, Name: dt.Name})
 			}
 		}
-		// Once a level declares its own domain types, it is authoritative;
-		// deeper ancestors are inherited only by sentinel (empty-domainTypes)
-		// levels, which contribute nothing here and let the walk continue.
-		if levelHasExplicit {
-			break
-		}
+		break
 	}
 	return out, nil
+}
+
+// NotAllowedMessage explains why an asset type can't be created in a domain,
+// distinguishing "creatable nowhere on this instance" from "not in this
+// domain" without leaking the allowed domain types.
+func NotAllowedMessage(ctx context.Context, client *http.Client, assetTypeID, assetTypeName, domainName, domainTypeName string) string {
+	creatableSomewhere := true
+	if allowed, err := ListAllowedDomainTypesForAssetType(ctx, client, assetTypeID); err == nil {
+		creatableSomewhere = len(allowed) > 0
+	}
+	if !creatableSomewhere {
+		return fmt.Sprintf("Asset type %q can't be created in any domain on this instance.", assetTypeName)
+	}
+	return fmt.Sprintf(
+		"Asset type %q isn't allowed in domain %q (domain type %q). Pick a different asset type, or a different domain.",
+		assetTypeName, domainName, domainTypeName)
 }
 
 // GetAttributeTypeFull fetches /attributeTypes/{id} and decodes the full
@@ -890,9 +962,22 @@ func GetAttributeTypeFull(ctx context.Context, client *http.Client, id string) (
 	return &result, nil
 }
 
-// GetRelationTypeFull fetches a relation type's role and coRole from
-// /rest/2.0/relationTypes/{id}. These leg names are not part of the
-// assignment payload, so relation slots are hydrated with them per id.
+// PrepareCreateRelationTypeFull is the subset of the /relationTypes/{id}
+// response we need. role/coRole and the two leg types only exist on the
+// relation type resource, not on the assignment reference, so relation
+// slots are hydrated with them separately.
+type PrepareCreateRelationTypeFull struct {
+	ID         string                  `json:"id"`
+	PublicID   string                  `json:"publicId"`
+	Role       string                  `json:"role"`
+	CoRole     string                  `json:"coRole"`
+	SourceType *PrepareCreateAssetType `json:"sourceType"`
+	TargetType *PrepareCreateAssetType `json:"targetType"`
+}
+
+// GetRelationTypeFull fetches a relation type's role, coRole, and leg types
+// from /rest/2.0/relationTypes/{id}. These are not part of the assignment
+// payload, so relation slots are hydrated with them per id.
 func GetRelationTypeFull(ctx context.Context, client *http.Client, id string) (*PrepareCreateRelationTypeFull, error) {
 	reqURL := fmt.Sprintf("/rest/2.0/relationTypes/%s", url.PathEscape(id))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)

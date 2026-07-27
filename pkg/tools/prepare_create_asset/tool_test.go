@@ -34,6 +34,7 @@ const (
 	cxRelPublicID    = "FieldMapping_C"
 	cxLeg1Role       = "source"
 	cxLeg2Role       = "target"
+	groupsRelID      = "00000000-0000-0000-0000-000000004201"
 )
 
 // Mock fixture for the consolidated /assignments shape. Kept local rather
@@ -52,10 +53,12 @@ type domainRow struct {
 }
 
 type mockDGC struct {
-	t               *testing.T
-	excludeBT       bool // simulate license-gated asset type missing from /assetTypes
-	domainTypeOther bool // domain returns a non-Glossary type
-	noAssignments   bool // /assignments/assetType/{id} returns [] (subtype with inherited assignments)
+	t                *testing.T
+	excludeBT        bool // simulate license-gated asset type missing from /assetTypes
+	domainTypeOther  bool // domain returns a non-Glossary type
+	noAssignments    bool // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
+	emptyDomainTypes bool // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
+	bidiRelation     bool // the assignment carries one relation type assigned in BOTH directions
 }
 
 func (m *mockDGC) server() *httptest.Server {
@@ -141,12 +144,36 @@ func (m *mockDGC) server() *httptest.Server {
 			writeJSON(w, http.StatusOK, []any{})
 			return
 		}
-		// When domain type doesn't match the assignment's domainTypes, the
-		// reducer will surface "no scoped assignment" — we still serve the
-		// canonical assignment so that branch is exercised in the reducer.
+		domainTypes := []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}}
+		if m.emptyDomainTypes {
+			domainTypes = []map[string]string{}
+		}
+		if m.bidiRelation {
+			writeJSON(w, http.StatusOK, []map[string]any{{
+				"id":          "asgn-1",
+				"domainTypes": domainTypes,
+				"assignedCharacteristicTypeReferences": []map[string]any{
+					{
+						"id": "rel-line-fwd",
+						"assignedResourceReference": map[string]string{
+							"id": groupsRelID, "resourceDiscriminator": "RelationType",
+						},
+						"relationTypeDirection": "TO_TARGET",
+					},
+					{
+						"id": "rel-line-rev",
+						"assignedResourceReference": map[string]string{
+							"id": groupsRelID, "resourceDiscriminator": "RelationType",
+						},
+						"relationTypeDirection": "TO_SOURCE",
+					},
+				},
+			}})
+			return
+		}
 		writeJSON(w, http.StatusOK, []map[string]any{{
 			"id":          "asgn-1",
-			"domainTypes": []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}},
+			"domainTypes": domainTypes,
 			"assignedCharacteristicTypeReferences": []map[string]any{
 				{
 					"id": "ref-def",
@@ -171,9 +198,7 @@ func (m *mockDGC) server() *httptest.Server {
 					},
 					"assignedResourcePublicId": relTypePublicID,
 					"minimumOccurrences":       0,
-					// direction + the other-leg type restriction live on the
-					// reference; role/coRole are served from /relationTypes/{id}.
-					"relationTypeDirection": "TO_TARGET",
+					"relationTypeDirection":    "TO_TARGET",
 					"relationTypeRestriction": map[string]string{
 						"id": relTargetTypeID, "name": relTargetName,
 					},
@@ -209,17 +234,23 @@ func (m *mockDGC) server() *httptest.Server {
 	})
 
 	mux.HandleFunc("GET /rest/2.0/relationTypes/", func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/relationTypes/")
-		if id != relTypeID {
+		switch strings.TrimPrefix(r.URL.Path, "/rest/2.0/relationTypes/") {
+		case relTypeID:
+			writeJSON(w, http.StatusOK, map[string]any{
+				"id":       relTypeID,
+				"publicId": relTypePublicID,
+				"role":     relRole,
+				"coRole":   relCoRole,
+			})
+		case groupsRelID:
+			writeJSON(w, http.StatusOK, map[string]any{
+				"id":     groupsRelID,
+				"role":   "groups",
+				"coRole": "is grouped by",
+			})
+		default:
 			http.Error(w, "not found", http.StatusNotFound)
-			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"id":       relTypeID,
-			"publicId": relTypePublicID,
-			"role":     relRole,
-			"coRole":   relCoRole,
-		})
 	})
 
 	mux.HandleFunc("GET /rest/2.0/attributeTypes/", func(w http.ResponseWriter, r *http.Request) {
@@ -467,8 +498,33 @@ func TestPrepare_TypeNotAllowedInDomain(t *testing.T) {
 	if out.Status != prepare_create_asset.StatusNeedsClarification {
 		t.Fatalf("want needs_clarification, got %q", out.Status)
 	}
-	if !strings.Contains(out.Message, "not allowed in domain") {
-		t.Errorf("expected 'not allowed in domain' message, got %q", out.Message)
+	if !strings.Contains(out.Message, "isn't allowed in domain") {
+		t.Errorf("expected not-here-branch message, got %q", out.Message)
+	}
+	if !strings.Contains(out.Message, "Pick a different asset type, or a different domain") {
+		t.Errorf("expected not-here recovery hint, got %q", out.Message)
+	}
+}
+
+func TestPrepare_NotCreatableAnywhere_NowhereBranch(t *testing.T) {
+	run := func(m *mockDGC) string {
+		c := client(t, m)
+		out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
+			AssetType: btTypeName,
+			Domain:    glossaryDomain,
+		})
+		if out.Status != prepare_create_asset.StatusNeedsClarification {
+			t.Fatalf("want needs_clarification, got %q (%s)", out.Status, out.Message)
+		}
+		if !strings.Contains(out.Message, "can't be created in any domain") {
+			t.Errorf("expected nowhere-branch message, got %q", out.Message)
+		}
+		return out.Message
+	}
+	noAssignment := run(&mockDGC{t: t, noAssignments: true})
+	allEmpty := run(&mockDGC{t: t, emptyDomainTypes: true})
+	if noAssignment != allEmpty {
+		t.Errorf("nowhere sub-cases must produce identical messages:\n  no-assignment: %q\n  all-empty:     %q", noAssignment, allEmpty)
 	}
 }
 
@@ -485,6 +541,35 @@ func TestPrepare_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *testin
 	}
 	if !strings.Contains(out.Message, "No compatible domains") {
 		t.Errorf("expected factual no-compatible-domains message, got %q", out.Message)
+	}
+}
+
+func TestPrepare_BidirectionalRelation_BothDirectionsAsSeparateEntries(t *testing.T) {
+	c := client(t, &mockDGC{t: t, bidiRelation: true})
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+	})
+	if out.Status != prepare_create_asset.StatusReady {
+		t.Fatalf("want ready, got %q (%s)", out.Status, out.Message)
+	}
+	if len(out.RelationTypes) != 2 {
+		t.Fatalf("expected both directions as 2 separate entries, got %d: %+v", len(out.RelationTypes), out.RelationTypes)
+	}
+	dirs := map[string]prepare_create_asset.RelationSchemaEntry{}
+	for _, r := range out.RelationTypes {
+		if r.RelationTypeID != groupsRelID {
+			t.Errorf("both entries must carry the same relationTypeId %q, got %q", groupsRelID, r.RelationTypeID)
+		}
+		dirs[r.Direction] = r
+	}
+	fwd, okFwd := dirs["TO_TARGET"]
+	rev, okRev := dirs["TO_SOURCE"]
+	if !okFwd || !okRev {
+		t.Fatalf("expected one entry per direction, got directions %v", dirs)
+	}
+	if fwd.Role != "groups" || rev.Role != "groups" || fwd.CoRole != "is grouped by" {
+		t.Errorf("each direction must carry the relation type's role/coRole, got fwd=%+v rev=%+v", fwd, rev)
 	}
 }
 

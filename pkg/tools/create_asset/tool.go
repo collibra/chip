@@ -227,22 +227,11 @@ func buildExecutionContext(ctx context.Context, client *http.Client, input Input
 		return nil, &Output{Status: StatusValidationError, Message: fmt.Sprintf("Domain %q has no domain type — cannot determine scoped assignment.", domain.Name)}
 	}
 
-	assignment, err := clients.GetScopedAssignment(ctx, client, assetType.ID, domain.Type.ID)
+	assignment, err := clients.GetScopedAssignment(ctx, client, assetType.ID, domain.Type.ID, domain.ID)
 	if err != nil {
-		// Disambiguate "wrong domain type for this asset type" from "asset
-		// type has no domain types at all" — the second case happens with
-		// subtypes that inherit assignments from a parent and the standard
-		// "pick a different domain" hint is misleading.
-		if allowed, allowedErr := clients.ListAllowedDomainTypesForAssetType(ctx, client, assetType.ID); allowedErr == nil && len(allowed) == 0 {
-			return nil, &Output{
-				Status:  StatusValidationError,
-				Message: fmt.Sprintf("No compatible domains found for asset type %q on this instance.", assetType.Name),
-			}
-		}
 		return nil, &Output{
-			Status: StatusValidationError,
-			Message: fmt.Sprintf("Asset type %q is not allowed in domain %q (domain type %q). Pick a different domain or a different asset type.",
-				assetType.Name, domain.Name, domain.Type.Name),
+			Status:  StatusValidationError,
+			Message: clients.NotAllowedMessage(ctx, client, assetType.ID, assetType.Name, domain.Name, domain.Type.Name),
 		}
 	}
 
@@ -370,9 +359,6 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 	return resolved, nil
 }
 
-// validateRequiredAttributes blocks the create when a required slot on the
-// asset type's OWN assignment has no resolved value. Parent-inherited slots
-// are skipped: Collibra itself accepts the create without them.
 func validateRequiredAttributes(resolved []resolvedAttribute, assignment *clients.PrepareCreateScopedAssignment) *Output {
 	supplied := make(map[string]struct{}, len(resolved))
 	for _, r := range resolved {
@@ -380,7 +366,7 @@ func validateRequiredAttributes(resolved []resolvedAttribute, assignment *client
 	}
 	var missing []string
 	for _, slot := range assignment.Attributes {
-		if !slot.Required || !slot.FromOwnAssignment {
+		if !slot.Required {
 			continue
 		}
 		if _, ok := supplied[slot.AttributeTypeID]; !ok {
