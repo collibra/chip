@@ -14,7 +14,7 @@ import (
 
 func server(t *testing.T, code int, body any, gotQuery *string) *http.Client {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /rest/dq/internal/v1/rules/templates", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /rest/dq/1.0/ruleTemplates", func(w http.ResponseWriter, r *http.Request) {
 		if gotQuery != nil {
 			*gotQuery = r.URL.RawQuery
 		}
@@ -36,30 +36,30 @@ func TestListDQRuleTemplates_HappyPath(t *testing.T) {
 	tol := 5
 	c := server(t, http.StatusOK, map[string]any{
 		"results": []clients.DQRuleTemplate{
-			{ID: "t1", Name: "Not Null Check", Dimensions: []string{"Completeness"}, Tolerance: &tol, Ootb: true},
+			{ID: "t1", Name: "Not Null Check", Dimensions: []string{"Completeness"}, Tolerance: &tol, IsSystem: true},
 		},
 		"total": 1, "offset": 0, "limit": 100,
 	}, &query)
 
-	ootb := true
-	out, err := list_dq_rule_templates.NewTool(c).Handler(t.Context(), list_dq_rule_templates.Input{Ootb: &ootb})
+	isSystem := true
+	out, err := list_dq_rule_templates.NewTool(c).Handler(t.Context(), list_dq_rule_templates.Input{IsSystem: &isSystem})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if out.Status != list_dq_rule_templates.StatusSuccess {
 		t.Fatalf("status = %q, want success (%s)", out.Status, out.Message)
 	}
-	if len(out.Templates) != 1 || out.Templates[0].Name != "Not Null Check" || !out.Templates[0].Ootb {
+	if len(out.Templates) != 1 || out.Templates[0].Name != "Not Null Check" || !out.Templates[0].IsSystem {
 		t.Fatalf("unexpected templates: %+v", out.Templates)
 	}
-	if !strings.Contains(query, "isOotb=true") {
-		t.Fatalf("expected isOotb=true in query, got %q", query)
+	if !strings.Contains(query, "isSystem=true") {
+		t.Fatalf("expected isSystem=true in query, got %q", query)
 	}
 }
 
 func TestListDQRuleTemplates_InvalidLimit(t *testing.T) {
 	c := server(t, http.StatusOK, map[string]any{}, nil)
-	out, _ := list_dq_rule_templates.NewTool(c).Handler(t.Context(), list_dq_rule_templates.Input{Limit: 500})
+	out, _ := list_dq_rule_templates.NewTool(c).Handler(t.Context(), list_dq_rule_templates.Input{Limit: 5000})
 	if out.Status != list_dq_rule_templates.StatusValidationError {
 		t.Fatalf("status = %q, want validation_error", out.Status)
 	}

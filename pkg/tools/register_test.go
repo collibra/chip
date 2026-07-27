@@ -28,6 +28,37 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+var dataQualityToolNames = []string{
+	"create_data_quality_rule",
+	"get_data_quality_rule",
+	"get_data_quality_rule_results",
+	"validate_data_quality_rule",
+	"list_data_quality_rule_templates",
+	"get_data_quality_rule_template",
+	"deploy_data_quality_rule_template",
+	"generate_data_quality_rule_sql",
+	"find_data_quality_rules",
+	"search_catalog_columns",
+}
+
+func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range dataQualityToolNames {
+		if slices.Contains(names, name) {
+			t.Fatalf("expected %q to be absent when data-quality feature is disabled; got tools=%v", name, names)
+		}
+	}
+}
+
+func TestRegisterAll_DataQualityToolsVisibleWhenEnabled(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.DataQualityFeatureName}})
+	for _, name := range dataQualityToolNames {
+		if !slices.Contains(names, name) {
+			t.Fatalf("expected %q to be present when data-quality feature is enabled; got tools=%v", name, names)
+		}
+	}
+}
+
 func listToolNames(t *testing.T, cfg *chip.ServerToolConfig) []string {
 	t.Helper()
 	server := chip.NewServer()

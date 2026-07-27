@@ -57,7 +57,7 @@ type Output struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "get_dq_rule",
+		Name:  "get_data_quality_rule",
 		Title: "Get Data Quality Rule",
 		Description: "Read the definition of a single data quality rule (a check on a table's data; Collibra calls it a 'monitor') on an existing data quality job (a saved check on ONE database table; also called a 'dataset'). " +
 			"Returns the rule's type, SQL, filter, tolerance (count of failing records allowed before it fails) and active/suppressed (kept but not scored) state.",

@@ -9,23 +9,25 @@ import (
 	"strconv"
 )
 
-// DQRuleTemplate is a data quality rule template (a "RuleTemplateResponse") — a
+// DQRuleTemplate is a data quality rule template (a "RuleTemplate") — a
 // parameterized SQL pattern (with a {{column}} placeholder) that can be deployed
-// as concrete rules across many columns/jobs. Ootb marks the built-in templates;
-// custom templates are user-defined.
+// as concrete rules across many columns/jobs. IsSystem marks the built-in
+// (system) templates; custom templates are user-defined. Field names follow the
+// public /rest/dq/1.0/ruleTemplates API.
 type DQRuleTemplate struct {
-	ID              string   `json:"id"`
-	Name            string   `json:"name"`
-	Description     string   `json:"description,omitempty"`
-	SQLQuery        string   `json:"sqlQuery,omitempty"`
-	SourceDialect   string   `json:"sourceDialect,omitempty"`
-	Dimensions      []string `json:"dimensions,omitempty"`
-	Tolerance       *int     `json:"tolerance,omitempty"`
-	Ootb            bool     `json:"ootb"`
-	DeploymentCount int64    `json:"deploymentCount"`
+	ID                string   `json:"id"`
+	Name              string   `json:"ruleTemplateName"`
+	Description       string   `json:"description,omitempty"`
+	SQL               string   `json:"sql,omitempty"`
+	Dialect           string   `json:"dialect,omitempty"`
+	Dimensions        []string `json:"dimensions,omitempty"`
+	Tolerance         *int     `json:"tolerance,omitempty"`
+	IsSystem          bool     `json:"isSystem"`
+	DeployedRuleCount int64    `json:"deployedRuleCount"`
 }
 
-// dqRuleTemplateListResponse is the paginated list envelope (PagedResponse).
+// dqRuleTemplateListResponse is the paginated list envelope
+// (RuleTemplatePaginated).
 type dqRuleTemplateListResponse struct {
 	Results []DQRuleTemplate `json:"results"`
 	Total   int64            `json:"total"`
@@ -42,20 +44,21 @@ type DQRuleTemplateList struct {
 }
 
 // ListDQRuleTemplatesParams are the optional filters/pagination for listing
-// templates. Ootb is a tri-state: nil = all, true = OOTB only, false = custom only.
+// templates. IsSystem is a tri-state: nil = all, true = system (built-in) only,
+// false = custom only.
 type ListDQRuleTemplatesParams struct {
 	Name      string
 	Dimension string
 	CreatedBy string
-	Ootb      *bool
+	IsSystem  *bool
 	SortBy    string
 	SortDir   string
 	Offset    int
 	Limit     int
 }
 
-// ListDQRuleTemplates lists rule templates (OOTB and custom) —
-// GET /rest/dq/internal/v1/rules/templates.
+// ListDQRuleTemplates lists rule templates (system and custom) —
+// GET /rest/dq/1.0/ruleTemplates.
 func ListDQRuleTemplates(ctx context.Context, client *http.Client, params ListDQRuleTemplatesParams) (*DQRuleTemplateList, error) {
 	q := url.Values{}
 	if params.Name != "" {
@@ -67,8 +70,8 @@ func ListDQRuleTemplates(ctx context.Context, client *http.Client, params ListDQ
 	if params.CreatedBy != "" {
 		q.Set("createdBy", params.CreatedBy)
 	}
-	if params.Ootb != nil {
-		q.Set("isOotb", strconv.FormatBool(*params.Ootb))
+	if params.IsSystem != nil {
+		q.Set("isSystem", strconv.FormatBool(*params.IsSystem))
 	}
 	if params.SortBy != "" {
 		q.Set("sortBy", params.SortBy)
@@ -81,7 +84,7 @@ func ListDQRuleTemplates(ctx context.Context, client *http.Client, params ListDQ
 		q.Set("limit", strconv.Itoa(params.Limit))
 	}
 
-	path := "/rest/dq/internal/v1/rules/templates"
+	path := "/rest/dq/1.0/ruleTemplates"
 	if enc := q.Encode(); enc != "" {
 		path += "?" + enc
 	}
@@ -102,10 +105,10 @@ func ListDQRuleTemplates(ctx context.Context, client *http.Client, params ListDQ
 	return &DQRuleTemplateList{Results: resp.Results, Total: resp.Total, Offset: resp.Offset, Limit: resp.Limit}, nil
 }
 
-// GetDQRuleTemplate fetches a single rule template by id —
-// GET /rest/dq/internal/v1/rules/templates/{templateId}.
-func GetDQRuleTemplate(ctx context.Context, client *http.Client, templateID string) (*DQRuleTemplate, error) {
-	path := "/rest/dq/internal/v1/rules/templates/" + url.PathEscape(templateID)
+// GetDQRuleTemplate fetches a single rule template by name —
+// GET /rest/dq/1.0/ruleTemplates/{ruleTemplateName}.
+func GetDQRuleTemplate(ctx context.Context, client *http.Client, ruleTemplateName string) (*DQRuleTemplate, error) {
+	path := "/rest/dq/1.0/ruleTemplates/" + url.PathEscape(ruleTemplateName)
 	respBody, status, err := dqDo(ctx, client, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getting dq rule template: %w", err)
@@ -115,7 +118,7 @@ func GetDQRuleTemplate(ctx context.Context, client *http.Client, templateID stri
 		case http.StatusForbidden:
 			return nil, fmt.Errorf("getting dq rule template: missing permission to view templates: %s", string(respBody))
 		case http.StatusNotFound:
-			return nil, fmt.Errorf("getting dq rule template: template %q not found: %s", templateID, string(respBody))
+			return nil, fmt.Errorf("getting dq rule template: template %q not found: %s", ruleTemplateName, string(respBody))
 		default:
 			return nil, fmt.Errorf("getting dq rule template: unexpected status %d: %s", status, string(respBody))
 		}
@@ -129,10 +132,11 @@ func GetDQRuleTemplate(ctx context.Context, client *http.Client, templateID stri
 
 // DQTemplateDeployTarget is one deployment target: the job and, for a
 // column-level template, the column substituted for the {{column}} placeholder.
-// ColumnName is optional for table-level templates.
+// ColumnName and ConnectionName are optional.
 type DQTemplateDeployTarget struct {
-	JobName    string `json:"jobName"`
-	ColumnName string `json:"columnName,omitempty"`
+	JobName        string `json:"jobName"`
+	ColumnName     string `json:"columnName,omitempty"`
+	ConnectionName string `json:"connectionName,omitempty"`
 }
 
 // dqTemplateDeployRequest is the request body for the deploy endpoint.
@@ -140,28 +144,49 @@ type dqTemplateDeployRequest struct {
 	Targets []DQTemplateDeployTarget `json:"targets"`
 }
 
+// DQTemplateDeployOutcome is the per-target result of a deploy. Status reports
+// whether the target was deployed or skipped; Reason explains skips/failures.
+type DQTemplateDeployOutcome struct {
+	JobName          string `json:"jobName"`
+	ColumnName       string `json:"columnName,omitempty"`
+	DeployedRuleName string `json:"deployedRuleName,omitempty"`
+	Status           string `json:"status"`
+	Reason           string `json:"reason,omitempty"`
+}
+
+// DQTemplateDeployResult is the deploy response (RuleTemplateDeployResult): a
+// per-target outcome list. Deploy is partial-success — individual targets may be
+// deployed or skipped independently.
+type DQTemplateDeployResult struct {
+	Results []DQTemplateDeployOutcome `json:"results"`
+}
+
 // DeployDQRuleTemplate instantiates a template as concrete rules on the given
 // targets, using dialect-specific SQL resolved server-side —
-// POST /rest/dq/internal/v1/rules/templates/{templateId}/deploy. Each deployed
-// rule is named {templateName}_{columnName} by the server. Returns no body on
-// success (HTTP 204).
-func DeployDQRuleTemplate(ctx context.Context, client *http.Client, templateID string, targets []DQTemplateDeployTarget) error {
-	path := "/rest/dq/internal/v1/rules/templates/" + url.PathEscape(templateID) + "/deploy"
+// POST /rest/dq/1.0/ruleTemplates/{ruleTemplateName}/deploy. The deploy is
+// partial-success: it returns HTTP 200 with a per-target outcome list even when
+// some targets are skipped.
+func DeployDQRuleTemplate(ctx context.Context, client *http.Client, ruleTemplateName string, targets []DQTemplateDeployTarget) (*DQTemplateDeployResult, error) {
+	path := "/rest/dq/1.0/ruleTemplates/" + url.PathEscape(ruleTemplateName) + "/deploy"
 	respBody, status, err := dqDo(ctx, client, http.MethodPost, path, dqTemplateDeployRequest{Targets: targets})
 	if err != nil {
-		return fmt.Errorf("deploying dq rule template: %w", err)
+		return nil, fmt.Errorf("deploying dq rule template: %w", err)
 	}
-	if status != http.StatusNoContent {
+	if status != http.StatusOK {
 		switch status {
 		case http.StatusBadRequest:
-			return fmt.Errorf("deploying dq rule template: bad request (e.g. incompatible template/column or invalid target): %s", string(respBody))
+			return nil, fmt.Errorf("deploying dq rule template: bad request (e.g. invalid targets or incompatible template): %s", string(respBody))
 		case http.StatusForbidden:
-			return fmt.Errorf("deploying dq rule template: missing permission to deploy templates: %s", string(respBody))
+			return nil, fmt.Errorf("deploying dq rule template: missing permission to deploy templates: %s", string(respBody))
 		case http.StatusNotFound:
-			return fmt.Errorf("deploying dq rule template: template %q or a target job not found: %s", templateID, string(respBody))
+			return nil, fmt.Errorf("deploying dq rule template: template %q not found: %s", ruleTemplateName, string(respBody))
 		default:
-			return fmt.Errorf("deploying dq rule template: unexpected status %d: %s", status, string(respBody))
+			return nil, fmt.Errorf("deploying dq rule template: unexpected status %d: %s", status, string(respBody))
 		}
 	}
-	return nil
+	var result DQTemplateDeployResult
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("deploying dq rule template: decoding response: %w", err)
+	}
+	return &result, nil
 }

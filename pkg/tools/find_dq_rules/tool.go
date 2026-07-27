@@ -70,7 +70,7 @@ type Output struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "find_dq_rules",
+		Name:  "find_data_quality_rules",
 		Title: "Find Data Quality Rules",
 		Description: "Search existing data quality rules (checks on a table's data; Collibra calls them 'monitors') across data quality jobs " +
 			"(a job, also called a 'dataset', is a saved check on ONE database table). Filter by exact jobName and/or " +

@@ -18,8 +18,11 @@ import (
 type OutputStatus string
 
 const (
-	// StatusSuccess means the template was deployed to all targets.
+	// StatusSuccess means every target was deployed.
 	StatusSuccess OutputStatus = "success"
+	// StatusPartial means the deploy ran but some targets were skipped/failed
+	// while others were deployed.
+	StatusPartial OutputStatus = "partial"
 	// StatusValidationError means the inputs failed validation before any write.
 	StatusValidationError OutputStatus = "validation_error"
 	// StatusError means the deployment failed due to a downstream DQ error.
@@ -37,30 +40,41 @@ type Target struct {
 
 // Input is the tool's typed input.
 type Input struct {
-	TemplateID string   `json:"templateId" jsonschema:"Required. UUID of the rule template to deploy (from list_dq_rule_templates)."`
-	Targets    []Target `json:"targets" jsonschema:"Required. One or more job/column targets. Each deployed rule is named {templateName}_{columnName} by the server."`
-	Confirm    bool     `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of the template and the target list WITHOUT deploying, so it can be reviewed with the user (inspect the template's SQL with get_dq_rule_template). Set true to actually deploy after the user has approved."`
+	RuleTemplateName string   `json:"ruleTemplateName" jsonschema:"Required. Name of the rule template to deploy (from list_data_quality_rule_templates)."`
+	Targets          []Target `json:"targets" jsonschema:"Required. One or more job/column targets. Each deployed rule is named {templateName}_{columnName} by the server."`
+	Confirm          bool     `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of the template and the target list WITHOUT deploying, so it can be reviewed with the user (inspect the template's SQL with get_data_quality_rule_template). Set true to actually deploy after the user has approved."`
+}
+
+// Outcome is the per-target result of a deploy.
+type Outcome struct {
+	JobName          string `json:"jobName" jsonschema:"The target job."`
+	ColumnName       string `json:"columnName,omitempty" jsonschema:"The target column, when set."`
+	DeployedRuleName string `json:"deployedRuleName,omitempty" jsonschema:"Name of the rule the server created for this target, when deployed."`
+	Status           string `json:"status" jsonschema:"Per-target status reported by the DQ service (e.g. deployed or SKIPPED)."`
+	Reason           string `json:"reason,omitempty" jsonschema:"Why a target was skipped or failed, when applicable."`
 }
 
 // Output is the typed response.
 type Output struct {
-	Status  OutputStatus `json:"status" jsonschema:"'preview' when confirm was not set (nothing deployed — review and call again with confirm=true); 'success' when the template was deployed; 'validation_error' for bad inputs; 'error' for downstream DQ failures."`
-	Message string       `json:"message" jsonschema:"Human-readable summary."`
-	Preview *Preview     `json:"preview,omitempty" jsonschema:"The template id and resolved targets returned when confirm=false; nothing was deployed."`
-	Count   int          `json:"count,omitempty" jsonschema:"Number of targets the template was deployed to, on success."`
+	Status   OutputStatus `json:"status" jsonschema:"'preview' when confirm was not set (nothing deployed — review and call again with confirm=true); 'success' when every target was deployed; 'partial' when some targets were skipped/failed; 'validation_error' for bad inputs; 'error' for downstream DQ failures."`
+	Message  string       `json:"message" jsonschema:"Human-readable summary, including deployed vs skipped counts."`
+	Preview  *Preview     `json:"preview,omitempty" jsonschema:"The template name and resolved targets returned when confirm=false; nothing was deployed."`
+	Outcomes []Outcome    `json:"outcomes,omitempty" jsonschema:"Per-target deploy outcomes (partial-success): each target's status and, on skip/failure, the reason."`
+	Deployed int          `json:"deployed,omitempty" jsonschema:"Number of targets successfully deployed."`
+	Skipped  int          `json:"skipped,omitempty" jsonschema:"Number of targets skipped or failed."`
 }
 
 // Preview is the deployment plan echoed back for review when confirm is false.
 type Preview struct {
-	TemplateID string   `json:"templateId"`
-	Targets    []Target `json:"targets"`
-	Count      int      `json:"count"`
+	RuleTemplateName string   `json:"ruleTemplateName"`
+	Targets          []Target `json:"targets"`
+	Count            int      `json:"count"`
 }
 
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "deploy_dq_rule_template",
+		Name:  "deploy_data_quality_rule_template",
 		Title: "Deploy Data Quality Rule Template",
 		Description: "Instantiate a rule template as concrete rules (checks on a table's data; Collibra calls them 'monitors') across one or more job/column targets " +
 			"(a job, also called a 'dataset', is a saved check on ONE database table). " +
@@ -68,7 +82,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"{templateName}_{columnName}. Provide a columnName per target for column-level templates. " +
 			"Built around a confirm checkpoint: confirm=false (default) returns a PREVIEW of the template + targets without deploying — review it with the user; confirm=true deploys. " +
 			"Requires permission to deploy templates and to create rules on the target jobs. " +
-			"The deploy is all-or-nothing on the server side.",
+			"The deploy is partial-success: each target is deployed or skipped independently, and the per-target outcomes (with skip reasons) are returned.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(false)},
@@ -77,8 +91,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
-		if strings.TrimSpace(input.TemplateID) == "" {
-			return Output{Status: StatusValidationError, Message: "templateId is required."}, nil
+		if strings.TrimSpace(input.RuleTemplateName) == "" {
+			return Output{Status: StatusValidationError, Message: "ruleTemplateName is required."}, nil
 		}
 		if len(input.Targets) == 0 {
 			return Output{Status: StatusValidationError, Message: "at least one target is required."}, nil
@@ -95,7 +109,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			})
 		}
 
-		templateID := strings.TrimSpace(input.TemplateID)
+		ruleTemplateName := strings.TrimSpace(input.RuleTemplateName)
 
 		// Confirm checkpoint: without confirm, return the deployment plan for
 		// review and deploy nothing.
@@ -106,20 +120,52 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 			return Output{
 				Status: StatusPreview,
-				Message: fmt.Sprintf("Preview only — nothing deployed. Will deploy template %s to %d target(s) (each rule named {template}_{column}). "+
-					"Inspect the template's SQL with get_dq_rule_template, review the targets with the user, then call again with confirm=true.", templateID, len(targets)),
-				Preview: &Preview{TemplateID: templateID, Targets: review, Count: len(targets)},
+				Message: fmt.Sprintf("Preview only — nothing deployed. Will deploy template %q to %d target(s) (each rule named {template}_{column}). "+
+					"Inspect the template's SQL with get_data_quality_rule_template, review the targets with the user, then call again with confirm=true.", ruleTemplateName, len(targets)),
+				Preview: &Preview{RuleTemplateName: ruleTemplateName, Targets: review, Count: len(targets)},
 			}, nil
 		}
 
-		if err := clients.DeployDQRuleTemplate(ctx, collibraClient, templateID, targets); err != nil {
+		result, err := clients.DeployDQRuleTemplate(ctx, collibraClient, ruleTemplateName, targets)
+		if err != nil {
 			return Output{Status: StatusError, Message: fmt.Sprintf("Could not deploy template: %v", err)}, nil
 		}
 
+		// Partial-success: surface each target's outcome and tally deployed vs
+		// skipped. A target counts as deployed when the server assigned it a rule
+		// name; otherwise it was skipped/failed (with a reason).
+		outcomes := make([]Outcome, 0, len(result.Results))
+		deployed, skipped := 0, 0
+		for _, o := range result.Results {
+			outcomes = append(outcomes, Outcome{
+				JobName:          o.JobName,
+				ColumnName:       o.ColumnName,
+				DeployedRuleName: o.DeployedRuleName,
+				Status:           o.Status,
+				Reason:           o.Reason,
+			})
+			if o.DeployedRuleName != "" {
+				deployed++
+			} else {
+				skipped++
+			}
+		}
+
+		status := StatusSuccess
+		if skipped > 0 {
+			if deployed == 0 {
+				status = StatusError
+			} else {
+				status = StatusPartial
+			}
+		}
+
 		return Output{
-			Status:  StatusSuccess,
-			Message: fmt.Sprintf("Deployed template to %d target(s).", len(targets)),
-			Count:   len(targets),
+			Status:   status,
+			Message:  fmt.Sprintf("Deployed %d of %d target(s); %d skipped.", deployed, len(outcomes), skipped),
+			Outcomes: outcomes,
+			Deployed: deployed,
+			Skipped:  skipped,
 		}, nil
 	}
 }

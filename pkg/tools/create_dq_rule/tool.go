@@ -81,7 +81,7 @@ type Output struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "create_dq_rule",
+		Name:  "create_data_quality_rule",
 		Title: "Create Data Quality Rule",
 		Description: "Create a data quality rule (a single data-quality check on a table's data; Collibra calls it a 'monitor') " +
 			"on an existing data quality job (a saved data-quality check on ONE database table that scans the table and runs its rules; also called a 'dataset'), identified by its job name. " +

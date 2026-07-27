@@ -32,20 +32,19 @@ const defaultLimit = 100
 type Input struct {
 	Name      string `json:"name,omitempty" jsonschema:"Optional. Partial-match filter on the template name."`
 	Dimension string `json:"dimension,omitempty" jsonschema:"Optional. Filter by data quality dimension — a category such as Accuracy, Completeness or Validity (e.g. 'Completeness', 'Validity')."`
-	Ootb      *bool  `json:"ootb,omitempty" jsonschema:"Optional. Filter by origin: true = built-in (OOTB, out-of-the-box) templates only, false = custom user-defined templates only, omit = all."`
+	IsSystem  *bool  `json:"isSystem,omitempty" jsonschema:"Optional. Filter by origin: true = built-in (system) templates only, false = custom user-defined templates only, omit = all."`
 	Offset    int    `json:"offset,omitempty" jsonschema:"Optional. Pagination offset (min 0). Defaults to 0."`
-	Limit     int    `json:"limit,omitempty" jsonschema:"Optional. Max templates to return (1-100). Defaults to 100."`
+	Limit     int    `json:"limit,omitempty" jsonschema:"Optional. Max templates to return (1-1000). Defaults to 100."`
 }
 
 // Template is one returned rule template.
 type Template struct {
-	ID          string   `json:"id" jsonschema:"Template UUID — pass this to deploy_dq_rule_template."`
-	Name        string   `json:"name" jsonschema:"Template name."`
+	Name        string   `json:"ruleTemplateName" jsonschema:"Template name — the key passed to get_data_quality_rule_template and deploy_data_quality_rule_template."`
 	Description string   `json:"description,omitempty" jsonschema:"What the template checks."`
-	SQLQuery    string   `json:"sqlQuery,omitempty" jsonschema:"Parameterized SQL pattern (uses a {{column}} placeholder)."`
+	SQL         string   `json:"sql,omitempty" jsonschema:"Parameterized SQL pattern (uses a {{column}} placeholder)."`
 	Dimensions  []string `json:"dimensions,omitempty" jsonschema:"Data quality dimensions (categories such as Accuracy, Completeness, Validity) the template covers."`
 	Tolerance   *int     `json:"tolerance,omitempty" jsonschema:"Default tolerance — number of failing ('breaking') records allowed before a rule fails; a count, not a percentage — when set."`
-	Ootb        bool     `json:"ootb" jsonschema:"True for built-in (out-of-the-box) templates, false for custom user-defined ones."`
+	IsSystem    bool     `json:"isSystem" jsonschema:"True for built-in (system) templates, false for custom user-defined ones."`
 }
 
 // Output is the typed response.
@@ -59,12 +58,12 @@ type Output struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "list_dq_rule_templates",
+		Name:  "list_data_quality_rule_templates",
 		Title: "List Data Quality Rule Templates",
 		Description: "List the data quality rule templates available in the connected DQ environment — built-in " +
 			"(OOTB, i.e. out-of-the-box) templates plus any custom user-defined ones. Each template is a parameterized SQL pattern that " +
-			"can be deployed as concrete rules (checks; Collibra calls them 'monitors') across columns via deploy_dq_rule_template. Optional filters: name, " +
-			"dimension (a data-quality category such as Accuracy or Completeness), and ootb (built-in vs custom). Paginated (offset/limit).",
+			"can be deployed as concrete rules (checks; Collibra calls them 'monitors') across columns via deploy_data_quality_rule_template. Optional filters: name, " +
+			"dimension (a data-quality category such as Accuracy or Completeness), and isSystem (built-in vs custom). Paginated (offset/limit).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -80,14 +79,14 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if limit == 0 {
 			limit = defaultLimit
 		}
-		if limit < 1 || limit > 100 {
-			return Output{Status: StatusValidationError, Message: "limit must be between 1 and 100."}, nil
+		if limit < 1 || limit > 1000 {
+			return Output{Status: StatusValidationError, Message: "limit must be between 1 and 1000."}, nil
 		}
 
 		list, err := clients.ListDQRuleTemplates(ctx, collibraClient, clients.ListDQRuleTemplatesParams{
 			Name:      strings.TrimSpace(input.Name),
 			Dimension: strings.TrimSpace(input.Dimension),
-			Ootb:      input.Ootb,
+			IsSystem:  input.IsSystem,
 			Offset:    input.Offset,
 			Limit:     limit,
 		})
@@ -98,13 +97,12 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		templates := make([]Template, 0, len(list.Results))
 		for _, t := range list.Results {
 			templates = append(templates, Template{
-				ID:          t.ID,
 				Name:        t.Name,
 				Description: t.Description,
-				SQLQuery:    t.SQLQuery,
+				SQL:         t.SQL,
 				Dimensions:  t.Dimensions,
 				Tolerance:   t.Tolerance,
-				Ootb:        t.Ootb,
+				IsSystem:    t.IsSystem,
 			})
 		}
 

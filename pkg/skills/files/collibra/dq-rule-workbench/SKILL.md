@@ -15,7 +15,7 @@ Relationship to the other DQ skills:
   (validate → create → run → observe, edit/delete). This workbench reuses those
   rules and defers to that skill for the per-rule detail.
 - **Job creation** — when a column has no suitable job, this flow calls
-  `prepare_create_dq_job` + `create_dq_job` (see their tool descriptions).
+  `prepare_create_data_quality_job` + `create_data_quality_job` (see their tool descriptions).
 
 ## Tools this flow orchestrates
 
@@ -24,16 +24,16 @@ Relationship to the other DQ skills:
   data element / data attribute; needs the Knowledge Graph API), plus
   `search_asset_keyword` (domain/community/asset-type + free-text),
   `discover_data_assets` (natural-language), `get_asset_details` (by UUID).
-- **Resolve DQ location / job + detect PUSHDOWN**: `prepare_create_dq_job`
+- **Resolve DQ location / job + detect PUSHDOWN**: `prepare_create_data_quality_job`
   (resolves a catalog Table asset → connection / edge / job and reports the job
-  type). `create_dq_job` when none exists.
-- **Duplicate detection**: `find_dq_rules` (filter by `jobName` + `columnName`).
+  type). `create_data_quality_job` when none exists.
+- **Duplicate detection**: `find_data_quality_rules` (filter by `jobName` + `columnName`).
 - **Define rules** — two paths:
-  - Templates: `list_dq_rule_templates` / `get_dq_rule_template` →
-    `deploy_dq_rule_template` (bulk).
-  - Plain-language / AI: `generate_dq_rule_sql` (Text2SQL) → `create_dq_rule`.
-- **Review SQL**: `validate_dq_rule`.
-- **Read results**: `get_dq_rule_results` (per-run rule outcomes, once the job has run).
+  - Templates: `list_data_quality_rule_templates` / `get_data_quality_rule_template` →
+    `deploy_data_quality_rule_template` (bulk).
+  - Plain-language / AI: `generate_data_quality_rule_sql` (Text2SQL) → `create_data_quality_rule`.
+- **Review SQL**: `validate_data_quality_rule`.
+- **Read results**: `get_data_quality_rule_results` (per-run rule outcomes, once the job has run).
 - **Catalog associations**: `edit_asset` (`add_relation`) to Business Rule, Data
   Element, Data Attribute, or a catalog Data Quality Rule asset.
 
@@ -45,14 +45,14 @@ Relationship to the other DQ skills:
 2. **Cap at 25 columns per invocation.** If targeting yields more, present the
    top 25, state how many were excluded, and ask the user to refine.
 3. **Rules require a PUSHDOWN, DQ-connected table.** Resolve each column's table
-   with `prepare_create_dq_job` and confirm the job type is PUSHDOWN. Columns
+   with `prepare_create_data_quality_job` and confirm the job type is PUSHDOWN. Columns
    whose table is not connected to a DQ Pushdown source are excluded — silently
    for search results (report the count + reason), but a **hard error** if the
    user named such a column explicitly.
 4. **Check for duplicates before creating.** For each targeted column call
-   `find_dq_rules` with `jobName` + `columnName`. Show any existing rule (name,
+   `find_data_quality_rules` with `jobName` + `columnName`. Show any existing rule (name,
    job, SQL) and have the user confirm-to-proceed or skip that column.
-5. **Validate every rule's SQL before saving.** Run `validate_dq_rule` on each
+5. **Validate every rule's SQL before saving.** Run `validate_data_quality_rule` on each
    generated or edited SQL. Do not create a rule whose SQL is invalid. See
    `collibra/dq-rules`.
 6. **A newly created job must complete at least one run before rules can be
@@ -90,16 +90,16 @@ Progress through these states; the user may revise within a state before moving 
    Enforce the 25-cap (rule 2) and the DQ/PUSHDOWN exclusion (rule 3).
 
 **2. Column confirmation.** Present a summary per column: qualified path, parent
-   domain/community, data type, existing-rule count (from `find_dq_rules`), and any
+   domain/community, data type, existing-rule count (from `find_data_quality_rules`), and any
    duplicate flag. The user confirms or edits the list (remove columns / restart
    targeting) before advancing.
 
 **3. Rule definition.** Pick one path for the whole confirmed list:
-   - *Template*: `list_dq_rule_templates` (filter by dimension / OOTB), show the
+   - *Template*: `list_data_quality_rule_templates` (filter by dimension / OOTB), show the
      choices, let the user pick one. There is **no** template/data-type
      compatibility API, so incompatible combinations can't be pre-flagged — they
      surface as errors at deploy (step 7); warn the user of this.
-   - *Plain-language / AI*: the user gives one intent; call `generate_dq_rule_sql`
+   - *Plain-language / AI*: the user gives one intent; call `generate_data_quality_rule_sql`
      per column (it needs `edgeSiteId`/`connectionId` from step 5's resolution and
      the column list). Note Text2SQL returns a single SQL string — there is no
      separate filter/WHERE clause; if the intent implies scoping, author a
@@ -107,13 +107,13 @@ Progress through these states; the user may revise within a state before moving 
 
 **4. SQL review & revision.** For every rule, show the SQL and let the user
    approve, edit SQL, revise the intent and regenerate, or skip the column. Run
-   `validate_dq_rule` on each version before presenting (rule 5). Loop until the
+   `validate_data_quality_rule` on each version before presenting (rule 5). Loop until the
    user approves or skips.
 
 **5. Job assignment.** For each column resolve a job in priority order:
    1. *Exact match* — an existing job covering the column's table + connection.
    2. *Connection match* — a job on the same connection but not yet the table.
-   3. *No match* — create one via `prepare_create_dq_job` + `create_dq_job`
+   3. *No match* — create one via `prepare_create_data_quality_job` + `create_data_quality_job`
       (rule 6 applies).
    Group columns by connection, resolve one job per group, and show the full
    grouping. The user confirms all assignments before any rule is saved (rule 1).
@@ -132,32 +132,32 @@ Progress through these states; the user may revise within a state before moving 
    call with `confirm` omitted to get a `preview` (nothing is written), then call
    again with `confirm: true` only after the step-6 approval. The tools enforce
    this — a `confirm=false` call never writes.
-   - Template path: `deploy_dq_rule_template` with `targets` = the confirmed
+   - Template path: `deploy_data_quality_rule_template` with `targets` = the confirmed
      `{jobName, columnName}` list (bulk; rules named `{template}_{column}`).
-   - Plain-language path: `create_dq_rule` per column (validated SQL as
+   - Plain-language path: `create_data_quality_rule` per column (validated SQL as
      `monitorValue`; a meaningful `monitorName` — see `collibra/dq-rules`).
    Apply the partial-success model (rule 7), and report outcomes with job links.
    The rules are evaluated on each job's next (scheduled) run — this flow does not
-   trigger runs. Once a job has run, read outcomes with `get_dq_rule_results`.
+   trigger runs. Once a job has run, read outcomes with `get_data_quality_rule_results`.
 
 ## Rule settings & catalog associations
 
 Which settings you can set depends on the path:
 
-- **Plain-language path (`create_dq_rule`)**: set `dimensions` (default none),
+- **Plain-language path (`create_data_quality_rule`)**: set `dimensions` (default none),
   `tolerance` (default 0), and `description` (default auto-generated from the
   intent) per rule, bulk-uniform unless the user asks for per-column values.
   **`tolerance` is a count of breaking records allowed before the rule fails, not
   a percentage** — despite the ticket's "Tolerance %", the API takes an integer
   record count. Say it that way to the user.
-- **Template path (`deploy_dq_rule_template`)**: rules inherit the template's
+- **Template path (`deploy_data_quality_rule_template`)**: rules inherit the template's
   `dimensions`, `tolerance` and `description`. The deploy call takes only
   `{jobName, columnName}` targets, so these are **not** set per deploy — choose
   (or create) a template that already carries the settings you want.
 
-**Notifications are job-level, not per-rule.** `create_dq_rule` cannot attach
+**Notifications are job-level, not per-rule.** `create_data_quality_rule` cannot attach
 notifications to a rule; notification recipients/triggers are configured when the
-job is created (`create_dq_job` `notify*` fields) and apply to the whole job. Do
+job is created (`create_data_quality_job` `notify*` fields) and apply to the whole job. Do
 not tell the user a rule carries its own notification settings.
 
 To link created rules to catalog assets — Business Rule, Data Element, Data
@@ -173,6 +173,6 @@ association and confirm it with the user.
   deploys fail at execution.
 - Text2SQL returns one SQL string, not a primary-SQL + filter split.
 - Per-rule notifications are not supported — notifications are job-level only
-  (`create_dq_job`). The ticket lists notifications as a rule setting; the tools
+  (`create_data_quality_job`). The ticket lists notifications as a rule setting; the tools
   do not.
 - `tolerance` is a breaking-record count, not the ticket's "Tolerance %".
