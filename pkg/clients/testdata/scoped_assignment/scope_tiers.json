@@ -1,0 +1,93 @@
+{
+  "description": "Scope tier selection on one Business Term level. No scope covers Business Glossary: the global assignment wins. A scope lists Regional Glossary directly: that assignment wins whole over global. Two scopes cover Glossary A, one directly and one through its community: domain-direct wins. Two scopes list Glossary B directly: the first found wins, never a union. The Deep scope lists only the top community and covers Target Glossary through two community levels.",
+  "assetTypes": [
+    { "id": "03000000-0000-0000-0000-000000000001", "name": "Business Term" }
+  ],
+  "domainTypes": [
+    { "id": "04000000-0000-0000-0000-000000000001", "name": "Glossary" }
+  ],
+  "organization": [
+    { "id": "02000000-0000-0000-0000-000000000001", "name": "Root", "type": "Community" },
+    { "id": "02000000-0000-0000-0000-000000000002", "name": "Sales", "type": "Community", "parent": "Root" },
+    { "id": "02000000-0000-0000-0000-000000000003", "name": "Deep", "type": "Community", "parent": "Root" },
+    { "id": "02000000-0000-0000-0000-000000000004", "name": "Deep Child", "type": "Community", "parent": "Deep" },
+    { "id": "01000000-0000-0000-0000-000000000001", "name": "Business Glossary", "type": "Domain", "parent": "Root", "domainType": "Glossary" },
+    { "id": "01000000-0000-0000-0000-000000000002", "name": "Regional Glossary", "type": "Domain", "parent": "Root", "domainType": "Glossary" },
+    { "id": "01000000-0000-0000-0000-000000000003", "name": "Glossary A", "type": "Domain", "parent": "Sales", "domainType": "Glossary" },
+    { "id": "01000000-0000-0000-0000-000000000004", "name": "Glossary B", "type": "Domain", "parent": "Sales", "domainType": "Glossary" },
+    { "id": "01000000-0000-0000-0000-000000000005", "name": "Target Glossary", "type": "Domain", "parent": "Deep Child", "domainType": "Glossary" }
+  ],
+  "scopes": [
+    { "id": "05000000-0000-0000-0000-000000000001", "name": "Regional", "domains": ["Regional Glossary"] },
+    { "id": "05000000-0000-0000-0000-000000000002", "name": "Direct A", "domains": ["Glossary A"] },
+    { "id": "05000000-0000-0000-0000-000000000003", "name": "Sales Community", "communities": ["Sales"] },
+    { "id": "05000000-0000-0000-0000-000000000004", "name": "Direct B1", "domains": ["Glossary B"] },
+    { "id": "05000000-0000-0000-0000-000000000005", "name": "Direct B2", "domains": ["Glossary B"] },
+    { "id": "05000000-0000-0000-0000-000000000006", "name": "Deep Scope", "communities": ["Deep"] }
+  ],
+  "assignments": [
+    {
+      "id": "06000000-0000-0000-0000-000000000001",
+      "assetType": "Business Term",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000001", "name": "Definition", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000002",
+      "assetType": "Business Term",
+      "scope": "Regional",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000002", "name": "Regional Attr 1", "min": 1 },
+        { "id": "07000000-0000-0000-0000-000000000003", "name": "Regional Attr 2", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000003",
+      "assetType": "Business Term",
+      "scope": "Direct A",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000004", "name": "Direct Attr", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000004",
+      "assetType": "Business Term",
+      "scope": "Sales Community",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000005", "name": "Community Attr", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000005",
+      "assetType": "Business Term",
+      "scope": "Direct B1",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000006", "name": "B1 Attr", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000006",
+      "assetType": "Business Term",
+      "scope": "Direct B2",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000007", "name": "B2 Attr", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000007",
+      "assetType": "Business Term",
+      "scope": "Deep Scope",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000008", "name": "Deep Attr", "min": 1 }
+      ]
+    }
+  ]
+}

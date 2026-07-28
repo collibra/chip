@@ -52,7 +52,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"A direct id can't be combined with filters. With no fields at all it lists the assessments you can see. Returns each assessment's status, template, full question/answer content, assignees, owner, visibility, and timestamps.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

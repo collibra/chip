@@ -9,6 +9,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
+	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
@@ -99,6 +100,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(DataQualityFeatureName) {
+		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
 		toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
 		toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
 		toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))

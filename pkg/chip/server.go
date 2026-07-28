@@ -87,7 +87,13 @@ func NewServer(opts ...ServerOption) *Server {
 					store.set(params)
 				}
 			}
-			if p := store.get(); p != nil {
+			p := store.get()
+			if ss, ok := req.GetSession().(*mcp.ServerSession); ok {
+				if sp := ss.InitializeParams(); sp != nil && sp.ClientInfo != nil {
+					p = sp
+				}
+			}
+			if p != nil {
 				ctx = SetInitParams(ctx, p)
 			}
 			return next(ctx, method, req)

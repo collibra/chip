@@ -165,7 +165,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"On success the response includes a post-edit snapshot of the asset and per-operation before/after values.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(true), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 
@@ -239,7 +239,7 @@ type editContext struct {
 	attributeTypeByName  map[string]clients.EditAssetAssignmentAttributeType
 	attributesByTypeName map[string][]clients.EditAssetAttributeInstance
 	relationTypeByRole   map[string]clients.EditAssetAssignmentRelationType
-	// relationTypeByCoRole indexes inverse (TARGET_TO_SOURCE) relation types
+	// relationTypeByCoRole indexes inverse (TO_SOURCE) relation types
 	// by their CoRole name so add_relation can author from the tail asset.
 	relationTypeByCoRole map[string]clients.EditAssetAssignmentRelationType
 	// roleByName is populated only when the request contains at least one
@@ -265,31 +265,12 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		return nil, fmt.Errorf("fetching current attributes: %w", err)
 	}
 
-	// Attributes from the per-asset endpoint; relations from the type-chain walk
-	// (see the respective client functions for why they differ).
 	effective, err := clients.GetEffectiveAssignmentForAsset(ctx, client, assetID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching effective assignment: %w", err)
 	}
 
-	domain, err := clients.GetDomainDetails(ctx, client, asset.Domain.ID)
-	if err != nil {
-		return nil, fmt.Errorf("fetching domain for relation assignment: %w", err)
-	}
-	var domainTypeID string
-	if domain.Type != nil {
-		domainTypeID = domain.Type.ID
-	}
-	relationAssignment, err := clients.GetAssignmentForAssetType(ctx, client, asset.Type.ID, domainTypeID)
-	if err != nil {
-		return nil, fmt.Errorf("fetching relation assignment: %w", err)
-	}
-
-	assignment := &clients.EditAssetAssignment{
-		AssetType:      effective.AssetType,
-		AttributeTypes: effective.AttributeTypes,
-		RelationTypes:  relationAssignment.RelationTypes,
-	}
+	assignment := effective
 
 	byName := make(map[string]clients.EditAssetAssignmentAttributeType, len(assignment.AttributeTypes))
 	for _, at := range assignment.AttributeTypes {

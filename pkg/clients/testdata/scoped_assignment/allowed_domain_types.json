@@ -1,0 +1,28 @@
+{
+  "description": "Allowed domain types. Child's own assignment has an empty domainTypes list: the verdict is 'creatable nowhere', and the walk must not fall through to the parent. X's level lists Glossary: the verdict is 'creatable somewhere'.",
+  "assetTypes": [
+    { "id": "03000000-0000-0000-0000-000000000001", "name": "Child", "parent": "Parent" },
+    { "id": "03000000-0000-0000-0000-000000000002", "name": "Parent" },
+    { "id": "03000000-0000-0000-0000-000000000003", "name": "X" }
+  ],
+  "domainTypes": [
+    { "id": "04000000-0000-0000-0000-000000000001", "name": "Glossary" }
+  ],
+  "assignments": [
+    {
+      "id": "06000000-0000-0000-0000-000000000001",
+      "assetType": "Child",
+      "domainTypes": []
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000002",
+      "assetType": "Parent",
+      "domainTypes": ["Glossary"]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000003",
+      "assetType": "X",
+      "domainTypes": ["Glossary"]
+    }
+  ]
+}

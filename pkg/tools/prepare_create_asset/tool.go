@@ -110,7 +110,7 @@ type AttributeSchemaEntry struct {
 
 // RelationSchemaEntry is one relation slot in the scoped assignment.
 type RelationSchemaEntry struct {
-	RelationTypeID string `json:"relationTypeId" jsonschema:"UUID of the relation type."`
+	RelationTypeID string `json:"relationTypeId" jsonschema:"UUID of the relation type. A relation type assigned in both directions appears once per direction, so the same relationTypeId may occur in two entries that differ by direction."`
 	PublicID       string `json:"publicId,omitempty" jsonschema:"PublicId of the relation type."`
 	Kind           string `json:"kind,omitempty" jsonschema:"Discriminator: 'RelationType' for a simple binary relation, 'ComplexRelationType' for a complex one. Complex relation types carry legs[] instead of a single role/coRole."`
 	Role           string `json:"role" jsonschema:"Forward role name of the relation (e.g. 'is part of'). Empty for complex relation types — see legs[] instead."`
@@ -152,7 +152,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Use this tool when the agent needs to browse what's creatable on this instance or inspect an asset type's full schema before composing a create.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 
@@ -201,12 +201,11 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 
 		// Step 4: hydrate the scoped assignment.
-		assignment, err := clients.GetScopedAssignment(ctx, collibraClient, assetType.ID, domain.Type.ID)
+		assignment, err := clients.GetScopedAssignment(ctx, collibraClient, assetType.ID, domain.Type.ID, domain.ID)
 		if err != nil {
 			return Output{
-				Status: StatusNeedsClarification,
-				Message: fmt.Sprintf("Asset type %q is not allowed in domain %q (domain type %q). Pick a different domain or a different asset type.",
-					assetType.Name, domain.Name, domain.Type.Name),
+				Status:  StatusNeedsClarification,
+				Message: clients.NotAllowedMessage(ctx, collibraClient, assetType.ID, assetType.Name, domain.Name, domain.Type.Name),
 			}, nil
 		}
 
@@ -234,9 +233,6 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 		}
 
-		// role/coRole are not in the assignment payload, so always hydrate them
-		// from the relation type resource — an empty role would otherwise break
-		// the RelationSchemaEntry contract.
 		if err := hydrateRelationDetails(ctx, collibraClient, out.RelationTypes); err != nil {
 			out.Message += " (relation details could not be fully hydrated: " + err.Error() + ")"
 		}
@@ -563,6 +559,16 @@ func hydrateSimpleRelation(ctx context.Context, client *http.Client, rel *Relati
 	rel.CoRole = details.CoRole
 	if rel.PublicID == "" {
 		rel.PublicID = details.PublicID
+	}
+	if rel.TargetTypeID == "" {
+		other := details.TargetType
+		if rel.Direction == "TO_SOURCE" {
+			other = details.SourceType
+		}
+		if other != nil {
+			rel.TargetTypeID = other.ID
+			rel.TargetTypeName = other.Name
+		}
 	}
 	return nil
 }

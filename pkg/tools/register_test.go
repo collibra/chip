@@ -29,6 +29,7 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 }
 
 var dataQualityToolNames = []string{
+	"create_data_quality_job",
 	"create_data_quality_rule",
 	"get_data_quality_rule",
 	"get_data_quality_rule_results",
@@ -45,7 +46,7 @@ func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {
 	names := listToolNames(t, &chip.ServerToolConfig{})
 	for _, name := range dataQualityToolNames {
 		if slices.Contains(names, name) {
-			t.Fatalf("expected %q to be absent when data-quality feature is disabled; got tools=%v", name, names)
+			t.Fatalf("expected %q to be absent without the %q experimental feature; got tools=%v", name, tools.DataQualityFeatureName, names)
 		}
 	}
 }
@@ -54,12 +55,49 @@ func TestRegisterAll_DataQualityToolsVisibleWhenEnabled(t *testing.T) {
 	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.DataQualityFeatureName}})
 	for _, name := range dataQualityToolNames {
 		if !slices.Contains(names, name) {
-			t.Fatalf("expected %q to be present when data-quality feature is enabled; got tools=%v", name, names)
+			t.Fatalf("expected %q to be present with the %q experimental feature; got tools=%v", name, tools.DataQualityFeatureName, names)
+		}
+	}
+}
+
+func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
+	cfg := &chip.ServerToolConfig{
+		EnableDebugTools: true,
+		Experimental:     []string{tools.ContextSpecificationsFeature, "skills"},
+	}
+	for _, tool := range listTools(t, cfg) {
+		if tool.Title == "" {
+			t.Errorf("tool %q has no title", tool.Name)
+		}
+		if tool.Annotations == nil {
+			t.Errorf("tool %q has no annotations", tool.Name)
+			continue
+		}
+		if tool.Annotations.DestructiveHint == nil {
+			t.Errorf("tool %q does not set DestructiveHint explicitly", tool.Name)
+		}
+		if tool.Annotations.OpenWorldHint == nil {
+			t.Errorf("tool %q does not set OpenWorldHint explicitly", tool.Name)
+		}
+		if tool.Annotations.ReadOnlyHint && tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint {
+			t.Errorf("tool %q is read-only but marked destructive", tool.Name)
+		}
+		if tool.Annotations.ReadOnlyHint && !tool.Annotations.IdempotentHint {
+			t.Errorf("tool %q is read-only but not marked idempotent", tool.Name)
 		}
 	}
 }
 
 func listToolNames(t *testing.T, cfg *chip.ServerToolConfig) []string {
+	t.Helper()
+	var names []string
+	for _, tool := range listTools(t, cfg) {
+		names = append(names, tool.Name)
+	}
+	return names
+}
+
+func listTools(t *testing.T, cfg *chip.ServerToolConfig) []*mcp.Tool {
 	t.Helper()
 	server := chip.NewServer()
 	if err := tools.RegisterAll(server, &http.Client{}, cfg); err != nil {
@@ -77,12 +115,12 @@ func listToolNames(t *testing.T, cfg *chip.ServerToolConfig) []string {
 	}
 	defer func() { _ = session.Close() }()
 
-	names := []string{}
+	var result []*mcp.Tool
 	for tool, err := range session.Tools(context.Background(), nil) {
 		if err != nil {
 			t.Fatalf("listing tools: %v", err)
 		}
-		names = append(names, tool.Name)
+		result = append(result, tool)
 	}
-	return names
+	return result
 }
