@@ -28,6 +28,26 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+var dataQualityToolNames = []string{"create_data_quality_job"}
+
+func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range dataQualityToolNames {
+		if slices.Contains(names, name) {
+			t.Fatalf("expected %q to be absent without the %q experimental feature; got tools=%v", name, tools.DataQualityFeatureName, names)
+		}
+	}
+}
+
+func TestRegisterAll_DataQualityToolsVisibleWhenEnabled(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.DataQualityFeatureName}})
+	for _, name := range dataQualityToolNames {
+		if !slices.Contains(names, name) {
+			t.Fatalf("expected %q to be present with the %q experimental feature; got tools=%v", name, tools.DataQualityFeatureName, names)
+		}
+	}
+}
+
 func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
 	cfg := &chip.ServerToolConfig{
 		EnableDebugTools: true,
