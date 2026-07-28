@@ -1,0 +1,32 @@
+{
+  "description": "How one assignment's slots are emitted. The first relation keeps the reference fields: the resource id (not the line id), publicId, kind, and direction. Role, coRole, and target stay empty; /relationTypes/{id} hydrates them later. The second relation is assigned in both directions and both survive the dedup. Only a restriction sets the target type. DateTimeAttributeType is normalized to DateAttributeType. The derived relation slot is dropped.",
+  "assetTypes": [
+    { "id": "03000000-0000-0000-0000-000000000001", "name": "Business Term" },
+    { "id": "03000000-0000-0000-0000-000000000002", "name": "Data Attribute" }
+  ],
+  "domainTypes": [
+    { "id": "04000000-0000-0000-0000-000000000001", "name": "Glossary" }
+  ],
+  "organization": [
+    { "id": "02000000-0000-0000-0000-000000000001", "name": "Root", "type": "Community" },
+    { "id": "01000000-0000-0000-0000-000000000001", "name": "Business Glossary", "type": "Domain", "parent": "Root", "domainType": "Glossary" }
+  ],
+  "assignments": [
+    {
+      "id": "06000000-0000-0000-0000-000000000001",
+      "assetType": "Business Term",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000001", "name": "Effective Date", "kind": "DateTimeAttributeType", "min": 1 }
+      ],
+      "relations": [
+        { "id": "08000000-0000-0000-0000-000000000001", "publicId": "TermGroupsTerm" },
+        { "id": "08000000-0000-0000-0000-000000000002", "direction": "TO_TARGET" },
+        { "id": "08000000-0000-0000-0000-000000000002", "direction": "TO_SOURCE" },
+        { "id": "08000000-0000-0000-0000-000000000003", "direction": "TO_SOURCE" },
+        { "id": "08000000-0000-0000-0000-000000000004", "direction": "TO_TARGET", "restriction": "Data Attribute" },
+        { "id": "08000000-0000-0000-0000-000000000005", "discriminator": "DerivedRelationType" }
+      ]
+    }
+  ]
+}

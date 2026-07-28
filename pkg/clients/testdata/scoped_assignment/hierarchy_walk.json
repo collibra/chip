@@ -1,0 +1,53 @@
+{
+  "description": "Finding the assignment level. Data Product Port has its own assignment, so the parent's extra attributes must not leak in. Abbreviation has no assignment: the walk goes up to Business Term. Acronym starts two levels down and must skip the unassigned Abbreviation. Policy's assignment lists only the Other domain type, so a Glossary domain is not allowed.",
+  "assetTypes": [
+    { "id": "03000000-0000-0000-0000-000000000001", "name": "Data Product Port", "parent": "Data Asset" },
+    { "id": "03000000-0000-0000-0000-000000000002", "name": "Data Asset" },
+    { "id": "03000000-0000-0000-0000-000000000003", "name": "Acronym", "parent": "Abbreviation" },
+    { "id": "03000000-0000-0000-0000-000000000004", "name": "Abbreviation", "parent": "Business Term" },
+    { "id": "03000000-0000-0000-0000-000000000005", "name": "Business Term" },
+    { "id": "03000000-0000-0000-0000-000000000006", "name": "Policy" }
+  ],
+  "domainTypes": [
+    { "id": "04000000-0000-0000-0000-000000000001", "name": "Data Contract" },
+    { "id": "04000000-0000-0000-0000-000000000002", "name": "Glossary" },
+    { "id": "04000000-0000-0000-0000-000000000003", "name": "Other" }
+  ],
+  "organization": [
+    { "id": "02000000-0000-0000-0000-000000000001", "name": "Root", "type": "Community" },
+    { "id": "01000000-0000-0000-0000-000000000001", "name": "Contracts", "type": "Domain", "parent": "Root", "domainType": "Data Contract" },
+    { "id": "01000000-0000-0000-0000-000000000002", "name": "Business Glossary", "type": "Domain", "parent": "Root", "domainType": "Glossary" }
+  ],
+  "assignments": [
+    {
+      "id": "06000000-0000-0000-0000-000000000001",
+      "assetType": "Data Product Port",
+      "domainTypes": ["Data Contract"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000001", "name": "Own Attr", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000002",
+      "assetType": "Data Asset",
+      "domainTypes": ["Data Contract"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000002", "name": "Location", "min": 1 },
+        { "id": "07000000-0000-0000-0000-000000000003", "name": "Descriptive Example", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000003",
+      "assetType": "Business Term",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000004", "name": "Definition", "min": 1 }
+      ]
+    },
+    {
+      "id": "06000000-0000-0000-0000-000000000004",
+      "assetType": "Policy",
+      "domainTypes": ["Other"]
+    }
+  ]
+}
