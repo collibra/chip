@@ -1,45 +1,36 @@
 name: release
-run-name: release - ${{ github.ref_name }} - triggered by ${{ github.actor }}
+run-name: release - ${{ inputs.tag }} - triggered by ${{ github.actor }}
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g. v0.0.45)'
+        required: true
+        type: string
 
 jobs:
-  version:
+  validate:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.resolve.outputs.version }}
-      tag: ${{ steps.resolve.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Resolve release version from version.go
-        id: resolve
+      - name: Verify tag exists
         run: |
-          if [ "${{ github.ref_name }}" != "main" ]; then
-            echo "ERROR: Release must be dispatched from main, got ${{ github.ref_name }}"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${{ inputs.tag }}" > /dev/null; then
+            echo "ERROR: Tag ${{ inputs.tag }} does not exist"
             exit 1
           fi
-          VERSION=$(sed -n 's/.*Version = "\(.*\)-SNAPSHOT".*/\1/p' pkg/chip/version.go)
-          if [ -z "$VERSION" ]; then
-            echo "ERROR: Could not parse a -SNAPSHOT version from pkg/chip/version.go"
-            exit 1
-          fi
-          TAG="v${VERSION}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" > /dev/null; then
-            echo "ERROR: Tag ${TAG} already exists"
-            exit 1
-          fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
   build:
-    needs: version
+    needs: validate
     uses: ./.github/workflows/build.yaml
+    with:
+      ref: ${{ inputs.tag }}
 
   release:
-    needs: [version, build]
+    needs: [validate, build]
     runs-on:
       - runs-on
       - run-id=${{ github.run_id }}
@@ -53,6 +44,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       - name: Setup Go
@@ -65,18 +57,13 @@ jobs:
 
       - name: Set version
         run: |
-          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
+          VERSION=${{ inputs.tag }}
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Test
         if: ${{ !contains(env.VERSION, '-') }} # Skip tests for pre-release versions (e.g., 1.0.0-beta) to avoid issues with version parsing in tests
         run: go test --tags release -run TestReleaseVersionCheck -v ./...
-
-      # The tag is created only after the Release environment approval,
-      # so a rejected run leaves no trace.
-      - name: Create release tag
-        run: |
-          git tag "${{ needs.version.outputs.tag }}"
-          git push origin "refs/tags/${{ needs.version.outputs.tag }}"
 
       - name: Setup Java 17
         run: |
@@ -146,7 +133,7 @@ jobs:
           version: latest
           args: release --clean --verbose
         env:
-          GORELEASER_CURRENT_TAG: ${{ needs.version.outputs.tag }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JSIGN_JAR_PATH: ${{ env.JSIGN_JAR_PATH }}
           CODE_SIGNING_CERT_CHAIN_FILE: ${{ env.CODE_SIGNING_CERT_CHAIN_FILE }}
@@ -158,114 +145,3 @@ jobs:
         run: |
           rm -rf /tmp/chip-signing ~/.aws
           echo "Cleanup completed"
-
-  chip-service-pr:
-    needs: [version, release]
-    if: ${{ !contains(needs.version.outputs.version, '-') }} # Don't propagate pre-release versions
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout chip-service
-        uses: actions/checkout@v5
-        with:
-          repository: collibra/chip-service
-          token: ${{ secrets.COLLIBRA_GITHUB_TOKEN }}
-
-      - name: Setup Git
-        run: |
-          git config --global user.name "collibra-cicd"
-          git config --global user.email "collibra-cicd@users.noreply.github.com"
-
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
-        with:
-          gpg_private_key: ${{ secrets.CICD_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.CICD_GPG_PASSPHRASE }}
-          trust_level: 5
-          git_config_global: true
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Bump chip dependency
-        env:
-          TAG: ${{ needs.version.outputs.tag }}
-          GOPRIVATE: github.com/collibra/*
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.COLLIBRA_GITHUB_TOKEN }}@github.com/collibra".insteadOf "https://github.com/collibra"
-          go get github.com/collibra/chip@${TAG}
-          go mod tidy
-
-      - name: Create PR
-        env:
-          GH_TOKEN: ${{ secrets.COLLIBRA_GITHUB_TOKEN }}
-          TAG: ${{ needs.version.outputs.tag }}
-        run: |
-          git checkout -b auto-bump-chip-${TAG}
-          git commit -S -am "chore: bump chip to ${TAG}"
-          git push -u origin HEAD
-
-          PR_URL=$(gh pr create \
-            --title "chore: bump chip to ${TAG}" \
-            --body "Triggered by chip release https://github.com/collibra/chip/actions/runs/${{ github.run_id }}" \
-            --base main \
-            --head auto-bump-chip-${TAG})
-
-          gh pr merge --auto --merge "${PR_URL}"
-
-  bump-version:
-    needs: [version, release]
-    if: ${{ !contains(needs.version.outputs.version, '-') }} # Don't bump main for pre-release versions (e.g., 1.0.0-beta)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v5
-        with:
-          ref: main
-          token: ${{ secrets.COLLIBRA_GITHUB_TOKEN }}
-
-      - name: Setup Git
-        run: |
-          git config --global user.name "collibra-cicd"
-          git config --global user.email "collibra-cicd@users.noreply.github.com"
-
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
-        with:
-          gpg_private_key: ${{ secrets.CICD_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.CICD_GPG_PASSPHRASE }}
-          trust_level: 5
-          git_config_global: true
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-
-      - name: Bump version.go to next SNAPSHOT
-        env:
-          GH_TOKEN: ${{ secrets.COLLIBRA_GITHUB_TOKEN }}
-        run: |
-          RELEASED=${{ needs.version.outputs.version }}
-
-          # Skip if main has moved past the released version (e.g., manual bump or newer release)
-          if ! grep -q "\"${RELEASED}-SNAPSHOT\"" pkg/chip/version.go; then
-            echo "version.go no longer matches ${RELEASED}-SNAPSHOT, skipping auto-bump"
-            exit 0
-          fi
-
-          IFS=. read -r MAJOR MINOR PATCH <<< "$RELEASED"
-          NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))-SNAPSHOT"
-          sed -i "s/Version = \".*\"/Version = \"${NEXT}\"/" pkg/chip/version.go
-
-          git checkout -b chore/bump-${NEXT}
-          git commit -S -am "chore: bump version to ${NEXT}"
-          git push -u origin HEAD
-
-          PR_URL=$(gh pr create \
-            --title "chore: bump version to ${NEXT}" \
-            --body "Post-release bump after https://github.com/collibra/chip/actions/runs/${{ github.run_id }}" \
-            --base main \
-            --head chore/bump-${NEXT})
-
-          gh pr merge --auto --merge "${PR_URL}"
