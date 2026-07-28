@@ -332,13 +332,21 @@ type PrepareCreateScopedAttribute struct {
 
 // PrepareCreateScopedRelation is one relation slot in a scoped assignment.
 type PrepareCreateScopedRelation struct {
-	RelationTypeID string
-	Role           string
-	CoRole         string
-	// Direction is "SOURCE_TO_TARGET" or "TARGET_TO_SOURCE" — describing
-	// which side of the relation the asset being created sits on.
+	RelationTypeID       string
+	RelationTypePublicID string
+	// Kind is the assignment discriminator, e.g. "RelationType" or
+	// "ComplexRelationType". It selects which resource endpoint hydrates the
+	// leg detail (role/coRole live on different resources for the two).
+	Kind   string
+	Role   string
+	CoRole string
+	// Direction is "TO_TARGET" or "TO_SOURCE" — describing which side of the
+	// relation the asset being created sits on (TO_TARGET means it is the
+	// source leg and the relation points out to the target).
 	Direction string
-	// TargetType is the asset type on the other side of the relation.
+	// TargetType is the asset type on the other side of the relation. It is
+	// only populated when the assignment restricts the other leg to a
+	// specific type (relationTypeRestriction); many assignments do not.
 	TargetType *PrepareCreateAssetType
 }
 
@@ -365,13 +373,23 @@ type PrepareCreateAttributeTypeFull struct {
 	AllowedValues []string `json:"allowedValues,omitempty"`
 }
 
+// PrepareCreateRelationTypeFull is the subset of the /relationTypes/{id}
+// response we need. role/coRole are the human-readable leg names; they only
+// exist on the relation type resource, not on the assignment, so relation
+// slots are hydrated with them separately.
+type PrepareCreateRelationTypeFull struct {
+	ID       string `json:"id"`
+	PublicID string `json:"publicId"`
+	Role     string `json:"role"`
+	CoRole   string `json:"coRole"`
+}
+
 // rawScopedAssignment mirrors the on-the-wire shape of a single assignment
 // returned from /assignments/assetType/{id}. Fields we don't use are omitted.
 type rawScopedAssignment struct {
-	ID                                   string                                    `json:"id"`
-	DomainTypes                          []rawAssignmentResourceRef                `json:"domainTypes"`
-	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference  `json:"assignedCharacteristicTypeReferences"`
-	CharacteristicTypes                  []rawAssignmentCharacteristicTypeMetadata `json:"characteristicTypes"`
+	ID                                   string                                   `json:"id"`
+	DomainTypes                          []rawAssignmentResourceRef               `json:"domainTypes"`
+	AssignedCharacteristicTypeReferences []rawAssignedCharacteristicTypeReference `json:"assignedCharacteristicTypeReferences"`
 }
 
 type rawAssignmentResourceRef struct {
@@ -381,25 +399,21 @@ type rawAssignmentResourceRef struct {
 	ResourceDiscriminator string `json:"resourceDiscriminator"`
 }
 
+// rawAssignedCharacteristicTypeReference is one assigned-characteristic entry
+// from the assignment payload. For relation slots it also carries the
+// assignment-scoped direction and the type restriction on the other leg
+// (relationTypeRestriction) — these live here, on the reference, not on a
+// separate metadata list. Role and coRole are NOT in the assignment payload
+// at all; they live on the relation type resource and are hydrated separately
+// via GetRelationTypeFull.
 type rawAssignedCharacteristicTypeReference struct {
-	ID                        string                   `json:"id"`
-	AssignedResourceReference rawAssignmentResourceRef `json:"assignedResourceReference"`
-	AssignedResourcePublicID  string                   `json:"assignedResourcePublicId"`
-	MinimumOccurrences        int                      `json:"minimumOccurrences"`
-	MaximumOccurrences        *int                     `json:"maximumOccurrences"`
-}
-
-// rawAssignmentCharacteristicTypeMetadata carries the relation-specific
-// detail (role, coRole, direction, target type) that lives alongside the
-// assignedCharacteristicTypeReferences list. We index it by id when
-// hydrating relation slots.
-type rawAssignmentCharacteristicTypeMetadata struct {
-	ID         string                    `json:"id"`
-	Role       string                    `json:"role,omitempty"`
-	CoRole     string                    `json:"coRole,omitempty"`
-	Direction  string                    `json:"direction,omitempty"`
-	TargetType *rawAssignmentResourceRef `json:"targetType,omitempty"`
-	SourceType *rawAssignmentResourceRef `json:"sourceType,omitempty"`
+	ID                        string                    `json:"id"`
+	AssignedResourceReference rawAssignmentResourceRef  `json:"assignedResourceReference"`
+	AssignedResourcePublicID  string                    `json:"assignedResourcePublicId"`
+	MinimumOccurrences        int                       `json:"minimumOccurrences"`
+	MaximumOccurrences        *int                      `json:"maximumOccurrences"`
+	RelationTypeDirection     string                    `json:"relationTypeDirection"`
+	RelationTypeRestriction   *rawAssignmentResourceRef `json:"relationTypeRestriction"`
 }
 
 // GetAssetTypeByID resolves an asset type by its UUID. Used as the first
@@ -689,10 +703,6 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 			if out.AssignmentID == "" {
 				out.AssignmentID = a.ID
 			}
-			metaByID := make(map[string]rawAssignmentCharacteristicTypeMetadata, len(a.CharacteristicTypes))
-			for _, m := range a.CharacteristicTypes {
-				metaByID[m.ID] = m
-			}
 			for _, ref := range a.AssignedCharacteristicTypeReferences {
 				disc := ref.AssignedResourceReference.ResourceDiscriminator
 				rt := ref.AssignedResourceReference.ResourceType
@@ -720,17 +730,24 @@ func reduceScopedAssignmentChain(chain []assignmentChainNode, domainTypeID strin
 						continue
 					}
 					seenRelIDs[ref.AssignedResourceReference.ID] = struct{}{}
-					meta := metaByID[ref.AssignedResourceReference.ID]
-					rel := PrepareCreateScopedRelation{
-						RelationTypeID: ref.AssignedResourceReference.ID,
-						Role:           meta.Role,
-						CoRole:         meta.CoRole,
-						Direction:      meta.Direction,
+					// Direction and the other-leg type restriction come from the
+					// reference itself. Role/coRole are not in the assignment
+					// payload — hydrateRelationDetails fills them from the
+					// relation type resource.
+					kind := disc
+					if kind == "" {
+						kind = rt
 					}
-					if meta.TargetType != nil {
+					rel := PrepareCreateScopedRelation{
+						RelationTypeID:       ref.AssignedResourceReference.ID,
+						RelationTypePublicID: ref.AssignedResourcePublicID,
+						Kind:                 kind,
+						Direction:            ref.RelationTypeDirection,
+					}
+					if ref.RelationTypeRestriction != nil {
 						rel.TargetType = &PrepareCreateAssetType{
-							ID:   meta.TargetType.ID,
-							Name: meta.TargetType.Name,
+							ID:   ref.RelationTypeRestriction.ID,
+							Name: ref.RelationTypeRestriction.Name,
 						}
 					}
 					out.Relations = append(out.Relations, rel)
@@ -842,6 +859,113 @@ func GetAttributeTypeFull(ctx context.Context, client *http.Client, id string) (
 	var result PrepareCreateAttributeTypeFull
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decoding attribute type details response: %w", err)
+	}
+	return &result, nil
+}
+
+// GetRelationTypeFull fetches a relation type's role and coRole from
+// /rest/2.0/relationTypes/{id}. These leg names are not part of the
+// assignment payload, so relation slots are hydrated with them per id.
+func GetRelationTypeFull(ctx context.Context, client *http.Client, id string) (*PrepareCreateRelationTypeFull, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/relationTypes/%s", url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building get relation type request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("getting relation type details: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getting relation type details: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result PrepareCreateRelationTypeFull
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding relation type details response: %w", err)
+	}
+	return &result, nil
+}
+
+// PrepareCreateComplexRelationTypeFull is the subset of the
+// /complexRelationTypes/{id} response we need. Unlike a simple relation type,
+// a complex relation type has two or more legs, each with its own role and
+// asset type, so there is no single role/coRole.
+type PrepareCreateComplexRelationTypeFull struct {
+	ID       string
+	PublicID string
+	Legs     []PrepareCreateComplexRelationLeg
+}
+
+// PrepareCreateComplexRelationLeg is one leg of a complex relation type.
+type PrepareCreateComplexRelationLeg struct {
+	Role                 string
+	CoRole               string
+	RelationTypePublicID string
+	AssetTypeID          string
+	AssetTypeName        string
+	Min                  int
+	Max                  *int
+}
+
+// GetComplexRelationTypeFull fetches a complex relation type's legs from
+// /rest/2.0/complexRelationTypes/{id}. Complex relation type ids are not
+// resolvable via /relationTypes/{id} (that endpoint 404s for them), so
+// relation slots whose Kind is "ComplexRelationType" hydrate here instead.
+func GetComplexRelationTypeFull(ctx context.Context, client *http.Client, id string) (*PrepareCreateComplexRelationTypeFull, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/complexRelationTypes/%s", url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building get complex relation type request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("getting complex relation type details: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getting complex relation type details: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var raw struct {
+		ID       string `json:"id"`
+		PublicID string `json:"publicId"`
+		LegTypes []struct {
+			Role                 string                    `json:"role"`
+			CoRole               string                    `json:"coRole"`
+			RelationTypePublicID string                    `json:"relationTypePublicId"`
+			MinimumOccurrences   int                       `json:"minimumOccurrences"`
+			MaximumOccurrences   *int                      `json:"maximumOccurrences"`
+			AssetType            *rawAssignmentResourceRef `json:"assetType"`
+		} `json:"legTypes"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("decoding complex relation type details response: %w", err)
+	}
+
+	result := PrepareCreateComplexRelationTypeFull{ID: raw.ID, PublicID: raw.PublicID}
+	for _, leg := range raw.LegTypes {
+		entry := PrepareCreateComplexRelationLeg{
+			Role:                 leg.Role,
+			CoRole:               leg.CoRole,
+			RelationTypePublicID: leg.RelationTypePublicID,
+			Min:                  leg.MinimumOccurrences,
+			Max:                  leg.MaximumOccurrences,
+		}
+		if leg.AssetType != nil {
+			entry.AssetTypeID = leg.AssetType.ID
+			entry.AssetTypeName = leg.AssetType.Name
+		}
+		result.Legs = append(result.Legs, entry)
 	}
 	return &result, nil
 }

@@ -38,7 +38,7 @@ type Output struct {
 // lets the caller tell an empty attribute apart from one that isn't valid at
 // all — the GraphQL attribute lists only include attributes that have a value.
 type AssignableAttribute struct {
-	Name     string `json:"name" jsonschema:"the attribute type name, e.g. Definition"`
+	Name     string `json:"name" jsonschema:"the attribute type display name, e.g. Definition. This is a name only — to get the attribute type's UUID or publicId, call prepare_create_asset (attributeSchema[].attributeTypeId / .publicId)."`
 	Required bool   `json:"required" jsonschema:"whether the assignment requires this attribute to have a value"`
 	IsSet    bool   `json:"isSet" jsonschema:"true if the asset currently has a value for this attribute, false if it is empty but settable"`
 }
@@ -55,10 +55,10 @@ func NewTool(collibraClient *http.Client, contextSpecsEnabled bool) *chip.Tool[I
 	return &chip.Tool[Input, Output]{
 		Name:        "get_asset_details",
 		Title:       "Get Asset Details",
-		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Also returns assignableAttributes: every attribute type the asset can hold, with required and isSet flags — use this to tell an empty-but-settable attribute (e.g. an unset Definition) apart from one that isn't valid for the asset. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page). Optionally executes a Context Specification against the asset and returns the generated YAML context (requires the context-specifications experimental feature).",
+		Description: "Get detailed information about a specific asset by its UUID, including attributes, relations, responsibilities (owners, stewards, and other role assignments), and metadata. Also returns assignableAttributes: every attribute type the asset can hold, with required and isSet flags — use this to tell an empty-but-settable attribute (e.g. an unset Definition) apart from one that isn't valid for the asset. Returns up to 100 attributes per type and supports cursor-based pagination for relations (50 per page). Attributes and relations here carry display names only — for an attribute or relation type's UUID or publicId, call prepare_create_asset (attributeSchema[]/relationTypes[]). Optionally executes a Context Specification against the asset and returns the generated YAML context (requires the context-specifications experimental feature).",
 		Handler:     handler(collibraClient, contextSpecsEnabled),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

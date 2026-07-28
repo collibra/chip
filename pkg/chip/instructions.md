@@ -10,6 +10,7 @@ Reach for these tools when the user asks about **discovering, understanding, or 
 - **Business Terms**: standardized definitions for business concepts.
 - **Data Contracts**: agreements defining data product interfaces.
 - **Classifications**: data classes applied to assets to categorize them — most commonly for data sensitivity (PII, PHI), but also for arbitrary taxonomies.
+- **Assessments**: questionnaires *conducted* from a template (e.g. DPIA, PIA, EU AI Act) in the Assessments application. These are **not catalog assets** — they have their own questions/answers/status and their own tools. Don't use the asset tools on them.
 
 ## Tool categories
 
@@ -20,6 +21,7 @@ Reach for these tools when the user asks about **discovering, understanding, or 
 - **Classification**: `search_data_class`, `search_data_classification_match`, `add_data_classification_match`, `remove_data_classification_match` (require `dgc.classify` + `dgc.catalog`).
 - **Asset writes**: `create_asset` (one smart write tool for any asset type), `prepare_create_asset` (optional read-only companion for browsing/inspection), `edit_asset` (typed operations on existing assets).
 - **Data contracts**: `list_data_contract`, `init_data_contract` (create a new contract governing a Data Product Port), `pull_data_contract_manifest`, `push_data_contract_manifest` (add manifest versions to an existing contract).
+- **Assessments**: `get_assessment` (fetch by name/UUID, or filter by status/template/asset/date), `create_assessment` (conduct a new one from a template, by name or UUID), `edit_assessment` (set answers, status, name, owner, assignees, or visibility as one atomic PATCH). These operate on conducted assessments, not catalog assets — reach for them instead of `get_asset_details`/`edit_asset` when the target is an assessment.
 
 ## Recommended workflows
 
@@ -30,6 +32,7 @@ Reach for these tools when the user asks about **discovering, understanding, or 
 - **Upstream/downstream lineage** → `search_lineage_entities` → `get_lineage_upstream` or `get_lineage_downstream`. Summarize from graph structure; only call `get_lineage_entity` for the most relevant IDs, only call `get_lineage_transformation` when the user asks for the SQL.
 - **Classify a column** → `search_asset_keyword` for column UUID → `search_data_class` for class UUID → `add_data_classification_match`.
 - **Create an asset** → `create_asset` directly with `name` + `assetType` + `domain` (names or UUIDs both accepted) + optional `attributes`. Markdown in `RICH_TEXT` attributes (e.g. `Definition`) is auto-converted to HTML. Read the response status: `success`, `duplicate_found` (re-call with `allowDuplicate: true` if intentional), `validation_error` (message includes suggestions — self-correct and retry), or `error`. `prepare_create_asset` first is **optional**, only useful for browsing or schema inspection.
+- **Work with an assessment** → `get_assessment` (by name or UUID) to read its questions and answers, `edit_assessment` to set answers (give `answerType` for a not-yet-answered question) or change status, and `create_assessment` to conduct a new one from a template. Not catalog assets — don't reach for `get_asset_details`/`edit_asset`.
 
 ## Key patterns
 

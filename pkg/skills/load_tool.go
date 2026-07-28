@@ -40,7 +40,7 @@ func NewLoadTool(catalog *Catalog) *chip.Tool[loadInput, loadOutput] {
 			"reference; resourcePath takes precedence over headerOnly.",
 		Handler:     loadHandler(catalog),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

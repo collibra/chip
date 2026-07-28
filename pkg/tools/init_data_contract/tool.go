@@ -39,7 +39,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Initialize a data contract and link it to its initial manifest. This is the first step in creating a data contract. Idempotent by governed port. Provide a manifest to upload, or omit it to auto-generate the manifest from the governed port's existing Collibra metadata. After initialization, use push_data_contract_manifest to add further manifest versions.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.data-contract"},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 
