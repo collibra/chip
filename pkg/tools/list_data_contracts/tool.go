@@ -31,6 +31,7 @@ type Contract struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "list_data_contract",
+		Title:       "List Data Contracts",
 		Description: "List data contracts available in Collibra. Returns a paginated list of data contract metadata, sorted by the last modified date in descending order.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

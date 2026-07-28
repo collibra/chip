@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // EditAssetCore is the slim view of an asset returned by GET /rest/2.0/assets/{id}
@@ -39,8 +40,8 @@ type EditAssetStatusRef struct {
 	Name string `json:"name"`
 }
 
-// EditAssetDomainDetails is the view of a domain that exposes its domain type,
-// returned by GET /rest/2.0/domains/{id}. Needed to scope the assignment.
+// EditAssetDomainDetails exposes a domain's type, used to scope the relation
+// assignment lookup.
 type EditAssetDomainDetails struct {
 	ID   string                  `json:"id"`
 	Name string                  `json:"name"`
@@ -114,10 +115,9 @@ type editAssetAttributesList struct {
 	Results []EditAssetAttributeInstance `json:"results"`
 }
 
-// EditAssetAssignment is the scoped assignment for a (asset type, domain type)
-// pair — lists which attribute and relation types are valid for assets of
-// this shape. This is the public shape the edit_asset tool consumes; it is
-// built up from Collibra's raw assignment response by GetAssignmentForAssetType.
+// EditAssetAssignment lists which attribute and relation types are valid for an
+// asset. This is the public shape the edit_asset tool consumes; it is built from
+// Collibra's raw assignment response by GetEffectiveAssignmentForAsset.
 type EditAssetAssignment struct {
 	AssetType      EditAssetTypeRef                   `json:"assetType"`
 	DomainType     *EditAssetDomainTypeRef            `json:"domainType,omitempty"`
@@ -126,14 +126,17 @@ type EditAssetAssignment struct {
 }
 
 // EditAssetAssignmentRelationType is a relation type allowed by a scoped
-// assignment, in the direction where the edited asset is the source (head).
-// Role is the forward name (e.g. "synonym"); CoRole is the reverse name.
+// assignment. Role is the forward name (source→target); CoRole is the inverse
+// name (target→source). Reversed is true when the edited asset is the tail
+// (target) of this relation — add_relation must then flip source and target
+// when calling the API.
 type EditAssetAssignmentRelationType struct {
 	ID         string            `json:"id"`
 	Role       string            `json:"role"`
 	CoRole     string            `json:"coRole,omitempty"`
 	SourceType *EditAssetTypeRef `json:"sourceType,omitempty"`
 	TargetType *EditAssetTypeRef `json:"targetType,omitempty"`
+	Reversed   bool              `json:"reversed,omitempty"`
 }
 
 // --- Raw assignment response shape (Collibra's wire format) ----------------
@@ -232,7 +235,7 @@ func GetAssetCore(ctx context.Context, client *http.Client, assetID string) (*Ed
 }
 
 // GetDomainDetails fetches a domain including its domain type reference, used
-// to scope the assignment lookup.
+// to scope the relation assignment lookup.
 func GetDomainDetails(ctx context.Context, client *http.Client, domainID string) (*EditAssetDomainDetails, error) {
 	reqURL := fmt.Sprintf("/rest/2.0/domains/%s", url.PathEscape(domainID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -306,21 +309,90 @@ func ListAttributesForAsset(ctx context.Context, client *http.Client, assetID st
 	return all, nil
 }
 
-// GetAssignmentForAssetType returns the scoped assignment for an (asset type,
-// domain type) pair, listing valid attribute and relation types. Collibra's
-// endpoint returns an array — typically one entry per matching scope. We
-// merge attribute and relation types across the returned entries; if a
-// domainTypeID was supplied, we filter to entries that match it (when present
-// on the entry), otherwise we use everything returned.
+// GetEffectiveAssignmentForAsset returns the assignment Collibra resolves for a
+// specific asset via GET /assignments/asset/{assetId}, which handles type and
+// domain inheritance server-side. Use it for ATTRIBUTES only: it is unreliable
+// for relation types (it omits some inherited relations for certain asset
+// types), so relations stay on GetAssignmentForAssetType.
+//
+// The response is a single Assignment with the same characteristicTypes shape as
+// /assignments/assetType, so we reuse mergeEditAssignments with an empty
+// domainTypeID (the server already scoped it).
+func GetEffectiveAssignmentForAsset(ctx context.Context, client *http.Client, assetID string) (*EditAssetAssignment, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/assignments/asset/%s", url.PathEscape(assetID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get effective assignment: building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get effective assignment: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("no assignment found for asset %q", assetID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get effective assignment: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var raw rawAssignmentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("get effective assignment: decoding response: %w", err)
+	}
+
+	merged := EditAssetAssignment{AssetType: raw.AssetType}
+	mergeEditAssignments(&merged, []rawAssignmentResponse{raw}, "", make(map[string]struct{}), make(map[string]struct{}))
+	return &merged, nil
+}
+
+// GetAssignmentForAssetType resolves the assignment for an (asset type, domain
+// type) pair by walking the asset type's parent chain and merging each level,
+// filtering by domain type. A subtype inherits relation roles from a parent's
+// assignment (e.g. KPI under Business Asset), which the walk picks up. Used for
+// RELATION types only; attributes come from GetEffectiveAssignmentForAsset.
 func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) (*EditAssetAssignment, error) {
-	params := url.Values{}
-	if domainTypeID != "" {
-		params.Set("domainTypeId", domainTypeID)
+	merged := EditAssetAssignment{
+		AssetType: EditAssetTypeRef{ID: assetTypeID},
 	}
+	seenAttrIDs := make(map[string]struct{})
+	seenRelKeys := make(map[string]struct{})
+	seenTypes := make(map[string]struct{})
+
+	currentID := assetTypeID
+	for depth := 0; depth < maxAssignmentChainDepth; depth++ {
+		if _, looped := seenTypes[currentID]; looped {
+			break
+		}
+		seenTypes[currentID] = struct{}{}
+
+		list, err := fetchRawEditAssignments(ctx, client, currentID, domainTypeID)
+		if err != nil {
+			if depth == 0 {
+				return nil, err
+			}
+			// Tolerate parent-level fetch errors: keep what we have.
+			break
+		}
+		mergeEditAssignments(&merged, list, domainTypeID, seenAttrIDs, seenRelKeys)
+
+		at, err := GetAssetTypeByID(ctx, client, currentID)
+		if err != nil || at.Parent == nil || at.Parent.ID == "" {
+			break
+		}
+		currentID = at.Parent.ID
+	}
+	return &merged, nil
+}
+
+// fetchRawEditAssignments is the bare /assignments/assetType/{id} fetch for
+// one chain level, decoded into edit_asset's raw shape.
+func fetchRawEditAssignments(ctx context.Context, client *http.Client, assetTypeID, domainTypeID string) ([]rawAssignmentResponse, error) {
 	reqURL := fmt.Sprintf("/rest/2.0/assignments/assetType/%s", url.PathEscape(assetTypeID))
-	if q := params.Encode(); q != "" {
-		reqURL += "?" + q
-	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -357,10 +429,15 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 		}
 		list = []rawAssignmentResponse{single}
 	}
+	return list, nil
+}
 
-	merged := EditAssetAssignment{
-		AssetType: EditAssetTypeRef{ID: assetTypeID},
-	}
+// mergeEditAssignments folds one chain level's assignments into merged,
+// deduping attribute types by ID and relation types by (ID, direction) —
+// the subtype's own entries are merged first, so they win over a parent's.
+// An assignment applies when its domainTypes either explicitly contains the
+// target domain type or is empty (Collibra's inherit-from-parent sentinel).
+func mergeEditAssignments(merged *EditAssetAssignment, list []rawAssignmentResponse, domainTypeID string, seenAttrIDs, seenRelKeys map[string]struct{}) {
 	for _, a := range list {
 		// If the caller passed a domainTypeID, skip assignments whose
 		// domainTypes don't include it.
@@ -386,6 +463,10 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 				if ct.AttributeType == nil {
 					continue
 				}
+				if _, dup := seenAttrIDs[ct.AttributeType.ID]; dup {
+					continue
+				}
+				seenAttrIDs[ct.AttributeType.ID] = struct{}{}
 				merged.AttributeTypes = append(merged.AttributeTypes, EditAssetAssignmentAttributeType{
 					ID:       ct.AttributeType.ID,
 					Name:     ct.AttributeType.Name,
@@ -396,23 +477,41 @@ func GetAssignmentForAssetType(ctx context.Context, client *http.Client, assetTy
 				if ct.RelationType == nil {
 					continue
 				}
-				// Only register the direction where the edited asset is the
-				// source (head). Collibra emits both directions as separate
-				// characteristic entries; TO_TARGET = forward (asset->target).
-				if ct.RoleDirection != "" && ct.RoleDirection != "TO_TARGET" {
+				// Collibra emits each relation type twice: once per direction.
+				// The live wire values are TO_TARGET (edited asset is the
+				// head/source) and TO_SOURCE (edited asset is the tail —
+				// the relation must be created in reverse). Empty means
+				// symmetric/unspecified, treated as forward. The longer
+				// SOURCE_TO_TARGET / TARGET_TO_SOURCE spellings are accepted
+				// defensively. Any other direction value is skipped.
+				var reversed bool
+				switch ct.RoleDirection {
+				case "", "TO_TARGET", "SOURCE_TO_TARGET":
+					reversed = false
+				case "TO_SOURCE", "TARGET_TO_SOURCE":
+					reversed = true
+				default:
 					continue
 				}
+				relKey := ct.RelationType.ID
+				if reversed {
+					relKey += ":reversed"
+				}
+				if _, dup := seenRelKeys[relKey]; dup {
+					continue
+				}
+				seenRelKeys[relKey] = struct{}{}
 				merged.RelationTypes = append(merged.RelationTypes, EditAssetAssignmentRelationType{
 					ID:         ct.RelationType.ID,
 					Role:       ct.RelationType.Role,
 					CoRole:     ct.RelationType.CoRole,
 					SourceType: ct.RelationType.SourceType,
 					TargetType: ct.RelationType.TargetType,
+					Reversed:   reversed,
 				})
 			}
 		}
 	}
-	return &merged, nil
 }
 
 // PatchAsset updates the whitelisted core fields (name, displayName, statusId)
@@ -769,25 +868,68 @@ type editAssetUsersList struct {
 	Results []EditAssetUser `json:"results"`
 }
 
-// FindUserByUsername returns the first user matching a username, or nil if
-// none exists. Used by set_responsibility to resolve "jane.smith" to a UUID.
+// FindUserByUsername returns the user whose username exactly matches, or nil if
+// none exists. The /rest/2.0/users `name` filter is a loose partial search over
+// username, first name and last name, so we scan the results for an exact
+// (case-insensitive) username match rather than trusting the first row —
+// otherwise an unrelated user could be returned and bound.
 func FindUserByUsername(ctx context.Context, client *http.Client, username string) (*EditAssetUser, error) {
 	params := url.Values{}
 	params.Set("name", username)
-	params.Set("limit", "1")
-	return findUserBy(ctx, client, params)
+	params.Set("limit", "100")
+	users, err := listUsers(ctx, client, params)
+	if err != nil {
+		return nil, err
+	}
+	for i := range users {
+		if strings.EqualFold(users[i].UserName, username) {
+			return &users[i], nil
+		}
+	}
+	return nil, nil
 }
 
-// FindUserByEmail returns the first user matching an email address, or nil
-// if none exists.
+// FindUserByEmail returns the user with the given email address, or nil if none
+// exists. It uses the dedicated exact-match endpoint; the list endpoint has no
+// email filter, so an unknown `emailAddress` query param is silently ignored and
+// would return an arbitrary user.
 func FindUserByEmail(ctx context.Context, client *http.Client, email string) (*EditAssetUser, error) {
-	params := url.Values{}
-	params.Set("emailAddress", email)
-	params.Set("limit", "1")
-	return findUserBy(ctx, client, params)
+	reqURL := "/rest/2.0/users/email/" + url.PathEscape(email)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("find user by email: building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("find user by email: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("find user by email: reading response: %w", err)
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("find user by email: status %d: %s", resp.StatusCode, string(body))
+	}
+	var user EditAssetUser
+	if err := json.Unmarshal(body, &user); err != nil {
+		return nil, fmt.Errorf("find user by email: decoding response: %w", err)
+	}
+	if user.ID == "" {
+		return nil, nil
+	}
+	return &user, nil
 }
 
-func findUserBy(ctx context.Context, client *http.Client, params url.Values) (*EditAssetUser, error) {
+// listUsers fetches the users matching the given query params from
+// /rest/2.0/users and returns the full result page.
+func listUsers(ctx context.Context, client *http.Client, params url.Values) ([]EditAssetUser, error) {
 	reqURL := "/rest/2.0/users?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -812,18 +954,17 @@ func findUserBy(ctx context.Context, client *http.Client, params url.Values) (*E
 	if err := json.Unmarshal(body, &page); err != nil {
 		return nil, fmt.Errorf("find user: decoding response: %w", err)
 	}
-	if len(page.Results) == 0 {
-		return nil, nil
-	}
-	user := page.Results[0]
-	return &user, nil
+	return page.Results, nil
 }
 
 // EditAssetCreateResponsibilityRequest is the body for POST /rest/2.0/responsibilities.
+// resourceType is required alongside resourceId; without it the API rejects the
+// request with a 400 (addResourceMemberIncompleteParameters).
 type EditAssetCreateResponsibilityRequest struct {
-	RoleID     string `json:"roleId"`
-	OwnerID    string `json:"ownerId"`
-	ResourceID string `json:"resourceId"`
+	RoleID       string `json:"roleId"`
+	OwnerID      string `json:"ownerId"`
+	ResourceID   string `json:"resourceId"`
+	ResourceType string `json:"resourceType"`
 }
 
 // EditAssetResponsibility is a responsibility instance linking a role, an
@@ -869,6 +1010,32 @@ func CreateResponsibility(ctx context.Context, client *http.Client, payload Edit
 		return nil, fmt.Errorf("create responsibility: decoding response: %w", err)
 	}
 	return &result, nil
+}
+
+// DeleteResponsibility removes a responsibility instance by its ID via
+// DELETE /rest/2.0/responsibilities/{id}.
+func DeleteResponsibility(ctx context.Context, client *http.Client, responsibilityID string) error {
+	reqURL := "/rest/2.0/responsibilities/" + url.PathEscape(responsibilityID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("delete responsibility: building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete responsibility: sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("delete responsibility: reading response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("delete responsibility: status %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }
 
 // EditAssetBulkPatchAttributeItem is one row of PATCH /rest/2.0/attributes/bulk.

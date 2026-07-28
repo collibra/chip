@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "automerge": false,
+  "baseBranchPatterns": [
+    "main"
+  ],
+  "branchPrefix": "renovate-",
+  "dependencyDashboard": false,
+  "extends": [
+    "config:recommended",
+    "group:allNonMajor"
+  ],
+  "hashedBranchLength": 24,
+  "labels": [
+    "dependency-update"
+  ],
+  "major": {
+    "automerge": false,
+    "labels": [
+      "dependency-update",
+      "major-dependency-update"
+    ]
+  },
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "prHourlyLimit": 10,
+  "rebaseWhen": "behind-base-branch",
+  "registryAliases": {
+    "mirror-docker.repository.collibra.io": "index.docker.io"
+  },  
+  "reviewersSampleSize": 1,
+  "schedule": [
+    "at any time"
+  ],
+  "timezone": "America/New_York",
+  "updateNotScheduled": false
+}

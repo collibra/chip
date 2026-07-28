@@ -20,7 +20,8 @@ type Input struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.SearchLineageEntitiesOutput] {
 	return &chip.Tool[Input, clients.SearchLineageEntitiesOutput]{
-		Name: "search_lineage_entities",
+		Name:  "search_lineage_entities",
+		Title: "Search Lineage Entities",
 		Description: `WORKFLOW: This is the ENTRY POINT for almost all lineage questions. Call this first to find entity IDs before using any other lineage tool.
 					  Use when the user asks: "where does this data come from?", "what columns are in this report?", "what feeds into this table?", "what depends on this dataset?". Start here to resolve the entity name to an ID.
 					  Searches the technical lineage graph (all data objects across external systems, including unregistered assets, temporary tables, and source code — not just Collibra catalog assets). Supports partial name matching (case insensitive), type filtering (table, column, file, report, apiEndpoint, topic), and DGC UUID lookup. Returns entity IDs and names (paginated).

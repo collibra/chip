@@ -96,16 +96,16 @@ type DomainOption struct {
 
 // AttributeSchemaEntry is one attribute slot in the scoped assignment.
 type AttributeSchemaEntry struct {
-	AttributeTypeID       string   `json:"attributeTypeId" jsonschema:"UUID of the attribute type — pass this in attributes[].typeId to create_asset."`
-	Name                  string   `json:"name" jsonschema:"Display name of the attribute (e.g. 'Definition', 'Note'). Also accepted by create_asset."`
-	PublicID              string   `json:"publicId,omitempty" jsonschema:"PublicId of the attribute type."`
-	Kind                  string   `json:"kind" jsonschema:"Attribute-type discriminator (e.g. 'StringAttributeType', 'NumericAttributeType')."`
-	Required              bool     `json:"required" jsonschema:"True when the assignment's minimumOccurrences > 0. Note: Collibra doesn't always enforce this at create time — it can be an attestation/workflow signal rather than a hard create-time requirement. Agents may try a minimal create to discover what's actually enforced."`
-	Min                   int      `json:"min" jsonschema:"Minimum number of occurrences."`
-	Max                   *int     `json:"max,omitempty" jsonschema:"Maximum number of occurrences. Absent when unbounded."`
-	StringType            string   `json:"stringType,omitempty" jsonschema:"For string-kind attributes: 'RICH_TEXT' means create_asset will run the value through Markdown→HTML conversion. Only populated when input.includeStringType is true."`
-	Description           string   `json:"description,omitempty" jsonschema:"Server-defined description of the attribute. Only populated when input.includeStringType is true."`
-	AllowedValues         []string `json:"allowedValues,omitempty" jsonschema:"Permitted values for list-type attributes. Only populated when input.includeStringType is true."`
+	AttributeTypeID string   `json:"attributeTypeId" jsonschema:"UUID of the attribute type — pass this in attributes[].typeId to create_asset."`
+	Name            string   `json:"name" jsonschema:"Display name of the attribute (e.g. 'Definition', 'Note'). Also accepted by create_asset."`
+	PublicID        string   `json:"publicId,omitempty" jsonschema:"PublicId of the attribute type."`
+	Kind            string   `json:"kind" jsonschema:"Attribute-type discriminator (e.g. 'StringAttributeType', 'NumericAttributeType')."`
+	Required        bool     `json:"required" jsonschema:"True when the assignment's minimumOccurrences > 0. Note: Collibra doesn't always enforce this at create time — it can be an attestation/workflow signal rather than a hard create-time requirement. Agents may try a minimal create to discover what's actually enforced."`
+	Min             int      `json:"min" jsonschema:"Minimum number of occurrences."`
+	Max             *int     `json:"max,omitempty" jsonschema:"Maximum number of occurrences. Absent when unbounded."`
+	StringType      string   `json:"stringType,omitempty" jsonschema:"For string-kind attributes: 'RICH_TEXT' means create_asset will run the value through Markdown→HTML conversion. Only populated when input.includeStringType is true."`
+	Description     string   `json:"description,omitempty" jsonschema:"Server-defined description of the attribute. Only populated when input.includeStringType is true."`
+	AllowedValues   []string `json:"allowedValues,omitempty" jsonschema:"Permitted values for list-type attributes. Only populated when input.includeStringType is true."`
 }
 
 // RelationSchemaEntry is one relation slot in the scoped assignment.
@@ -127,7 +127,8 @@ type StatusOption struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name: "prepare_create_asset",
+		Name:  "prepare_create_asset",
+		Title: "Prepare to Create Asset",
 		Description: "Read-only companion to create_asset. Enumerates available asset types and domains, resolves a UUID/publicId/displayName for either, " +
 			"and hydrates the scoped attribute and relation schema for a given (assetType, domain) pair so the agent knows what attributes and relations are available. " +
 			"Optional: pass includeStringType=true to also populate each attribute's stringType (e.g. 'RICH_TEXT') and description. " +
@@ -545,13 +546,13 @@ func schemaEntriesFromAssignment(in []clients.PrepareCreateScopedAttribute) []At
 	out := make([]AttributeSchemaEntry, len(in))
 	for i, a := range in {
 		out[i] = AttributeSchemaEntry{
-			AttributeTypeID:   a.AttributeTypeID,
-			Name:              a.AttributeTypeName,
-			PublicID:          a.AttributeTypePublicID,
-			Kind:              a.Kind,
-			Required:          a.Required,
-			Min:               a.Min,
-			Max:               a.Max,
+			AttributeTypeID: a.AttributeTypeID,
+			Name:            a.AttributeTypeName,
+			PublicID:        a.AttributeTypePublicID,
+			Kind:            a.Kind,
+			Required:        a.Required,
+			Min:             a.Min,
+			Max:             a.Max,
 		}
 	}
 	return out

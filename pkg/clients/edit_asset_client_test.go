@@ -2,7 +2,11 @@ package clients
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/collibra/chip/pkg/tools/testutil"
 )
 
 // TestEditAssetAttributeInstance_ValueAcceptsAnyScalar covers Collibra's
@@ -66,5 +70,168 @@ func TestEditAssetAttributeInstance_ListPageDecodesMixedKinds(t *testing.T) {
 		if page.Results[i].Value != w {
 			t.Fatalf("results[%d].Value = %q, want %q", i, page.Results[i].Value, w)
 		}
+	}
+}
+
+// TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment checks parsing of
+// the per-asset endpoint's single Assignment object: required-ness from
+// minimumOccurrences and both relation directions (TO_TARGET / TO_SOURCE).
+func TestGetEffectiveAssignmentForAsset_ParsesResolvedAssignment(t *testing.T) {
+	const (
+		assetID   = "019e027f-25b9-728f-9ed8-77c315ac377f"
+		relTypeID = "cd000000-0000-0000-0000-000000007002"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "00000000-0000-0000-0000-000000011003", "name": "Acronym"},
+			"domainTypes": [{"id": "00000000-0000-0000-0000-000000010001", "name": "Glossary"}],
+			"characteristicTypes": [{
+				"id": "char-def",
+				"minimumOccurrences": 1,
+				"assignedCharacteristicTypeDiscriminator": "AttributeType",
+				"attributeType": {"id": "attr-def", "name": "Definition", "resourceType": "StringAttributeType"}
+			}, {
+				"id": "char-note",
+				"minimumOccurrences": 0,
+				"assignedCharacteristicTypeDiscriminator": "AttributeType",
+				"attributeType": {"id": "attr-note", "name": "Note", "resourceType": "StringAttributeType"}
+			}, {
+				"id": "char-rel-fwd",
+				"minimumOccurrences": 0,
+				"roleDirection": "TO_TARGET",
+				"assignedCharacteristicTypeDiscriminator": "RelationType",
+				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
+			}, {
+				"id": "char-rel-rev",
+				"minimumOccurrences": 0,
+				"roleDirection": "TO_SOURCE",
+				"assignedCharacteristicTypeDiscriminator": "RelationType",
+				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
+			}]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+
+	if len(got.AttributeTypes) != 2 {
+		t.Fatalf("expected 2 attribute types, got %d: %+v", len(got.AttributeTypes), got.AttributeTypes)
+	}
+	var def *EditAssetAssignmentAttributeType
+	for i := range got.AttributeTypes {
+		if got.AttributeTypes[i].Name == "Definition" {
+			def = &got.AttributeTypes[i]
+		}
+	}
+	if def == nil {
+		t.Fatalf("Definition attribute missing from effective assignment: %+v", got.AttributeTypes)
+	}
+	if !def.Required {
+		t.Errorf("Definition (minimumOccurrences=1) should be required")
+	}
+	if len(got.RelationTypes) != 2 {
+		t.Fatalf("expected forward+reversed relation entries, got %d: %+v", len(got.RelationTypes), got.RelationTypes)
+	}
+	var sawForward, sawReversed bool
+	for _, rt := range got.RelationTypes {
+		if rt.ID != relTypeID || rt.Role != "calculated using" {
+			t.Errorf("unexpected relation entry: %+v", rt)
+		}
+		if rt.Reversed {
+			sawReversed = true
+		} else {
+			sawForward = true
+		}
+	}
+	if !sawForward || !sawReversed {
+		t.Errorf("expected both directions, forward=%v reversed=%v", sawForward, sawReversed)
+	}
+}
+
+// TestGetAssignmentForAssetType_InheritsParentChain guards the #74 relation
+// behavior: a subtype's relation types can live on a parent's assignment (empty
+// domainTypes = inherit), so the walk must merge parent levels, keeping both
+// directions (TO_TARGET / TO_SOURCE) and deduping repeats.
+func TestGetAssignmentForAssetType_InheritsParentChain(t *testing.T) {
+	const (
+		kpiTypeID    = "00000000-0000-0000-0000-000000031107"
+		parentTypeID = "00000000-0000-0000-0000-000000031101"
+		domTypeID    = "00000000-0000-0000-0000-000000000001"
+		relTypeID    = "cd000000-0000-0000-0000-000000007002"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+kpiTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{
+			"id": "assignment-kpi",
+			"domainTypes": [{"id": "` + domTypeID + `", "name": "Business Glossary"}],
+			"characteristicTypes": [{
+				"id": "char-attr",
+				"minimumOccurrences": 0,
+				"assignedCharacteristicTypeDiscriminator": "AttributeType",
+				"attributeType": {"id": "attr-1", "name": "Definition", "resourceType": "StringAttributeType"}
+			}]
+		}]`))
+	})
+	mux.HandleFunc("GET /rest/2.0/assetTypes/"+kpiTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id": "` + kpiTypeID + `", "name": "KPI", "parent": {"id": "` + parentTypeID + `", "name": "Business Asset"}}`))
+	})
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+parentTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{
+			"id": "assignment-parent",
+			"domainTypes": [],
+			"characteristicTypes": [{
+				"id": "char-rel-fwd",
+				"minimumOccurrences": 0,
+				"roleDirection": "TO_TARGET",
+				"assignedCharacteristicTypeDiscriminator": "RelationType",
+				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
+			}, {
+				"id": "char-rel-rev",
+				"minimumOccurrences": 0,
+				"roleDirection": "TO_SOURCE",
+				"assignedCharacteristicTypeDiscriminator": "RelationType",
+				"relationType": {"id": "` + relTypeID + `", "role": "calculated using", "coRole": "used to calculate"}
+			}]
+		}]`))
+	})
+	mux.HandleFunc("GET /rest/2.0/assetTypes/"+parentTypeID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id": "` + parentTypeID + `", "name": "Business Asset"}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetAssignmentForAssetType(t.Context(), client, kpiTypeID, domTypeID)
+	if err != nil {
+		t.Fatalf("GetAssignmentForAssetType: %v", err)
+	}
+
+	if len(got.RelationTypes) != 2 {
+		t.Fatalf("expected forward+reversed relation entries from parent assignment, got %d: %+v", len(got.RelationTypes), got.RelationTypes)
+	}
+	var sawForward, sawReversed bool
+	for _, rt := range got.RelationTypes {
+		if rt.ID != relTypeID || rt.Role != "calculated using" {
+			t.Errorf("unexpected relation entry: %+v", rt)
+		}
+		if rt.Reversed {
+			sawReversed = true
+		} else {
+			sawForward = true
+		}
+	}
+	if !sawForward || !sawReversed {
+		t.Errorf("expected both directions inherited from parent, forward=%v reversed=%v", sawForward, sawReversed)
 	}
 }

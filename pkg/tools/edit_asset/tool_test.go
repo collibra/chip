@@ -43,9 +43,13 @@ const (
 // override attribute instances (e.g. to simulate ambiguous or missing ones)
 // and capture what the handler under test wrote to the API.
 type stub struct {
-	attributes               []clients.EditAssetAttributeInstance
-	asset                    *clients.EditAssetCore
-	attrTypesByID            map[string]clients.EditAssetAssignmentAttributeType
+	attributes    []clients.EditAssetAttributeInstance
+	asset         *clients.EditAssetCore
+	attrTypesByID map[string]clients.EditAssetAssignmentAttributeType
+	// attrStringTypeByID overrides the stringType returned by the full
+	// /attributeTypes/{id} endpoint; "RICH_TEXT" triggers Markdown→HTML
+	// conversion. Defaults to PLAIN_TEXT for any type not listed.
+	attrStringTypeByID       map[string]string
 	relationTypes            []clients.EditAssetAssignmentRelationType
 	roles                    []clients.EditAssetRole
 	statuses                 []clients.EditAssetStatus
@@ -58,6 +62,8 @@ type stub struct {
 	deletedRelationIDs       []string
 	addedTags                [][]string
 	createdResponsibilities  []clients.EditAssetCreateResponsibilityRequest
+	existingResponsibilities []clients.Responsibility
+	deletedResponsibilityIDs []string
 	bulkCreatedAttrs         [][]clients.CreateAttributeRequest
 	bulkPatchedAttrs         [][]clients.EditAssetBulkPatchAttributeItem
 	bulkCreatedRelations     [][]clients.EditAssetCreateRelationRequest
@@ -148,6 +154,22 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		_ = json.NewEncoder(w).Encode(updated)
 	})
 
+	// Full attribute-type lookup — supplies stringType so the handler can
+	// decide whether to render RICH_TEXT values from Markdown to HTML.
+	mux.HandleFunc("GET /rest/2.0/attributeTypes/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		stringType := s.attrStringTypeByID[id]
+		if stringType == "" {
+			stringType = "PLAIN_TEXT"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":                         id,
+			"name":                       s.attrTypesByID[id].Name,
+			"attributeTypeDiscriminator": "StringAttributeType",
+			"stringType":                 stringType,
+		})
+	})
+
 	mux.HandleFunc("GET /rest/2.0/attributes", func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"total":   len(s.attributes),
@@ -196,18 +218,9 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mux.HandleFunc("GET /rest/2.0/domains/"+testDomainID, func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(clients.EditAssetDomainDetails{
-			ID:   testDomainID,
-			Name: "Marketing Glossary",
-			Type: &clients.EditAssetDomainTypeRef{ID: testDomainTypeID, Name: "Business Glossary"},
-		})
-	})
-
-	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+testAssetTypeID, func(w http.ResponseWriter, _ *http.Request) {
-		// Emit Collibra's actual response shape: top-level array with one
-		// assignment, characteristicTypes flattening attribute and relation
-		// types via assignedCharacteristicTypeDiscriminator.
+	// characteristicTypes shared by both assignment endpoints (attributes are read
+	// from the per-asset one, relations from the assetType one).
+	buildChars := func() []map[string]any {
 		chars := []map[string]any{}
 		for _, v := range s.attrTypesByID {
 			chars = append(chars, map[string]any{
@@ -222,10 +235,14 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 			})
 		}
 		for _, rt := range s.relationTypes {
+			direction := "TO_TARGET"
+			if rt.Reversed {
+				direction = "TO_SOURCE"
+			}
 			chars = append(chars, map[string]any{
 				"id":                 "rel-char-" + rt.ID,
 				"minimumOccurrences": 0,
-				"roleDirection":      "TO_TARGET",
+				"roleDirection":      direction,
 				"assignedCharacteristicTypeDiscriminator": "RelationType",
 				"relationType": map[string]any{
 					"id":         rt.ID,
@@ -236,13 +253,35 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 				},
 			})
 		}
+		return chars
+	}
+
+	// Per-asset effective assignment (single object) — source of attributes.
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+testAssetID, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":                  "assignment-asset-1",
+			"assetType":           map[string]any{"id": testAssetTypeID, "name": "Business Term"},
+			"domainTypes":         []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
+			"characteristicTypes": buildChars(),
+		})
+	})
+
+	// Domain details — used to scope the relation (assetType) assignment lookup.
+	mux.HandleFunc("GET /rest/2.0/domains/"+testDomainID, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(clients.EditAssetDomainDetails{
+			ID:   testDomainID,
+			Name: "Marketing Glossary",
+			Type: &clients.EditAssetDomainTypeRef{ID: testDomainTypeID, Name: "Business Glossary"},
+		})
+	})
+
+	// Per-asset-type assignment (top-level array) — edit_asset uses its relations.
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/"+testAssetTypeID, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"id":        "assignment-1",
-			"assetType": map[string]any{"id": testAssetTypeID, "name": "Business Term"},
-			"domainTypes": []map[string]any{{
-				"id": testDomainTypeID, "name": "Business Glossary",
-			}},
-			"characteristicTypes": chars,
+			"id":                  "assignment-type-1",
+			"assetType":           map[string]any{"id": testAssetTypeID, "name": "Business Term"},
+			"domainTypes":         []map[string]any{{"id": testDomainTypeID, "name": "Business Glossary"}},
+			"characteristicTypes": buildChars(),
 		}})
 	})
 
@@ -308,25 +347,39 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		})
 	})
 
+	// The real /rest/2.0/users endpoint only supports a loose `name` filter
+	// (partial match over username/first/last) and silently ignores unknown
+	// params such as `emailAddress`. The mock mirrors that so the resolver's
+	// client-side validation is actually exercised.
 	mux.HandleFunc("GET /rest/2.0/users", func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
+		name := strings.ToLower(r.URL.Query().Get("name"))
 		var matches []clients.EditAssetUser
-		username := q.Get("name")
-		email := q.Get("emailAddress")
 		for _, u := range s.users {
-			if username != "" && u.UserName == username {
-				matches = append(matches, u)
-			}
-			if email != "" && u.EmailAddress == email {
+			if name == "" ||
+				strings.Contains(strings.ToLower(u.UserName), name) ||
+				strings.Contains(strings.ToLower(u.FirstName), name) ||
+				strings.Contains(strings.ToLower(u.LastName), name) {
 				matches = append(matches, u)
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"total":   len(matches),
 			"offset":  0,
-			"limit":   1,
+			"limit":   len(matches),
 			"results": matches,
 		})
+	})
+
+	// Dedicated exact-match-by-email endpoint.
+	mux.HandleFunc("GET /rest/2.0/users/email/{emailAddress}", func(w http.ResponseWriter, r *http.Request) {
+		email := r.PathValue("emailAddress")
+		for _, u := range s.users {
+			if strings.EqualFold(u.EmailAddress, email) {
+				_ = json.NewEncoder(w).Encode(u)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
 	})
 
 	mux.HandleFunc("GET /rest/2.0/statuses", func(w http.ResponseWriter, _ *http.Request) {
@@ -416,6 +469,18 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(resp)
 	})
+
+	mux.HandleFunc("GET /rest/2.0/responsibilities", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(clients.ResponsibilityPagedResponse{
+			Total:   int64(len(s.existingResponsibilities)),
+			Results: s.existingResponsibilities,
+		})
+	})
+
+	mux.HandleFunc("DELETE /rest/2.0/responsibilities/{responsibilityId}", func(w http.ResponseWriter, r *http.Request) {
+		s.deletedResponsibilityIDs = append(s.deletedResponsibilityIDs, r.PathValue("responsibilityId"))
+		w.WriteHeader(http.StatusNoContent)
+	})
 }
 
 func runTool(t *testing.T, s *stub, in edit_asset.Input) (edit_asset.Output, error) {
@@ -469,6 +534,120 @@ func TestEditAsset_AddAttribute_HappyPath(t *testing.T) {
 	}
 	if len(s.createdAttrs) != 1 || s.createdAttrs[0].TypeID != noteAttrTypeID {
 		t.Fatalf("expected POST to create Note attribute, got %+v", s.createdAttrs)
+	}
+}
+
+func TestEditAsset_SetAttribute_CreatesWhenAbsent(t *testing.T) {
+	s := newStub() // default stub has no Note instance
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetAttribute, AttributeName: "Note", Value: "first note",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q (%q)", out.Status, out.Results[0].Error)
+	}
+	if len(s.createdAttrs) != 1 || s.createdAttrs[0].TypeID != noteAttrTypeID {
+		t.Fatalf("expected set_attribute to CREATE the absent Note, got creates=%+v patches=%+v", s.createdAttrs, s.patchedAttrs)
+	}
+	if len(s.patchedAttrs) != 0 {
+		t.Fatalf("expected no patch when creating, got %+v", s.patchedAttrs)
+	}
+}
+
+func TestEditAsset_SetAttribute_PatchesWhenPresent(t *testing.T) {
+	s := newStub() // default stub has a Definition instance
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetAttribute, AttributeName: "Definition", Value: "updated def",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q (%q)", out.Status, out.Results[0].Error)
+	}
+	if got := s.patchedAttrs[defAttrInstanceID]; got != "updated def" {
+		t.Fatalf("expected set_attribute to PATCH existing Definition, got patches=%+v creates=%+v", s.patchedAttrs, s.createdAttrs)
+	}
+	if len(s.createdAttrs) != 0 {
+		t.Fatalf("expected no create when patching, got %+v", s.createdAttrs)
+	}
+}
+
+func TestEditAsset_UpdateAttribute_RichTextConvertsMarkdownToHTML(t *testing.T) {
+	s := newStub()
+	s.attrStringTypeByID = map[string]string{defAttrTypeID: "RICH_TEXT"}
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "**bold** term",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	got := s.patchedAttrs[defAttrInstanceID]
+	if !strings.Contains(got, "<strong>bold</strong>") {
+		t.Fatalf("expected HTML-rendered value written, got %q", got)
+	}
+	if !out.Results[0].ConvertedFromMarkdown {
+		t.Fatalf("expected ConvertedFromMarkdown=true on result")
+	}
+}
+
+func TestEditAsset_AddAttribute_RichTextConvertsMarkdownToHTML(t *testing.T) {
+	s := newStub()
+	s.attrStringTypeByID = map[string]string{noteAttrTypeID: "RICH_TEXT"}
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddAttribute, AttributeName: "Note", Value: "see [docs](http://x)",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q", out.Status)
+	}
+	if len(s.createdAttrs) != 1 {
+		t.Fatalf("expected one created attribute, got %+v", s.createdAttrs)
+	}
+	if !strings.Contains(s.createdAttrs[0].Value, "<a href=\"http://x\"") {
+		t.Fatalf("expected HTML-rendered value written, got %q", s.createdAttrs[0].Value)
+	}
+	if !out.Results[0].ConvertedFromMarkdown {
+		t.Fatalf("expected ConvertedFromMarkdown=true on result")
+	}
+}
+
+func TestEditAsset_UpdateAttribute_PlainTextNotConverted(t *testing.T) {
+	s := newStub()
+	// Definition defaults to PLAIN_TEXT — Markdown must pass through verbatim.
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "**not bold**",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := s.patchedAttrs[defAttrInstanceID]; got != "**not bold**" {
+		t.Fatalf("expected verbatim value, got %q", got)
+	}
+	if out.Results[0].ConvertedFromMarkdown {
+		t.Fatalf("expected ConvertedFromMarkdown=false for plain text")
 	}
 }
 
@@ -731,7 +910,7 @@ func TestEditAsset_AmbiguousAttributeName(t *testing.T) {
 	if out.Status != edit_asset.StatusError {
 		t.Fatalf("expected error, got %q", out.Status)
 	}
-	if !strings.Contains(out.Results[0].Error, "cannot disambiguate") {
+	if !strings.Contains(out.Results[0].Error, "can't pick one") {
 		t.Fatalf("expected disambiguation error, got %q", out.Results[0].Error)
 	}
 	if len(s.patchedAttrs) != 0 {
@@ -870,7 +1049,10 @@ func TestEditAsset_AddRelation_UnknownType(t *testing.T) {
 
 func TestEditAsset_AddRelation_CoRoleDoesNotMatch(t *testing.T) {
 	s := newStub()
-	// "has synonym" is the coRole; we intentionally only match forward roles.
+	// "has synonym" is the coRole of the synonym relation, but the mock only
+	// emits a TO_TARGET entry, so no TO_SOURCE assignment exists.
+	// The coRole should not resolve — only relations with a TO_SOURCE
+	// assignment entry can be authored via their coRole.
 	out, err := runTool(t, s, edit_asset.Input{
 		AssetID: testAssetID,
 		Operations: []edit_asset.Operation{{
@@ -882,6 +1064,41 @@ func TestEditAsset_AddRelation_CoRoleDoesNotMatch(t *testing.T) {
 	}
 	if out.Status != edit_asset.StatusError {
 		t.Fatalf("expected error for coRole-only match, got %q", out.Status)
+	}
+}
+
+func TestEditAsset_AddRelation_InverseRole_FlipsSourceTarget(t *testing.T) {
+	s := newStub()
+	// Add a TO_SOURCE entry for the synonym relation, simulating the
+	// case where the edited asset is the tail (e.g. authoring "is viewed through"
+	// from a Context Note instead of "frames" from the Context Lens).
+	s.relationTypes = append(s.relationTypes, clients.EditAssetAssignmentRelationType{
+		ID:         synonymRelTypeID,
+		Role:       "is synonym of",
+		CoRole:     "has synonym",
+		SourceType: &clients.EditAssetTypeRef{ID: testAssetTypeID, Name: "Business Term"},
+		TargetType: &clients.EditAssetTypeRef{ID: testAssetTypeID, Name: "Business Term"},
+		Reversed:   true,
+	})
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddRelation, RelationType: "has synonym", TargetAssetID: targetAssetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success for inverse-role add_relation, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.createdRelations) != 1 {
+		t.Fatalf("expected one POST to /rest/2.0/relations, got %+v", s.createdRelations)
+	}
+	got := s.createdRelations[0]
+	// Source and target must be flipped: the named "target" becomes the source.
+	if got.SourceID != targetAssetID || got.TargetID != testAssetID || got.TypeID != synonymRelTypeID {
+		t.Fatalf("expected source=%s target=%s type=%s, got %+v", targetAssetID, testAssetID, synonymRelTypeID, got)
 	}
 }
 
@@ -1033,6 +1250,11 @@ func TestEditAsset_SetResponsibility_HappyPath(t *testing.T) {
 	if got.RoleID != stewardRoleID || got.OwnerID != testUserID || got.ResourceID != testAssetID {
 		t.Fatalf("unexpected responsibility payload: %+v", got)
 	}
+	// resourceType must be sent alongside resourceId, or Collibra rejects the
+	// request with a 400 (addResourceMemberIncompleteParameters).
+	if got.ResourceType != "Asset" {
+		t.Fatalf("expected resourceType %q, got %q", "Asset", got.ResourceType)
+	}
 	if out.Results[0].NewValue != testResponsibilityID {
 		t.Fatalf("expected responsibility ID in NewValue, got %q", out.Results[0].NewValue)
 	}
@@ -1070,6 +1292,110 @@ func TestEditAsset_SetResponsibility_UnknownUserName(t *testing.T) {
 	}
 	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user found") {
 		t.Fatalf("expected no-user-found error, got %+v", out)
+	}
+}
+
+// A no-match identifier must never resolve to some other account. This guards
+// the field regression where an unknown email silently bound a service account
+// because the list endpoint ignored the bogus emailAddress filter and returned
+// the first user in the directory.
+func TestEditAsset_SetResponsibility_NoMatchDoesNotBindWrongUser(t *testing.T) {
+	s := newStub()
+	s.users = append(s.users, clients.EditAssetUser{
+		ID:           "5e000000-0000-0000-0000-000000000002",
+		UserName:     "active_work_ingestion_service_account",
+		EmailAddress: "svc@example.com",
+	})
+	for _, identifier := range []string{"nobody@nowhere.com", "nobody"} {
+		s.createdResponsibilities = nil
+		out, err := runTool(t, s, edit_asset.Input{
+			AssetID: testAssetID,
+			Operations: []edit_asset.Operation{{
+				Type: edit_asset.OpSetResponsibility, Role: "Steward", UserID: identifier,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("[%s] unexpected error: %v", identifier, err)
+		}
+		if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user found") {
+			t.Fatalf("[%s] expected no-user-found error, got %+v", identifier, out)
+		}
+		if len(s.createdResponsibilities) != 0 {
+			t.Fatalf("[%s] expected no responsibility created, got %+v", identifier, s.createdResponsibilities)
+		}
+	}
+}
+
+func TestEditAsset_RemoveResponsibility_HappyPath(t *testing.T) {
+	s := newStub()
+	s.existingResponsibilities = []clients.Responsibility{{
+		ID:           testResponsibilityID,
+		Role:         &clients.ResourceRole{ID: stewardRoleID, Name: "Steward"},
+		Owner:        &clients.ResourceRef{ID: testUserID},
+		BaseResource: &clients.ResourceRef{ID: testAssetID},
+	}}
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpRemoveResponsibility, Role: "Steward", UserID: testUserID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.deletedResponsibilityIDs) != 1 || s.deletedResponsibilityIDs[0] != testResponsibilityID {
+		t.Fatalf("expected delete of %s, got %+v", testResponsibilityID, s.deletedResponsibilityIDs)
+	}
+	if out.Results[0].PreviousValue != testResponsibilityID {
+		t.Fatalf("expected removed responsibility ID in PreviousValue, got %q", out.Results[0].PreviousValue)
+	}
+}
+
+func TestEditAsset_RemoveResponsibility_NotFound(t *testing.T) {
+	s := newStub() // no existing responsibilities
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpRemoveResponsibility, Role: "Steward", UserID: testUserID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no \"Steward\" responsibility found") {
+		t.Fatalf("expected not-found error, got %+v", out)
+	}
+	if len(s.deletedResponsibilityIDs) != 0 {
+		t.Fatalf("expected no delete, got %+v", s.deletedResponsibilityIDs)
+	}
+}
+
+func TestEditAsset_RemoveResponsibility_InheritedNotRemovable(t *testing.T) {
+	s := newStub()
+	// Same role+owner, but defined on a parent (baseResource != asset) — inherited.
+	s.existingResponsibilities = []clients.Responsibility{{
+		ID:           testResponsibilityID,
+		Role:         &clients.ResourceRole{ID: stewardRoleID, Name: "Steward"},
+		Owner:        &clients.ResourceRef{ID: testUserID},
+		BaseResource: &clients.ResourceRef{ID: "00000000-0000-0000-0000-0000000000ff"},
+	}}
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpRemoveResponsibility, Role: "Steward", UserID: testUserID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "inherited") {
+		t.Fatalf("expected inherited error, got %+v", out)
+	}
+	if len(s.deletedResponsibilityIDs) != 0 {
+		t.Fatalf("expected no delete of an inherited responsibility, got %+v", s.deletedResponsibilityIDs)
 	}
 }
 

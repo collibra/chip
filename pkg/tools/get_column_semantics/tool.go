@@ -39,6 +39,7 @@ type DataAttributeSemantics struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_column_semantics",
+		Title:       "Get Column Semantics",
 		Description: "Retrieve all connected Data Attribute assets for a Column, including descriptions and related Measures and generic business assets with their descriptions.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

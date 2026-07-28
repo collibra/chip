@@ -110,7 +110,8 @@ type AttributeResult struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name: "create_asset",
+		Name:  "create_asset",
+		Title: "Create Asset",
 		Description: "Create a new Collibra asset of any type. " +
 			"Inputs accept human-friendly identifiers: assetType resolves from UUID, publicId, or display name; domain from UUID or display name; status from UUID or status name; attributes by name or typeId. " +
 			"Markdown in RICH_TEXT attribute values (e.g. 'Definition') is converted to HTML server-side so it renders correctly in Collibra. " +
@@ -156,6 +157,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		resolvedAttrs, attrOut := resolveAttributes(ctx, collibraClient, input.Attributes, ec.assignment)
 		if attrOut != nil {
 			return *attrOut, nil
+		}
+
+		if out := validateRequiredAttributes(resolvedAttrs, ec.assignment); out != nil {
+			return *out, nil
 		}
 
 		// Status resolution happens last in the pre-flight so the agent
@@ -363,6 +368,40 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 		resolved = append(resolved, entry)
 	}
 	return resolved, nil
+}
+
+// validateRequiredAttributes checks that every attribute slot required on the
+// asset type's OWN assignment has a corresponding entry in the resolved list.
+// Slots inherited from a parent asset type's assignment are skipped even when
+// required there: the parent's requirement is not part of this type's own
+// assignment in the domain, and Collibra itself would accept the create
+// (matching the Core API and the UI). Foreign parent characteristics beyond
+// the asset type's own authoritative assignment are no longer surfaced at all
+// (see reduceScopedAssignmentChain), so this gate now only distinguishes
+// genuinely-inherited slots on sentinel subtypes. Returns a validation error
+// output if any required attribute is missing.
+func validateRequiredAttributes(resolved []resolvedAttribute, assignment *clients.PrepareCreateScopedAssignment) *Output {
+	supplied := make(map[string]struct{}, len(resolved))
+	for _, r := range resolved {
+		supplied[r.Slot.AttributeTypeID] = struct{}{}
+	}
+	var missing []string
+	for _, slot := range assignment.Attributes {
+		if !slot.Required || !slot.FromOwnAssignment {
+			continue
+		}
+		if _, ok := supplied[slot.AttributeTypeID]; !ok {
+			missing = append(missing, slot.AttributeTypeName)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	return &Output{
+		Status:  StatusValidationError,
+		Message: fmt.Sprintf("Missing required attribute(s): %s. These attributes are mandatory for this asset type in this domain.", strings.Join(missing, ", ")),
+	}
 }
 
 // matchAttributeSlot picks the scoped attribute slot for an input

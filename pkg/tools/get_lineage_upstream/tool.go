@@ -18,7 +18,8 @@ type Input struct {
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageDirectionalOutput] {
 	return &chip.Tool[Input, clients.GetLineageDirectionalOutput]{
-		Name: "get_lineage_upstream",
+		Name:  "get_lineage_upstream",
+		Title: "Get Upstream Lineage",
 		Description: `WORKFLOW: Call this AFTER search_lineage_entities has given you an entity ID. This is the tool for tracing data sources.
 					  Use when the user asks: "where does this data come from?", "what are the sources for this table?", "how is this column calculated?", "what feeds into this report?".
 					  Typical workflow: (1) search_lineage_entities to find the entity ID → (2) get_lineage_upstream with that ID → (3) optionally get_lineage_entity for the most relevant source entities only.

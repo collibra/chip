@@ -25,6 +25,7 @@ type Output struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "pull_data_contract_manifest",
+		Title:       "Pull Data Contract Manifest",
 		Description: "Download the manifest file for the currently active version of a specific data contract. Returns the manifest content as a string.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

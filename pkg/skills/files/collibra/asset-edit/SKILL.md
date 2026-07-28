@@ -14,28 +14,37 @@ runs them in order.
 
 | Operation | Use for | Key fields |
 |---|---|---|
-| `update_attribute` | Change an existing attribute value (e.g. update `Definition`) | `attributeName`, `value` |
-| `add_attribute` | Append a new value to an attribute (multi-valued attributes only) | `attributeName`, `value` |
+| `set_attribute` | Set an attribute's value (e.g. `Definition`, `Note`) — creates it if empty, updates it if already set | `attributeName`, `value` |
+| `add_attribute` | Append an additional value to a multi-valued attribute | `attributeName`, `value` |
 | `remove_attribute` | Clear an attribute value | `attributeName` (optionally a specific value) |
 | `update_property` | Change asset-level properties: `name`, `displayName`, `statusId` | `field`, `value` |
 | `add_relation` | Link this asset to another by relation role (e.g. `is synonym of`) | `relationType`, target asset identifier |
 | `remove_relation` | Unlink a relation | `relationType`, target asset identifier |
 | `add_tag` | Append a free-text tag (does not replace existing tags) | `tag` |
 | `set_responsibility` | Assign a user or group to a resource role (e.g. `Steward`, `Owner`) | `role`, `userId` (UUID, username, or email) |
+| `remove_responsibility` | Unassign a user or group from a resource role | `role`, `userId` (UUID, username, or email) |
 
 ## Hard rules
 
-1. **`update_attribute` vs `add_attribute`.** `update_attribute` fails if the attribute does
-   not already exist on the asset — the error suggests calling `add_attribute` instead.
-   `add_attribute` always appends and is valid only for multi-valued attribute types.
+1. **`set_attribute` vs `add_attribute`.** Use `set_attribute` for normal single-valued
+   attributes (like `Definition`) — it creates the value if absent and updates it if present,
+   so you never need to know the current state first. `add_attribute` only appends an extra
+   value to a multi-valued attribute.
+   To see which attributes an asset can hold — including ones that are valid but currently
+   empty — call `get_asset_details` and read `assignableAttributes`. An attribute missing
+   from the asset's values but present there is settable, not invalid.
 2. **`update_property` is restricted.** Only three fields are allowed: `name`, `displayName`,
    `statusId`. Other fields return an error listing the allowed set.
 3. **`statusId` accepts names.** Pass a human-readable status name (e.g. `"Candidate"`,
    `"Accepted"`) or the UUID — chip resolves either.
-4. **`set_responsibility` accepts user identifiers in three forms.** `userId` may be a UUID,
-   a username, or an email. Chip resolves the form server-side. The same applies to
-   `relationType` targets in `add_relation` / `remove_relation`.
-5. **RICH_TEXT attribute values are Markdown.** Same rule as `create_asset` — write Markdown,
+4. **Responsibility ops accept user identifiers in three forms.** For `set_responsibility`
+   and `remove_responsibility`, `userId` may be a UUID, a username, or an email. Chip resolves
+   the form server-side. The same applies to `relationType` targets in `add_relation` /
+   `remove_relation`.
+5. **`remove_responsibility` only removes direct responsibilities.** It deletes a responsibility
+   assigned directly on the asset; one inherited from a parent domain or community can't be
+   removed here and returns an error pointing to where it's defined.
+6. **RICH_TEXT attribute values are Markdown.** Same rule as `create_asset` — write Markdown,
    chip converts to HTML. See `shared/rich-text-markdown.md` for the full rules.
 
 ## Workflow

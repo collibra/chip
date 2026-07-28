@@ -29,9 +29,10 @@ type Output struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "push_data_contract_manifest",
+		Title:       "Push Data Contract Manifest",
 		Description: "Upload a new version of a data contract manifest to Collibra. The manifestID and version are automatically parsed from the manifest content if it adheres to the Open Data Contract Standard.",
 		Handler:     handler(collibraClient),
-		Permissions:  []string{"dgc.data-contract"},
+		Permissions: []string{"dgc.data-contract"},
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(true)},
 	}
 }

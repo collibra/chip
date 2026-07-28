@@ -19,7 +19,7 @@ Reach for these tools when the user asks about **discovering, understanding, or 
 - **Technical lineage**: `search_lineage_entities` (entry point), `get_lineage_upstream` / `get_lineage_downstream` (impact analysis), `get_lineage_entity` (resolve IDs), `get_lineage_transformation` (SQL/logic), `search_lineage_transformations`. Lineage uses its own entity IDs — not DGC asset UUIDs — so always start with `search_lineage_entities` to bridge.
 - **Classification**: `search_data_class`, `search_data_classification_match`, `add_data_classification_match`, `remove_data_classification_match` (require `dgc.classify` + `dgc.catalog`).
 - **Asset writes**: `create_asset` (one smart write tool for any asset type), `prepare_create_asset` (optional read-only companion for browsing/inspection), `edit_asset` (typed operations on existing assets).
-- **Data contracts**: `list_data_contract`, `pull_data_contract_manifest`, `push_data_contract_manifest`.
+- **Data contracts**: `list_data_contract`, `init_data_contract` (create a new contract governing a Data Product Port), `pull_data_contract_manifest`, `push_data_contract_manifest` (add manifest versions to an existing contract).
 
 ## Recommended workflows
 

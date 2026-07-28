@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -178,6 +179,7 @@ func WithReplacementInstructions(text string) ServerOption {
 
 type Tool[In, Out any] struct {
 	Name        string
+	Title       string
 	Description string
 	Handler     ToolHandlerFunc[In, Out]
 	Permissions []string
@@ -202,6 +204,10 @@ func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 				slog.ErrorContext(ctx, "error while calling tool function", "error", err)
 			}
 			capturedOutput = out
+			// Make nil slices/maps marshal as []/{} so output conforms to the
+			// concrete-typed schema stripNullableTypes produces (see
+			// normalizeNilCollections).
+			normalizeNilCollections(reflect.ValueOf(&capturedOutput).Elem())
 			return nil, err
 		}
 
@@ -221,6 +227,7 @@ func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 
 	mcp.AddTool(&s.Server, &mcp.Tool{
 		Name:         tool.Name,
+		Title:        tool.Title,
 		Description:  tool.Description,
 		InputSchema:  buildSchema[In](),
 		OutputSchema: buildSchema[Out](),
@@ -237,5 +244,108 @@ func buildSchema[Schema any]() *jsonschema.Schema {
 		log.Fatalf("jsonschema.For returned nil schema for %T", *new(Schema))
 	}
 	inputSchema.AdditionalProperties = nil
+	stripNullableTypes(inputSchema)
 	return inputSchema
+}
+
+// stripNullableTypes rewrites nullable type unions (e.g. ["null","array"])
+// emitted by the reflector into a single concrete type ("array"). jsonschema.For
+// marks every nilable Go type — slices, maps, pointers — as nullable, producing
+// a `"type": ["null", T]` union. Some MCP clients (notably the Claude desktop
+// app) fail to recognise such a union as a structured type and serialise the
+// argument to a JSON string instead, which the server then rejects with
+// `has type "string", want one of "null, array"`. chip never expects an explicit
+// null — optional fields are simply omitted — so collapsing the union to its
+// concrete type is safe and makes the schema portable across clients.
+//
+// This also narrows output schemas to concrete types; normalizeNilCollections
+// is the counterpart that keeps output DATA (nil slices/maps) conforming.
+func stripNullableTypes(s *jsonschema.Schema) {
+	if s == nil {
+		return
+	}
+	if len(s.Types) > 0 {
+		filtered := slices.DeleteFunc(slices.Clone(s.Types), func(t string) bool { return t == "null" })
+		switch len(filtered) {
+		case 0:
+			// Was ["null"] only — nothing concrete to keep; leave untouched.
+		case 1:
+			s.Type, s.Types = filtered[0], nil
+		default:
+			s.Types = filtered
+		}
+	}
+
+	stripNullableTypes(s.Items)
+	stripNullableTypes(s.AdditionalProperties)
+	stripNullableTypes(s.Not)
+	for _, child := range s.Properties {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.PrefixItems {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.Defs {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.AllOf {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.AnyOf {
+		stripNullableTypes(child)
+	}
+	for _, child := range s.OneOf {
+		stripNullableTypes(child)
+	}
+}
+
+// normalizeNilCollections replaces nil slices with [] and nil maps with {} in a
+// tool's output, so the output always matches its declared schema.
+//
+// Why this is needed: chip builds every tool's schema from its Go types, and
+// stripNullableTypes describes each list/map as a plain "array"/"object" rather
+// than "this type or null". That was added so some MCP clients (e.g. Cowork)
+// would stop mis-sending list *arguments* — an input-side fix.
+//
+// The side effect: the same rule also applies to *output* schemas, which now
+// disallow null. But an unset Go slice/map serializes to null, so any tool that
+// returns no results (or returns early with an error) emits null and fails its
+// own output validation with `has type "null", want "array"`.
+//
+// The fix is to correct the data, not loosen the schema (loosening it would
+// undo the input fix). We walk the output once and turn every nil slice/map
+// into an empty one. Empty collections still satisfy `omitempty`, so optional
+// fields stay omitted and the schema clients see is unchanged. Doing it here
+// covers every tool — current and future — so no handler has to remember to
+// initialise its slices.
+func normalizeNilCollections(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			normalizeNilCollections(v.Elem())
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			if f := v.Field(i); f.CanSet() {
+				normalizeNilCollections(f)
+			}
+		}
+	case reflect.Slice:
+		if v.IsNil() {
+			if v.CanSet() {
+				v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+			}
+			return
+		}
+		for i := 0; i < v.Len(); i++ {
+			normalizeNilCollections(v.Index(i))
+		}
+	case reflect.Map:
+		if v.IsNil() && v.CanSet() {
+			v.Set(reflect.MakeMap(v.Type()))
+		}
+		// ponytail: map values returned by reflect aren't addressable, so a nil
+		// slice/map nested *inside* a map value can't be normalised in place. No
+		// tool output nests collections that way today; revisit if one does.
+	}
 }

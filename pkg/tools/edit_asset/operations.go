@@ -7,16 +7,21 @@ import (
 	"strings"
 
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/markdown"
 	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/google/uuid"
 )
 
-// --- update_attribute ---------------------------------------------------------
+// --- set_attribute ------------------------------------------------------------
 
-func validateUpdateAttribute(ec *editContext, plan opPlan) opPlan {
+// validateSetAttribute resolves whether the op creates or patches, using the
+// asset's already-fetched attribute instances — so the right write is chosen up
+// front in a single call, no matter which tool name the caller used. (Also
+// serves the deprecated update_attribute alias.)
+func validateSetAttribute(ec *editContext, plan opPlan) opPlan {
 	op := plan.op
 	if strings.TrimSpace(op.AttributeName) == "" {
-		plan.result = newErrorResult(op, "attributeName is required for update_attribute")
+		plan.result = newErrorResult(op, "attributeName is required for set_attribute")
 		return plan
 	}
 	key := normalize(op.AttributeName)
@@ -28,38 +33,53 @@ func validateUpdateAttribute(ec *editContext, plan opPlan) opPlan {
 			suggestionSuffix("Attributes", ec.availableAttributeNames(), 10)))
 		return plan
 	}
+	if err := validateAttributeValue(attrType, op.Value); err != nil {
+		plan.result = newErrorResult(op, err.Error())
+		return plan
+	}
+	plan.attributeTypeID = attrType.ID
+	plan.attributeKind = attrType.Kind
 	instances := ec.attributesByTypeName[key]
 	switch len(instances) {
 	case 0:
-		plan.result = newErrorResult(op, fmt.Sprintf("no existing %q attribute to update on this asset (use add_attribute)", op.AttributeName))
-		return plan
+		// No value yet → create. (This is the case the old update_attribute
+		// erroneously rejected, forcing the agent into a second call.)
+		plan.attrCreate = true
 	case 1:
 		plan.targetAttributeID = instances[0].ID
 		plan.previousValue = instances[0].Value
 	default:
-		plan.result = newErrorResult(op, fmt.Sprintf("%d %q attributes on this asset — cannot disambiguate by name alone", len(instances), op.AttributeName))
-		return plan
-	}
-	if err := validateAttributeValue(attrType, op.Value); err != nil {
-		plan.result = newErrorResult(op, err.Error())
+		// Multiple values means a multi-valued attribute — "set" is ambiguous.
+		plan.result = newErrorResult(op, fmt.Sprintf(
+			"%d %q values on this asset — set_attribute can't pick one; use remove_attribute then add_attribute, or edit in the UI",
+			len(instances), op.AttributeName))
 		return plan
 	}
 	plan.result = newSuccessResult(op)
 	return plan
 }
 
-func executeUpdateAttribute(ctx context.Context, client *http.Client, plan opPlan) opPlan {
-	updated, err := clients.PatchAttributeValue(ctx, client, plan.targetAttributeID, plan.op.Value)
+func executeSetAttribute(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
+	if plan.attrCreate {
+		return executeAddAttribute(ctx, client, ec, plan)
+	}
+	return patchAttribute(ctx, client, plan.targetAttributeID, plan.previousValue, plan)
+}
+
+// patchAttribute updates an existing attribute instance to plan.writeValue.
+func patchAttribute(ctx context.Context, client *http.Client, attrID, prevValue string, plan opPlan) opPlan {
+	updated, err := clients.PatchAttributeValue(ctx, client, attrID, plan.writeValue)
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
 	}
 	plan.result = OperationResult{
-		Operation:     plan.op.Type,
-		Status:        "success",
-		AttributeName: plan.op.AttributeName,
-		PreviousValue: plan.previousValue,
-		NewValue:      updated.Value,
+		Operation:             plan.op.Type,
+		Status:                "success",
+		AttributeName:         plan.op.AttributeName,
+		PreviousValue:         prevValue,
+		NewValue:              updated.Value,
+		ConvertedFromMarkdown: plan.convertedFromMarkdown,
 	}
 	return plan
 }
@@ -85,21 +105,23 @@ func validateAddAttribute(ec *editContext, plan opPlan) opPlan {
 		return plan
 	}
 	plan.attributeTypeID = attrType.ID
+	plan.attributeKind = attrType.Kind
 	plan.result = newSuccessResult(op)
 	return plan
 }
 
 func executeAddAttribute(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
-	created, err := clients.CreateAttributeOnAsset(ctx, client, ec.asset.ID, plan.attributeTypeID, plan.op.Value)
+	created, err := clients.CreateAttributeOnAsset(ctx, client, ec.asset.ID, plan.attributeTypeID, plan.writeValue)
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
 	}
 	plan.result = OperationResult{
-		Operation:     plan.op.Type,
-		Status:        "success",
-		AttributeName: plan.op.AttributeName,
-		NewValue:      created.Value,
+		Operation:             plan.op.Type,
+		Status:                "success",
+		AttributeName:         plan.op.AttributeName,
+		NewValue:              created.Value,
+		ConvertedFromMarkdown: plan.convertedFromMarkdown,
 	}
 	return plan
 }
@@ -258,10 +280,19 @@ func validateAddRelation(ec *editContext, plan opPlan) opPlan {
 	}
 	rt, ok := ec.relationTypeByRole[normalize(op.RelationType)]
 	if !ok {
+		// Check whether the name matches an inverse (CoRole) instead. If it
+		// does, we can still create the relation — just with source and target
+		// flipped. This lets an agent author from either end of a relation.
+		if rt, ok = ec.relationTypeByCoRole[normalize(op.RelationType)]; ok {
+			plan.relationTypeID = rt.ID
+			plan.relationReversed = true
+			plan.result = newSuccessResult(op)
+			return plan
+		}
 		plan.result = newErrorResult(op, fmt.Sprintf(
-			"relation type %q is not valid for asset type %q in this domain (edited asset must be the source/head; try the forward role name).%s",
+			"relation type %q is not valid for asset type %q in this domain.%s",
 			op.RelationType, ec.asset.Type.Name,
-			suggestionSuffix("Relation roles", ec.availableRelationRoles(), 10)))
+			suggestionSuffix("Relation roles", ec.availableRelationRoles(), 25)))
 		return plan
 	}
 	plan.relationTypeID = rt.ID
@@ -270,9 +301,15 @@ func validateAddRelation(ec *editContext, plan opPlan) opPlan {
 }
 
 func executeAddRelation(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
+	sourceID, targetID := ec.asset.ID, plan.op.TargetAssetID
+	if plan.relationReversed {
+		// CoRole matched: the edited asset is the tail; the "target" the caller
+		// named is actually the head.
+		sourceID, targetID = targetID, sourceID
+	}
 	created, err := clients.CreateRelation(ctx, client, clients.EditAssetCreateRelationRequest{
-		SourceID: ec.asset.ID,
-		TargetID: plan.op.TargetAssetID,
+		SourceID: sourceID,
+		TargetID: targetID,
 		TypeID:   plan.relationTypeID,
 	})
 	if err != nil {
@@ -331,14 +368,17 @@ func executeAddTag(ctx context.Context, client *http.Client, ec *editContext, pl
 
 // --- set_responsibility -------------------------------------------------------
 
-func validateSetResponsibility(ec *editContext, plan opPlan) opPlan {
+// validateResponsibilityOp validates the shared role+userId inputs for the
+// set_responsibility and remove_responsibility operations and resolves the role
+// name to its UUID. The user identifier is resolved later, at execution time.
+func validateResponsibilityOp(ec *editContext, plan opPlan) opPlan {
 	op := plan.op
 	if strings.TrimSpace(op.Role) == "" {
-		plan.result = newErrorResult(op, "role is required for set_responsibility")
+		plan.result = newErrorResult(op, fmt.Sprintf("role is required for %s", op.Type))
 		return plan
 	}
 	if strings.TrimSpace(op.UserID) == "" {
-		plan.result = newErrorResult(op, "userId is required for set_responsibility (UUID, username, or email)")
+		plan.result = newErrorResult(op, fmt.Sprintf("userId is required for %s (UUID, username, or email)", op.Type))
 		return plan
 	}
 	role, ok := ec.roleByName[normalize(op.Role)]
@@ -353,36 +393,48 @@ func validateSetResponsibility(ec *editContext, plan opPlan) opPlan {
 	return plan
 }
 
+// resolveOwnerID turns a user identifier (UUID, email, or username) into the
+// owner UUID used by responsibility writes. A UUID passes through; an email
+// goes to the exact email lookup; anything else is treated as a username.
+// Returns ("", nil) when no user matches and ("", err) on a lookup failure.
+func resolveOwnerID(ctx context.Context, client *http.Client, userID string) (string, error) {
+	if _, parseErr := uuid.Parse(userID); parseErr == nil {
+		return userID, nil
+	}
+	var (
+		user *clients.EditAssetUser
+		err  error
+	)
+	if strings.Contains(userID, "@") {
+		user, err = clients.FindUserByEmail(ctx, client, userID)
+	} else {
+		user, err = clients.FindUserByUsername(ctx, client, userID)
+	}
+	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", nil
+	}
+	return user.ID, nil
+}
+
 func executeSetResponsibility(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
-	// Resolve userId at execution time. UUIDs pass through; emails go to
-	// the email lookup; anything else is treated as a username. Failures
-	// surface as per-op errors.
-	ownerID := plan.op.UserID
-	if _, parseErr := uuid.Parse(plan.op.UserID); parseErr != nil {
-		var (
-			user *clients.EditAssetUser
-			err  error
-		)
-		if strings.Contains(plan.op.UserID, "@") {
-			user, err = clients.FindUserByEmail(ctx, client, plan.op.UserID)
-		} else {
-			user, err = clients.FindUserByUsername(ctx, client, plan.op.UserID)
-		}
-		if err != nil {
-			plan.result = newErrorResult(plan.op, fmt.Sprintf("resolving user %q: %s", plan.op.UserID, err.Error()))
-			return plan
-		}
-		if user == nil {
-			plan.result = newErrorResult(plan.op, fmt.Sprintf("no user found matching %q (try the user's username, email, or UUID)", plan.op.UserID))
-			return plan
-		}
-		ownerID = user.ID
+	ownerID, err := resolveOwnerID(ctx, client, plan.op.UserID)
+	if err != nil {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("resolving user %q: %s", plan.op.UserID, err.Error()))
+		return plan
+	}
+	if ownerID == "" {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("no user found matching %q (try the user's username, email, or UUID)", plan.op.UserID))
+		return plan
 	}
 
 	created, err := clients.CreateResponsibility(ctx, client, clients.EditAssetCreateResponsibilityRequest{
-		RoleID:     plan.roleID,
-		OwnerID:    ownerID,
-		ResourceID: ec.asset.ID,
+		RoleID:       plan.roleID,
+		OwnerID:      ownerID,
+		ResourceID:   ec.asset.ID,
+		ResourceType: "Asset",
 	})
 	if err != nil {
 		plan.result = newErrorResult(plan.op, err.Error())
@@ -394,7 +446,100 @@ func executeSetResponsibility(ctx context.Context, client *http.Client, ec *edit
 	return plan
 }
 
+func executeRemoveResponsibility(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
+	ownerID, err := resolveOwnerID(ctx, client, plan.op.UserID)
+	if err != nil {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("resolving user %q: %s", plan.op.UserID, err.Error()))
+		return plan
+	}
+	if ownerID == "" {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("no user found matching %q (try the user's username, email, or UUID)", plan.op.UserID))
+		return plan
+	}
+
+	// Find the responsibility instance for this role+owner. We delete only a
+	// responsibility defined directly on this asset; an inherited one lives on a
+	// parent domain/community and can't be removed here.
+	responsibilities, err := clients.GetResponsibilities(ctx, client, ec.asset.ID)
+	if err != nil {
+		plan.result = newErrorResult(plan.op, fmt.Sprintf("looking up responsibilities: %s", err.Error()))
+		return plan
+	}
+	var match *clients.Responsibility
+	inheritedOnly := false
+	for i := range responsibilities {
+		r := responsibilities[i]
+		if r.Role == nil || r.Role.ID != plan.roleID || r.Owner == nil || r.Owner.ID != ownerID {
+			continue
+		}
+		if r.BaseResource != nil && r.BaseResource.ID == ec.asset.ID {
+			match = &responsibilities[i]
+			break
+		}
+		inheritedOnly = true
+	}
+	if match == nil {
+		if inheritedOnly {
+			plan.result = newErrorResult(plan.op, fmt.Sprintf(
+				"the %q responsibility for %q is inherited from a parent domain or community and cannot be removed from this asset; remove it where it is defined",
+				plan.op.Role, plan.op.UserID))
+			return plan
+		}
+		plan.result = newErrorResult(plan.op, fmt.Sprintf(
+			"no %q responsibility found for %q on this asset", plan.op.Role, plan.op.UserID))
+		return plan
+	}
+
+	if err := clients.DeleteResponsibility(ctx, client, match.ID); err != nil {
+		plan.result = newErrorResult(plan.op, err.Error())
+		return plan
+	}
+	res := newSuccessResult(plan.op)
+	res.PreviousValue = match.ID
+	plan.result = res
+	return plan
+}
+
 // --- shared helpers -----------------------------------------------------------
+
+// resolveAttributeWriteValues sets the value each add/update_attribute plan will
+// submit. For string-kind attribute types it fetches the full attribute type to
+// read its stringType and, when that is RICH_TEXT, renders the supplied value
+// from Markdown to HTML — mirroring create_asset so the two tools store rich
+// text identically. Plans that failed validation or aren't attribute writes are
+// left untouched. A failed attribute-type lookup falls back to the raw value.
+func resolveAttributeWriteValues(ctx context.Context, client *http.Client, plans []opPlan) {
+	for i := range plans {
+		p := &plans[i]
+		if p.result.Status == "error" {
+			continue
+		}
+		if p.op.Type != OpSetAttribute && p.op.Type != OpUpdateAttribute && p.op.Type != OpAddAttribute {
+			continue
+		}
+		p.writeValue = p.op.Value
+		if !isStringKind(p.attributeKind) {
+			continue
+		}
+		details, err := clients.GetAttributeTypeFull(ctx, client, p.attributeTypeID)
+		if err == nil && markdown.IsRichTextStringType(details.StringType) {
+			p.writeValue = markdown.ToHTML(p.op.Value)
+			p.convertedFromMarkdown = true
+		}
+	}
+}
+
+// isStringKind covers the assignment discriminators that map to a string value
+// at the API level — the kinds where stringType (and thus RICH_TEXT-ness) is
+// meaningful. Kept in sync with create_asset's equivalent.
+func isStringKind(discriminator string) bool {
+	switch discriminator {
+	case "StringAttributeType", "ScriptAttributeType", "SingleValueListAttributeType", "MultiValueListAttributeType":
+		return true
+	default:
+		return false
+	}
+}
 
 func validateAttributeValue(attrType clients.EditAssetAssignmentAttributeType, value string) error {
 	c := attrType.Constraints

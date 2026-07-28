@@ -11,12 +11,12 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 ### Read Tools
 
 - [`check_user_data_object_access`](pkg/tools/check_user_data_object_access/) - Check whether a user has access to one or more data objects (by ID) and through which roles (access controls). Defaults to the current user
-- [`get_data_access_data_source`](pkg/tools/get_data_access_data_source/) - Fetch a Collibra Data Access data source by ID, resolving an opaque data source ID to its name, type, and description
-- [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. **Requires:** `dgc.ai-copilot`
-- [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. **Requires:** `dgc.ai-copilot`
-- [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID
+- [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
+- [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
+- [`get_asset_details`](pkg/tools/get_asset_details/) - Retrieve detailed information about specific assets by UUID, including the asset's assignable attribute schema (every attribute it can hold, including empty ones)
 - [`get_business_term_data`](pkg/tools/get_business_term_data/) - Trace a business term back to its connected physical data assets
 - [`get_column_semantics`](pkg/tools/get_column_semantics/) - Retrieve data attributes, measures, and business assets connected to a column
+- [`get_data_access_data_source`](pkg/tools/get_data_access_data_source/) - Fetch a Collibra Data Access data source by ID, resolving an opaque data source ID to its name, type, and description
 - [`get_lineage_downstream`](pkg/tools/get_lineage_downstream/) - Get downstream technical lineage (consumers) for a data entity
 - [`get_lineage_entity`](pkg/tools/get_lineage_entity/) - Get metadata about a specific entity in the technical lineage graph
 - [`get_lineage_transformation`](pkg/tools/get_lineage_transformation/) - Get details and logic of a specific data transformation
@@ -27,7 +27,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`list_data_contract`](pkg/tools/list_data_contracts/) - List data contracts with pagination
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
-- [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets
+- [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets; filters (status, community, domain, domain type, asset type, created-by) accept names or UUIDs
 - [`search_data_access_identities`](pkg/tools/search_lineage_transformations/) - Search for Data Access users (identities) by name and/or email
 - [`search_data_access_objects`](pkg/tools/search_lineage_transformations/) - Search for data objects in Collibra Data Access (tables, columns, schemas, views, and other entities tracked in registered data sources)
 - [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters. **Requires:** `dgc.data-classes-read`
@@ -41,11 +41,13 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
 - [`create_data_access_request`](pkg/tools/create_asset/) - Create a new Collibra Data Access request on behalf of one or more users for one or more data objects
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
-    - `update_attribute`, `add_attribute`, `remove_attribute` - change, append, or clear an attribute value (e.g. `Definition`, `Note`)
+    - `set_attribute`, `add_attribute`, `remove_attribute` - set an attribute value (creates if empty, updates if present), append an extra value to a multi-valued attribute, or clear one (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
     - `add_relation`, `remove_relation` - link or unlink the asset to another asset by relation role (e.g. `is synonym of`)
     - `add_tag` - append a free-text tag without replacing existing tags
     - `set_responsibility` - assign a user or group to a resource role (e.g. `Steward`, `Owner`) by username, email, or UUID
+    - `remove_responsibility` - unassign a user or group from a resource role (only directly-assigned responsibilities, not inherited ones)
+- [`init_data_contract`](pkg/tools/init_data_contract/) - Initialize a new data contract asset governing a Data Product Port, with an optional initial manifest. **Requires:** `dgc.data-contract`
 - [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract. **Requires:** `dgc.data-contract`
 - [`remove_data_classification_match`](pkg/tools/remove_data_classification_match/) - Remove a classification match. **Requires:** `dgc.classify`, `dgc.catalog`, `dgc.data-classes-edit`
 
@@ -213,6 +215,8 @@ At present, enabling and disabling at the same time is not supported.
 Some functionality ships behind an opt-in `experimental` flag. These features are off by default and may change or be removed without a deprecation cycle. Enable them via `--experimental=<name>`, the `COLLIBRA_MCP_EXPERIMENTAL` environment variable, or the `mcp.experimental` field in `mcp.yaml`. Unknown names log a warning but do not fail startup, so stale configs survive a feature being retired or renamed.
 
 ### Known experimental features
+
+- `context-specifications` — Context specification tools: `list_context_specifications`, `get_context_specification`, and the `contextSpecificationId` parameter on `get_asset_details`. These tools generate structured YAML context for assets using the Semantic Blueprint API.
 
 - `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
 

@@ -46,14 +46,16 @@ func suggestionSuffix(label string, names []string, max int) string {
 type OperationType string
 
 const (
-	OpUpdateAttribute   OperationType = "update_attribute"
-	OpAddAttribute      OperationType = "add_attribute"
-	OpRemoveAttribute   OperationType = "remove_attribute"
-	OpUpdateProperty    OperationType = "update_property"
-	OpAddRelation       OperationType = "add_relation"
-	OpRemoveRelation    OperationType = "remove_relation"
-	OpAddTag            OperationType = "add_tag"
-	OpSetResponsibility OperationType = "set_responsibility"
+	OpSetAttribute         OperationType = "set_attribute"
+	OpUpdateAttribute      OperationType = "update_attribute" // deprecated alias of set_attribute; accepted but not advertised
+	OpAddAttribute         OperationType = "add_attribute"
+	OpRemoveAttribute      OperationType = "remove_attribute"
+	OpUpdateProperty       OperationType = "update_property"
+	OpAddRelation          OperationType = "add_relation"
+	OpRemoveRelation       OperationType = "remove_relation"
+	OpAddTag               OperationType = "add_tag"
+	OpSetResponsibility    OperationType = "set_responsibility"
+	OpRemoveResponsibility OperationType = "remove_responsibility"
 )
 
 // Whitelisted fields for update_property. Keeping this narrow avoids letting
@@ -74,11 +76,11 @@ type Input struct {
 // fields are interpreted. Unused fields are ignored. Server-side validation
 // catches missing or incompatible fields and returns a per-operation error.
 type Operation struct {
-	Type OperationType `json:"type" jsonschema:"Required. One of: update_attribute, add_attribute, remove_attribute, update_property, add_relation, remove_relation. (Phase 3: add_tag, set_responsibility.)"`
+	Type OperationType `json:"type" jsonschema:"Required. One of: set_attribute, add_attribute, remove_attribute, update_property, add_relation, remove_relation, add_tag, set_responsibility, remove_responsibility."`
 
-	// Attribute ops — used by update_attribute, add_attribute, remove_attribute.
-	AttributeName string `json:"attributeName,omitempty" jsonschema:"Attribute type name (e.g. 'Definition', 'Note'). Used by update_attribute, add_attribute, remove_attribute. The server resolves this to the attribute type UUID via the asset's scoped assignment."`
-	Value         string `json:"value,omitempty" jsonschema:"New value. Used by update_attribute, add_attribute, and update_property."`
+	// Attribute ops — used by set_attribute, add_attribute, remove_attribute.
+	AttributeName string `json:"attributeName,omitempty" jsonschema:"Attribute type name (e.g. 'Definition', 'Note'). Used by set_attribute, add_attribute, remove_attribute. The server resolves this to the attribute type UUID via the asset's scoped assignment."`
+	Value         string `json:"value,omitempty" jsonschema:"New value. Used by set_attribute, add_attribute, and update_property. For RICH_TEXT attribute types (e.g. 'Definition'), supply Markdown — the server converts it to HTML before writing."`
 
 	// update_property — whitelisted fields only.
 	Field string `json:"field,omitempty" jsonschema:"For update_property: one of 'name', 'displayName', 'statusId'. When field is 'statusId', value may be either the status UUID or the status name (e.g. 'Candidate', 'Accepted'); the server resolves names automatically. When field is 'name' and the asset's current displayName equals its current name (Collibra's create-time default), displayName is also updated to the new value so the user-facing label stays in sync — set field=displayName separately if the user has already customized it differently."`
@@ -91,9 +93,9 @@ type Operation struct {
 	// Tag op — appends a tag to the asset (does not replace existing tags).
 	Tag string `json:"tag,omitempty" jsonschema:"For add_tag: a free-text tag to append to the asset (e.g. 'finance'). Existing tags are preserved."`
 
-	// Responsibility op.
-	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility: resource role name (e.g. 'Steward', 'Owner'). The server resolves this to the role UUID."`
-	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility: identifies the user (or user group) to assign to the role. Accepts a UUID, a username (e.g. 'jane.smith'), or an email address (e.g. 'jane@example.com'). Names are resolved server-side via /rest/2.0/users."`
+	// Responsibility ops — set_responsibility and remove_responsibility.
+	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility / remove_responsibility: resource role name (e.g. 'Steward', 'Owner'). The server resolves this to the role UUID. remove_responsibility deletes only a responsibility defined directly on this asset (not one inherited from a parent domain or community)."`
+	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility / remove_responsibility: identifies the user (or user group) the role is assigned to. Accepts a UUID, a username (e.g. 'jane.smith'), or an email address (e.g. 'jane@example.com'). Names are resolved server-side."`
 }
 
 // OutputStatus summarises the result of the call.
@@ -125,33 +127,39 @@ type AssetSummary struct {
 
 // OperationResult is the outcome of a single operation in the input array.
 type OperationResult struct {
-	Operation     OperationType `json:"operation"`
-	Status        string        `json:"status" jsonschema:"'success' or 'error'."`
-	AttributeName string        `json:"attributeName,omitempty"`
-	Field         string        `json:"field,omitempty"`
-	RelationType  string        `json:"relationType,omitempty"`
-	RelationID    string        `json:"relationId,omitempty"`
-	TargetAssetID string        `json:"targetAssetId,omitempty"`
-	Tag           string        `json:"tag,omitempty"`
-	Role          string        `json:"role,omitempty"`
-	UserID        string        `json:"userId,omitempty"`
-	PreviousValue       string `json:"previousValue,omitempty"`
-	NewValue            string `json:"newValue,omitempty"`
-	CascadedDisplayName bool   `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
-	Error               string `json:"error,omitempty"`
+	Operation             OperationType `json:"operation"`
+	Status                string        `json:"status" jsonschema:"'success' or 'error'."`
+	AttributeName         string        `json:"attributeName,omitempty"`
+	Field                 string        `json:"field,omitempty"`
+	RelationType          string        `json:"relationType,omitempty"`
+	RelationID            string        `json:"relationId,omitempty"`
+	TargetAssetID         string        `json:"targetAssetId,omitempty"`
+	Tag                   string        `json:"tag,omitempty"`
+	Role                  string        `json:"role,omitempty"`
+	UserID                string        `json:"userId,omitempty"`
+	PreviousValue         string        `json:"previousValue,omitempty"`
+	NewValue              string        `json:"newValue,omitempty"`
+	CascadedDisplayName   bool          `json:"cascadedDisplayName,omitempty" jsonschema:"True when update_property field=name also updated displayName because the asset's previous displayName matched its previous name (Collibra's create-time default). Only set on update_property results."`
+	ConvertedFromMarkdown bool          `json:"convertedFromMarkdown,omitempty" jsonschema:"True when the attribute value was treated as Markdown and converted to HTML before writing, because the attribute type is RICH_TEXT (e.g. 'Definition'). Only set on set_attribute / add_attribute results."`
+	Error                 string        `json:"error,omitempty"`
 }
 
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name: "edit_asset",
+		Name:  "edit_asset",
+		Title: "Edit Asset",
 		Description: "Edit an existing Collibra asset by submitting a list of typed operations against a single assetId. " +
 			"Supported operations: " +
-			"update_attribute / add_attribute / remove_attribute (change, append, or clear an attribute value such as 'Definition' or 'Note', identified by attribute type name); " +
+			"set_attribute (set an attribute's value such as 'Definition' or 'Note' by attribute type name — creates the value if the attribute is empty, updates it if it already has one, so this is the right op for normal single-valued attributes whether or not a value exists yet); " +
+			"add_attribute (append an additional value to a multi-valued attribute; for single-valued attributes prefer set_attribute); " +
+			"remove_attribute (clear an attribute value); " +
+			"for RICH_TEXT attributes like 'Definition' the value is treated as Markdown and converted to HTML before writing; " +
 			"update_property (whitelisted fields only: 'name' to rename — also updates displayName when it tracks the current name, so the user-facing label stays in sync; 'displayName' to change the display name; or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
 			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes a forward role name like 'is synonym of' plus the target assetId, remove_relation takes the relation instance UUID); " +
 			"add_tag (append a free-text tag without replacing existing tags); " +
-			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be given as a UUID, username, or email). " +
+			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be given as a UUID, username, or email); " +
+			"remove_responsibility (unassign a user or group from a resource role given the same role and user; removes only a responsibility assigned directly on the asset, not one inherited from a parent domain or community). " +
 			"Names (attribute names, relation roles, status names, resource role names, and user identifiers) are resolved server-side and matching is case- and whitespace-insensitive. " +
 			"Each operation is validated against the asset's scoped assignment before any writes; invalid ops return per-operation errors while valid siblings still apply, yielding status=success, partial_success, or error. " +
 			"On success the response includes a post-edit snapshot of the asset and per-operation before/after values.",
@@ -184,6 +192,9 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		for i, op := range input.Operations {
 			plans[i] = validateOperation(ec, op)
 		}
+		// Render RICH_TEXT attribute values from Markdown to HTML before any
+		// write, so add/update_attribute matches create_asset's behaviour.
+		resolveAttributeWriteValues(ctx, collibraClient, plans)
 		executeValidPlans(ctx, collibraClient, ec, plans)
 
 		results := make([]OperationResult, len(plans))
@@ -228,6 +239,9 @@ type editContext struct {
 	attributeTypeByName  map[string]clients.EditAssetAssignmentAttributeType
 	attributesByTypeName map[string][]clients.EditAssetAttributeInstance
 	relationTypeByRole   map[string]clients.EditAssetAssignmentRelationType
+	// relationTypeByCoRole indexes inverse (TARGET_TO_SOURCE) relation types
+	// by their CoRole name so add_relation can author from the tail asset.
+	relationTypeByCoRole map[string]clients.EditAssetAssignmentRelationType
 	// roleByName is populated only when the request contains at least one
 	// set_responsibility op, saving a GET on calls that don't need roles.
 	roleByName map[string]clients.EditAssetRole
@@ -251,18 +265,30 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		return nil, fmt.Errorf("fetching current attributes: %w", err)
 	}
 
+	// Attributes from the per-asset endpoint; relations from the type-chain walk
+	// (see the respective client functions for why they differ).
+	effective, err := clients.GetEffectiveAssignmentForAsset(ctx, client, assetID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching effective assignment: %w", err)
+	}
+
 	domain, err := clients.GetDomainDetails(ctx, client, asset.Domain.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching domain for scoped assignment: %w", err)
+		return nil, fmt.Errorf("fetching domain for relation assignment: %w", err)
 	}
 	var domainTypeID string
 	if domain.Type != nil {
 		domainTypeID = domain.Type.ID
 	}
-
-	assignment, err := clients.GetAssignmentForAssetType(ctx, client, asset.Type.ID, domainTypeID)
+	relationAssignment, err := clients.GetAssignmentForAssetType(ctx, client, asset.Type.ID, domainTypeID)
 	if err != nil {
-		return nil, fmt.Errorf("fetching scoped assignment: %w", err)
+		return nil, fmt.Errorf("fetching relation assignment: %w", err)
+	}
+
+	assignment := &clients.EditAssetAssignment{
+		AssetType:      effective.AssetType,
+		AttributeTypes: effective.AttributeTypes,
+		RelationTypes:  relationAssignment.RelationTypes,
 	}
 
 	byName := make(map[string]clients.EditAssetAssignmentAttributeType, len(assignment.AttributeTypes))
@@ -276,10 +302,17 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		attrsByTypeName[key] = append(attrsByTypeName[key], a)
 	}
 
-	relationByRole := make(map[string]clients.EditAssetAssignmentRelationType, len(assignment.RelationTypes))
+	relationByRole := make(map[string]clients.EditAssetAssignmentRelationType)
+	relationByCoRole := make(map[string]clients.EditAssetAssignmentRelationType)
 	for _, rt := range assignment.RelationTypes {
-		if rt.Role != "" {
-			relationByRole[normalize(rt.Role)] = rt
+		if rt.Reversed {
+			if rt.CoRole != "" {
+				relationByCoRole[normalize(rt.CoRole)] = rt
+			}
+		} else {
+			if rt.Role != "" {
+				relationByRole[normalize(rt.Role)] = rt
+			}
 		}
 	}
 
@@ -314,6 +347,7 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		attributeTypeByName:  byName,
 		attributesByTypeName: attrsByTypeName,
 		relationTypeByRole:   relationByRole,
+		relationTypeByCoRole: relationByCoRole,
 		roleByName:           rolesByName,
 		statusByName:         statusesByName,
 	}, nil
@@ -329,14 +363,25 @@ func (ec *editContext) availableAttributeNames() []string {
 	return names
 }
 
-// availableRelationRoles returns the forward-direction role names from
-// the assignment, for inclusion in error suggestions.
+// availableRelationRoles returns all usable role names (forward and inverse)
+// for inclusion in error suggestions, deduped — distinct relation types can
+// share a role name (e.g. "impacted by" toward different target types).
 func (ec *editContext) availableRelationRoles() []string {
+	seen := make(map[string]struct{}, len(ec.assignment.RelationTypes))
 	names := make([]string, 0, len(ec.assignment.RelationTypes))
 	for _, rt := range ec.assignment.RelationTypes {
-		if rt.Role != "" {
-			names = append(names, rt.Role)
+		name := rt.Role
+		if rt.Reversed {
+			name = rt.CoRole
 		}
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
 	}
 	return names
 }
@@ -359,11 +404,11 @@ func (ec *editContext) availableStatusNames() []string {
 	return names
 }
 
-// opsNeedRoles reports whether the request contains a set_responsibility op,
-// so newEditContext can skip the roles fetch otherwise.
+// opsNeedRoles reports whether the request contains a responsibility op, so
+// newEditContext can skip the roles fetch otherwise.
 func opsNeedRoles(ops []Operation) bool {
 	for _, op := range ops {
-		if op.Type == OpSetResponsibility {
+		if op.Type == OpSetResponsibility || op.Type == OpRemoveResponsibility {
 			return true
 		}
 	}
@@ -389,14 +434,25 @@ type opPlan struct {
 
 	// Attribute ops (resolved during validation)
 	attributeTypeID   string
+	attributeKind     string // assignment discriminator, e.g. "StringAttributeType"
 	targetAttributeID string
 	previousValue     string
+	// attrCreate is set when a set_attribute op resolves to a create (the
+	// attribute has no value yet) rather than a patch.
+	attrCreate bool
+
+	// writeValue is the attribute value actually submitted to Collibra. It
+	// defaults to op.Value but is replaced with the HTML rendering when the
+	// attribute type is RICH_TEXT (see resolveAttributeWriteValues).
+	writeValue            string
+	convertedFromMarkdown bool
 
 	// Property op (resolved during validation)
 	propertyPatch clients.EditAssetPatchRequest
 
 	// Relation ops (resolved during validation)
-	relationTypeID string
+	relationTypeID   string
+	relationReversed bool // true when add_relation matched a CoRole; flip source/target on execute
 
 	// Responsibility op (resolved during validation)
 	roleID string
@@ -438,8 +494,8 @@ func newSuccessResult(op Operation) OperationResult {
 func validateOperation(ec *editContext, op Operation) opPlan {
 	plan := opPlan{op: op}
 	switch op.Type {
-	case OpUpdateAttribute:
-		return validateUpdateAttribute(ec, plan)
+	case OpSetAttribute, OpUpdateAttribute:
+		return validateSetAttribute(ec, plan)
 	case OpAddAttribute:
 		return validateAddAttribute(ec, plan)
 	case OpRemoveAttribute:
@@ -452,8 +508,8 @@ func validateOperation(ec *editContext, op Operation) opPlan {
 		return validateRemoveRelation(plan)
 	case OpAddTag:
 		return validateAddTag(plan)
-	case OpSetResponsibility:
-		return validateSetResponsibility(ec, plan)
+	case OpSetResponsibility, OpRemoveResponsibility:
+		return validateResponsibilityOp(ec, plan)
 	default:
 		plan.result = newErrorResult(op, fmt.Sprintf("unsupported operation type %q", op.Type))
 		return plan
@@ -464,8 +520,8 @@ func validateOperation(ec *editContext, op Operation) opPlan {
 // result (previous/new values on success, error message on failure).
 func executePlan(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
 	switch plan.op.Type {
-	case OpUpdateAttribute:
-		return executeUpdateAttribute(ctx, client, plan)
+	case OpSetAttribute, OpUpdateAttribute:
+		return executeSetAttribute(ctx, client, ec, plan)
 	case OpAddAttribute:
 		return executeAddAttribute(ctx, client, ec, plan)
 	case OpRemoveAttribute:
@@ -480,6 +536,8 @@ func executePlan(ctx context.Context, client *http.Client, ec *editContext, plan
 		return executeAddTag(ctx, client, ec, plan)
 	case OpSetResponsibility:
 		return executeSetResponsibility(ctx, client, ec, plan)
+	case OpRemoveResponsibility:
+		return executeRemoveResponsibility(ctx, client, ec, plan)
 	default:
 		plan.result = newErrorResult(plan.op, fmt.Sprintf("unsupported operation type %q", plan.op.Type))
 		return plan

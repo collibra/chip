@@ -30,9 +30,9 @@ type Input struct {
 }
 
 type Output struct {
-	BusinessTermID        string                      `json:"businessTermId" jsonschema:"The Business Term asset ID."`
+	BusinessTermID        string      `json:"businessTermId" jsonschema:"The Business Term asset ID."`
 	ConnectedPhysicalData []Attribute `json:"connectedPhysicalData" jsonschema:"The data attributes with their connected columns and tables."`
-	Error                 string                      `json:"error,omitempty" jsonschema:"Error message if the operation failed."`
+	Error                 string      `json:"error,omitempty" jsonschema:"Error message if the operation failed."`
 }
 
 type Attribute struct {
@@ -46,6 +46,7 @@ type Attribute struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "get_business_term_data",
+		Title:       "Get Business Term Data",
 		Description: "Retrieve the physical data assets (Columns and Tables) associated with a Business Term via the path Business Term → Data Attribute → Column → Table.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},

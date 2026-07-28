@@ -1,6 +1,6 @@
 ---
 description: Navigator for chip's Collibra skills. Start here when unsure which skill applies.
-related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create
+related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context
 ---
 
 # Collibra skills — navigator
@@ -18,6 +18,7 @@ must be bridged to another, and which permissions are required.
 | Create any new asset (Business Term, Table, Column, KPI, …) | `collibra/asset-create` |
 | Modify an existing asset's attributes, relations, tags, status, or owners | `collibra/asset-edit` |
 | Register a table (and its dimension tables) as a Collibra Data Product with ports | `collibra/data-product-create` |
+| Generate governed YAML context (semantic blueprints, metric definitions) for an asset | `collibra/context` |
 
 If a task is a single tool call with no chaining (e.g. `get_asset_details` by UUID,
 `list_asset_types`, `pull_data_contract_manifest`), no skill is needed — the tool's own

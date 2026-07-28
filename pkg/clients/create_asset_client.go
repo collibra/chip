@@ -60,10 +60,38 @@ type CreateAttributeRequest struct {
 
 // CreateAttributeResponse is the response from POST /rest/2.0/attributes.
 type CreateAttributeResponse struct {
-	ID    string                    `json:"id"`
-	Type  CreateAttributeTypeRef    `json:"type"`
-	Asset CreateAttributeAssetRef   `json:"asset"`
-	Value string                    `json:"value"`
+	ID    string                  `json:"id"`
+	Type  CreateAttributeTypeRef  `json:"type"`
+	Asset CreateAttributeAssetRef `json:"asset"`
+	Value string                  `json:"value"`
+}
+
+// UnmarshalJSON tolerates `value` fields returned as JSON numbers, booleans,
+// or null. Collibra emits the field typed by the attribute kind
+// (NumericAttributeType → number, BooleanAttributeType → bool, etc.), so a
+// strict string decode fails even though the write succeeded.
+func (r *CreateAttributeResponse) UnmarshalJSON(data []byte) error {
+	type alias CreateAttributeResponse
+	aux := struct {
+		*alias
+		Value json.RawMessage `json:"value"`
+	}{alias: (*alias)(r)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	switch {
+	case len(aux.Value) == 0, string(aux.Value) == "null":
+		r.Value = ""
+	case aux.Value[0] == '"':
+		var s string
+		if err := json.Unmarshal(aux.Value, &s); err != nil {
+			return err
+		}
+		r.Value = s
+	default:
+		r.Value = string(aux.Value)
+	}
+	return nil
 }
 
 // CreateAttributeTypeRef is a reference to an attribute type.

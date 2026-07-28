@@ -16,6 +16,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
+	"github.com/collibra/chip/pkg/tools/get_context_specification"
 	"github.com/collibra/chip/pkg/tools/get_data_access_data_source"
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
@@ -24,7 +25,9 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_lineage_upstream"
 	"github.com/collibra/chip/pkg/tools/get_measure_data"
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
+	"github.com/collibra/chip/pkg/tools/init_data_contract"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
+	"github.com/collibra/chip/pkg/tools/list_context_specifications"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
@@ -39,6 +42,10 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 )
 
+// ContextSpecificationsFeature is the experimental-feature identifier used to
+// gate the context specification tools.
+const ContextSpecificationsFeature = "context-specifications"
+
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
 // instead of the standard DGC API.
@@ -50,7 +57,7 @@ var CopilotToolNames = []string{
 func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) error {
 	toolRegister(server, toolConfig, discover_data_assets.NewTool(client))
 	toolRegister(server, toolConfig, discover_business_glossary.NewTool(client))
-	toolRegister(server, toolConfig, get_asset_details.NewTool(client))
+	toolRegister(server, toolConfig, get_asset_details.NewTool(client, toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature)))
 	toolRegister(server, toolConfig, search_asset_keyword.NewTool(client))
 	toolRegister(server, toolConfig, search_data_classes.NewTool(client))
 	toolRegister(server, toolConfig, list_asset_types.NewTool(client))
@@ -58,6 +65,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, search_data_classification_matches.NewTool(client))
 	toolRegister(server, toolConfig, remove_data_classification_match.NewTool(client))
 	toolRegister(server, toolConfig, list_data_contracts.NewTool(client))
+	toolRegister(server, toolConfig, init_data_contract.NewTool(client))
 	toolRegister(server, toolConfig, push_data_contract_manifest.NewTool(client))
 	toolRegister(server, toolConfig, pull_data_contract_manifest.NewTool(client))
 	toolRegister(server, toolConfig, get_business_term_data.NewTool(client))
@@ -78,6 +86,10 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, create_data_access_request.NewTool(client))
 	toolRegister(server, toolConfig, check_user_data_object_access.NewTool(client))
 	toolRegister(server, toolConfig, get_data_access_data_source.NewTool(client))
+	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
+		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
+		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
+	}
 
 	if toolConfig.EnableDebugTools {
 		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))

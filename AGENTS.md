@@ -4,7 +4,7 @@
 
 
 # PR creation instructions
-- When generating commit messages, always start the PR message with the Jira ticket reference (e.g. DEV-146292) as part of the branch name. Keep the commit message short and professional one-liner.
+- Keep the commit message short and professional one-liner.
 - Use the github CLI to create the PR. The details of the `gh pr create` command are available below.
 - To find out what are the changes and generate the PR details, you must compare the current branch with the main branch.
 - Any local changes that are not committed to the branch should be ignored.
@@ -19,12 +19,6 @@ Please include a short summary of the changes and any relevant
 motivation and context. List any dependencies that are required
 for this change (i.e. Depends on merge of PR in another repo).
 -->
-
----
-
-### JIRA reference
-
-<!-- DEV-123 etc. -->
 
 ---
 

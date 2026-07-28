@@ -34,8 +34,8 @@ func main() {
 		EnabledTools:     config.Mcp.EnabledTools,
 		DisabledTools:    config.Mcp.DisabledTools,
 		EnableDebugTools: config.Mcp.EnableDebugTools,
-		Experimental:  config.Mcp.Experimental,
-		SkillsDir:     config.Mcp.SkillsDir,
+		Experimental:     config.Mcp.Experimental,
+		SkillsDir:        config.Mcp.SkillsDir,
 	}
 
 	serverOpts := []chip.ServerOption{
@@ -44,6 +44,9 @@ func main() {
 	if skills.Enabled(toolConfig) {
 		slog.Info("Experimental feature enabled: skills")
 		serverOpts = append(serverOpts, chip.WithReplacementInstructions(skills.Instructions))
+	}
+	if toolConfig.IsExperimentalEnabled(tools.ContextSpecificationsFeature) {
+		slog.Info("Experimental feature enabled: context-specifications")
 	}
 	server := chip.NewServer(serverOpts...)
 
