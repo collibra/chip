@@ -7,6 +7,12 @@ on:
     branches:
       - main
   workflow_call:
+    inputs:
+      ref:
+        description: 'Ref to build (defaults to the triggering ref)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build:
@@ -14,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup Go
