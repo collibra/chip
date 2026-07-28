@@ -215,13 +215,6 @@ jobs:
             --head auto-bump-chip-${TAG})
 
           gh pr merge --auto --merge "${PR_URL}"
-          echo "PR_URL=${PR_URL}" >> $GITHUB_ENV
-
-      - name: Auto review with collibra-cicd-auto-merge account
-        if: ${{ secrets.COLLIBRA_GITHUB_CHIP_AUTOMERGE_TOKEN != '' }} # Skipped until the secret is configured
-        env:
-          GH_TOKEN: ${{ secrets.COLLIBRA_GITHUB_CHIP_AUTOMERGE_TOKEN }} # Different account - can not approve own pull request
-        run: gh pr review "${PR_URL}" --approve -b "Automated review for chip dependency bump on release"
 
   bump-version:
     needs: [version, release]
@@ -276,10 +269,3 @@ jobs:
             --head chore/bump-${NEXT})
 
           gh pr merge --auto --merge "${PR_URL}"
-          echo "PR_URL=${PR_URL}" >> $GITHUB_ENV
-
-      - name: Auto review with collibra-cicd-auto-merge account
-        if: ${{ secrets.COLLIBRA_GITHUB_CHIP_AUTOMERGE_TOKEN != '' }} # Skipped until the secret is configured
-        env:
-          GH_TOKEN: ${{ secrets.COLLIBRA_GITHUB_CHIP_AUTOMERGE_TOKEN }} # Different account - can not approve own pull request
-        run: gh pr review "${PR_URL}" --approve -b "Automated review for post-release version bump"
