@@ -47,14 +47,21 @@ type mockDGC struct {
 	createdAttributes []clients.CreateAttributeRequest
 
 	// Overrides — when set, replace the corresponding default behavior.
-	assetTypeByName map[string][]assetTypeRow // case-insensitive prefix as Collibra returns it
-	domainByName    map[string][]domainRow    // case-insensitive prefix
-	dupResults      []asssetSearchRow
-	defStringType   string // value to return on /attributeTypes/{def}; default "RICH_TEXT"
-	noteStringType  string // value to return on /attributeTypes/{note}; default "PLAIN_TEXT"
-	createAssetCode int    // override status; default 201
-	createAttrCode  int    // override status; default 201
-	noAssignments   bool   // /assignments/assetType/{id} returns [] (e.g. subtype with inherited assignments)
+	assetTypeByName  map[string][]assetTypeRow // case-insensitive prefix as Collibra returns it
+	domainByName     map[string][]domainRow    // case-insensitive prefix
+	dupResults       []asssetSearchRow
+	defStringType    string // value to return on /attributeTypes/{def}; default "RICH_TEXT"
+	noteStringType   string // value to return on /attributeTypes/{note}; default "PLAIN_TEXT"
+	createAssetCode  int    // override status; default 201
+	createAttrCode   int    // override status; default 201
+	noAssignments    bool   // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
+	emptyDomainTypes bool   // the default assignment lists empty domainTypes (creatable nowhere, sub-case b)
+	domainTypeOther  bool   // the glossary domain resolves to a non-Glossary type, so the assignment doesn't govern it (not-here)
+
+	extraAssignments []map[string]any
+
+	traitInheritances         []map[string]any
+	ancestorTraitInheritances []map[string]any
 }
 
 type assetTypeRow struct {
@@ -122,6 +129,11 @@ func (m *mockDGC) server() *httptest.Server {
 		writeJSON(w, http.StatusOK, map[string]any{"results": results, "total": len(results)})
 	})
 
+	glossaryDomainType := &clients.PrepareCreateDomainType{ID: glossaryTypeID, Name: glossaryTypeName}
+	if m.domainTypeOther {
+		glossaryDomainType = &clients.PrepareCreateDomainType{ID: "00000000-0000-0000-0000-000000010099", Name: "Other Domain Type"}
+	}
+
 	// /domains/{id}
 	mux.HandleFunc("GET /rest/2.0/domains/", func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/domains/")
@@ -129,7 +141,7 @@ func (m *mockDGC) server() *httptest.Server {
 			writeJSON(w, http.StatusOK, domainRow{
 				ID:   glossaryDomainID,
 				Name: glossaryDomain,
-				Type: &clients.PrepareCreateDomainType{ID: glossaryTypeID, Name: glossaryTypeName},
+				Type: glossaryDomainType,
 			})
 			return
 		}
@@ -144,7 +156,7 @@ func (m *mockDGC) server() *httptest.Server {
 			if rows, ok := m.domainByName[strings.ToLower(name)]; ok {
 				results = rows
 			} else if strings.EqualFold(name, glossaryDomain) {
-				results = []domainRow{{ID: glossaryDomainID, Name: glossaryDomain, Type: &clients.PrepareCreateDomainType{ID: glossaryTypeID, Name: glossaryTypeName}}}
+				results = []domainRow{{ID: glossaryDomainID, Name: glossaryDomain, Type: glossaryDomainType}}
 			}
 		} else {
 			results = []domainRow{
@@ -162,33 +174,41 @@ func (m *mockDGC) server() *httptest.Server {
 			writeJSON(w, http.StatusOK, []any{})
 			return
 		}
-		writeJSON(w, http.StatusOK, []map[string]any{
-			{
-				"id": "assignment-bt",
-				"domainTypes": []map[string]string{
-					{"id": glossaryTypeID, "name": glossaryTypeName},
-				},
-				"assignedCharacteristicTypeReferences": []map[string]any{
-					{
-						"id": "ref-def",
-						"assignedResourceReference": map[string]string{
-							"id": defAttrID, "name": defAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
-						},
-						"assignedResourcePublicId": defAttrPublicID,
-						"minimumOccurrences":       1,
+		domainTypes := []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}}
+		if m.emptyDomainTypes {
+			domainTypes = []map[string]string{}
+		}
+		assignment := map[string]any{
+			"id":          "assignment-bt",
+			"domainTypes": domainTypes,
+			"assignedCharacteristicTypeReferences": []map[string]any{
+				{
+					"id": "ref-def",
+					"assignedResourceReference": map[string]string{
+						"id": defAttrID, "name": defAttrName, "resourceDiscriminator": "StringAttributeType",
 					},
-					{
-						"id": "ref-note",
-						"assignedResourceReference": map[string]string{
-							"id": noteAttrID, "name": noteAttrName, "resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
-						},
-						"assignedResourcePublicId": "Note",
-						"minimumOccurrences":       0,
-					},
+					"assignedResourcePublicId": defAttrPublicID,
+					"minimumOccurrences":       1,
 				},
-				"characteristicTypes": []any{},
+				{
+					"id": "ref-note",
+					"assignedResourceReference": map[string]string{
+						"id": noteAttrID, "name": noteAttrName, "resourceDiscriminator": "StringAttributeType",
+					},
+					"assignedResourcePublicId": "Note",
+					"minimumOccurrences":       0,
+				},
 			},
-		})
+		}
+		if len(m.traitInheritances) > 0 {
+			assignment["traitAssignmentInheritances"] = m.traitInheritances
+		}
+		if len(m.ancestorTraitInheritances) > 0 {
+			assignment["assignmentInheritances"] = m.ancestorTraitInheritances
+		}
+		payload := []map[string]any{assignment}
+		payload = append(payload, m.extraAssignments...)
+		writeJSON(w, http.StatusOK, payload)
 	})
 
 	// /attributeTypes/{id} — used to pull stringType for RICH_TEXT detection
@@ -587,10 +607,10 @@ func TestCreateAsset_AttributeFailure_PreservesAssetSuccess(t *testing.T) {
 	}
 }
 
-func TestCreateAsset_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *testing.T) {
+func TestCreateAsset_NoAssignmentAnywhere_NowhereBranch(t *testing.T) {
 	m := newMockDGC(t)
 	m.noAssignments = true
-	c, _ := newClient(t, m)
+	c, m := newClient(t, m)
 
 	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
 		Name:      "Test",
@@ -600,8 +620,73 @@ func TestCreateAsset_AssetTypeWithNoAssignments_ReturnsNoCompatibleDomains(t *te
 	if out.Status != create_asset.StatusValidationError {
 		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
 	}
-	if !strings.Contains(out.Message, "No compatible domains") {
-		t.Errorf("expected factual no-compatible-domains message, got %q", out.Message)
+	if !strings.Contains(out.Message, "can't be created in any domain") {
+		t.Errorf("expected nowhere-branch message, got %q", out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted when the type is not creatable, got %d", len(m.createdAssets))
+	}
+}
+
+func TestCreateAsset_AllEmptyDomainTypes_NowhereBranch(t *testing.T) {
+	m := newMockDGC(t)
+	m.emptyDomainTypes = true
+	c, m := newClient(t, m)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:      "Test",
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, "can't be created in any domain") {
+		t.Errorf("expected nowhere-branch message, got %q", out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted, got %d", len(m.createdAssets))
+	}
+}
+
+func TestCreateAsset_BothNowhereSubcases_IdenticalMessage(t *testing.T) {
+	run := func(configure func(*mockDGC)) string {
+		m := newMockDGC(t)
+		configure(m)
+		c, _ := newClient(t, m)
+		out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+			Name: "Test", AssetType: btTypeName, Domain: glossaryDomain,
+		})
+		return out.Message
+	}
+	noAssignment := run(func(m *mockDGC) { m.noAssignments = true })
+	allEmpty := run(func(m *mockDGC) { m.emptyDomainTypes = true })
+	if noAssignment != allEmpty {
+		t.Errorf("nowhere sub-cases must produce identical messages:\n  no-assignment: %q\n  all-empty:     %q", noAssignment, allEmpty)
+	}
+}
+
+func TestCreateAsset_NotHereBranch_NoCreate(t *testing.T) {
+	m := newMockDGC(t)
+	m.domainTypeOther = true
+	c, m := newClient(t, m)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:      "Customer",
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, "isn't allowed in domain") {
+		t.Errorf("expected not-here-branch message, got %q", out.Message)
+	}
+	if !strings.Contains(out.Message, "Pick a different asset type, or a different domain") {
+		t.Errorf("expected not-here recovery hint, got %q", out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted for a not-allowed type, got %d", len(m.createdAssets))
 	}
 }
 
@@ -611,13 +696,6 @@ const (
 	acronymTypePublicID = "Acronym"
 )
 
-// newAcronymSubtypeClient boots a mock DGC for the Acronym → BusinessTerm
-// subtype world: Acronym's own assignment has empty domainTypes
-// (inherit-sentinel), no attributes, and one extra relation ("has acronym");
-// the parent BusinessTerm assignment has the explicit Glossary domain type
-// and the required (min:1) Definition attribute. We mock both nodes to
-// mirror the live shape. Shared by the subtype-union and
-// parent-required-attribute tests.
 func newAcronymSubtypeClient(t *testing.T) *http.Client {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /rest/2.0/assetTypes/", func(w http.ResponseWriter, r *http.Request) {
@@ -667,27 +745,11 @@ func newAcronymSubtypeClient(t *testing.T) *http.Client {
 			},
 		}, "total": 1})
 	})
-	// Acronym's own assignment: empty domainTypes, one extra relation slot.
-	// BusinessTerm's assignment: explicit Glossary domainType, the canonical
-	// "Definition" attribute. The chain reducer should union both.
 	mux.HandleFunc("GET /rest/2.0/assignments/assetType/", func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/assignments/assetType/")
 		switch id {
 		case acronymTypeID:
-			writeJSON(w, http.StatusOK, []map[string]any{{
-				"id":          "asgn-acronym",
-				"domainTypes": []any{},
-				"assignedCharacteristicTypeReferences": []map[string]any{
-					{
-						"id": "ref-has-acronym",
-						"assignedResourceReference": map[string]string{
-							"id": "00000000-0000-0000-0000-00000000aaaa", "name": "has acronym",
-							"resourceType": "RelationType", "resourceDiscriminator": "RelationType",
-						},
-					},
-				},
-				"characteristicTypes": []any{},
-			}})
+			writeJSON(w, http.StatusOK, []any{})
 		case btTypeID:
 			writeJSON(w, http.StatusOK, []map[string]any{{
 				"id":          "asgn-bt",
@@ -697,13 +759,12 @@ func newAcronymSubtypeClient(t *testing.T) *http.Client {
 						"id": "ref-def",
 						"assignedResourceReference": map[string]string{
 							"id": defAttrID, "name": defAttrName,
-							"resourceType": "StringAttributeType", "resourceDiscriminator": "StringAttributeType",
+							"resourceDiscriminator": "StringAttributeType",
 						},
 						"assignedResourcePublicId": "Definition",
 						"minimumOccurrences":       1,
 					},
 				},
-				"characteristicTypes": []any{},
 			}})
 		default:
 			writeJSON(w, http.StatusOK, []any{})
@@ -757,8 +818,6 @@ func newAcronymSubtypeClient(t *testing.T) *http.Client {
 	return testutil.NewClient(srv)
 }
 
-// Resolving Acronym + Glossary should walk the parent chain, find Glossary
-// in BusinessTerm's allowed types, and union the characteristics.
 func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 	c := newAcronymSubtypeClient(t)
 
@@ -774,31 +833,26 @@ func TestCreateAsset_Subtype_InheritsParentDomainTypes(t *testing.T) {
 		t.Fatalf("subtype Acronym in Glossary should succeed via parent walk, got status=%q msg=%q", out.Status, out.Message)
 	}
 	if len(out.AttributeResults) != 1 || out.AttributeResults[0].Status != "success" {
-		t.Errorf("expected the parent's Definition attribute to resolve via union, got %#v", out.AttributeResults)
+		t.Errorf("expected the ancestor's Definition attribute to resolve via walk-up, got %#v", out.AttributeResults)
 	}
 }
 
-// An attribute required only on a PARENT asset type's assignment must not
-// block the create: Definition is required (min:1) on
-// BusinessTerm, but Acronym's own assignment doesn't list it, so creating
-// an Acronym without it succeeds — matching the Core API and the UI.
-func TestCreateAsset_ParentRequiredAttribute_DoesNotBlockCreate(t *testing.T) {
+func TestCreateAsset_WalkUpAncestorRequiredAttribute_BlocksCreate(t *testing.T) {
 	c := newAcronymSubtypeClient(t)
 
 	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
 		Name:      "MRR",
 		AssetType: acronymTypeName,
 		Domain:    glossaryDomain,
-		// No attributes: the parent's required Definition is omitted.
 	})
-	if out.Status != create_asset.StatusSuccess {
-		t.Fatalf("parent-required attribute must not block create, got %q (%s)", out.Status, out.Message)
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("walk-up ancestor required attribute must block create, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, defAttrName) {
+		t.Errorf("expected missing attribute name %q in message, got %q", defAttrName, out.Message)
 	}
 }
 
-// Definition is required (min:1) on BusinessTerm's OWN assignment, so the
-// gate applies. Contrast with TestCreateAsset_ParentRequiredAttribute_
-// DoesNotBlockCreate, where the requirement lives on a parent type only.
 func TestCreateAsset_MissingRequiredAttribute_ReturnsValidationError(t *testing.T) {
 	c, _ := newClient(t, newMockDGC(t))
 	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
@@ -812,6 +866,75 @@ func TestCreateAsset_MissingRequiredAttribute_ReturnsValidationError(t *testing.
 	}
 	if !strings.Contains(out.Message, "Definition") {
 		t.Errorf("expected missing attribute name in message, got %q", out.Message)
+	}
+}
+
+const (
+	traitAttrID   = "00000000-0000-0000-0000-000000000440"
+	traitAttrName = "Steward"
+)
+
+func traitRequiredAttrRefs() []map[string]any {
+	return []map[string]any{
+		{
+			"id": "ref-trait-steward",
+			"assignedResourceReference": map[string]string{
+				"id": traitAttrID, "name": traitAttrName,
+				"resourceDiscriminator": "StringAttributeType",
+			},
+			"assignedResourcePublicId": "Steward",
+			"minimumOccurrences":       1,
+		},
+	}
+}
+
+func TestCreateAsset_DirectTraitRequiredAttribute_BlocksCreate(t *testing.T) {
+	m := newMockDGC(t)
+	m.traitInheritances = []map[string]any{{
+		"assignedCharacteristicTypeReferences": traitRequiredAttrRefs(),
+	}}
+	c, m := newClient(t, m)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:       "Customer",
+		AssetType:  btTypeName,
+		Domain:     glossaryDomain,
+		Attributes: []create_asset.InputAttribute{{Name: defAttrName, Value: "A buyer."}},
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("direct-Trait required attribute must block create, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, traitAttrName) {
+		t.Errorf("expected missing Trait attribute name %q in message, got %q", traitAttrName, out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted when a required attribute is missing, got %d", len(m.createdAssets))
+	}
+}
+
+func TestCreateAsset_IndirectTraitRequiredAttribute_BlocksCreate(t *testing.T) {
+	m := newMockDGC(t)
+	m.ancestorTraitInheritances = []map[string]any{{
+		"traitAssignmentInheritances": []map[string]any{{
+			"assignedCharacteristicTypeReferences": traitRequiredAttrRefs(),
+		}},
+	}}
+	c, m := newClient(t, m)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:       "Customer",
+		AssetType:  btTypeName,
+		Domain:     glossaryDomain,
+		Attributes: []create_asset.InputAttribute{{Name: defAttrName, Value: "A buyer."}},
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("indirect-Trait required attribute must block create, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, traitAttrName) {
+		t.Errorf("expected missing Trait attribute name %q in message, got %q", traitAttrName, out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted when a required attribute is missing, got %d", len(m.createdAssets))
 	}
 }
 
@@ -830,5 +953,133 @@ func TestCreateAsset_RequiredFieldsMissing(t *testing.T) {
 		if out.Status != create_asset.StatusValidationError {
 			t.Errorf("[%d] want validation_error for %#v, got %q", i, in, out.Status)
 		}
+	}
+}
+
+func TestCreateAsset_ScopedAssignmentElsewhere_DoesNotBlockCreate(t *testing.T) {
+	m := newMockDGC(t)
+	m.extraAssignments = []map[string]any{{
+		"id": "assignment-pricebooks",
+		"domainTypes": []map[string]string{
+			{"id": glossaryTypeID, "name": glossaryTypeName},
+		},
+		"scope": map[string]any{
+			"id":   "00000000-0000-0000-0000-000000077001",
+			"name": "Pricebooks",
+			"domains": []map[string]string{
+				{"id": "00000000-0000-0000-0000-000000099777", "name": "Pricebook 4"},
+			},
+		},
+		"assignedCharacteristicTypeReferences": []map[string]any{
+			{
+				"id": "ref-pb-premier",
+				"assignedResourceReference": map[string]string{
+					"id":                    "00000000-0000-0000-0000-000000000777",
+					"name":                  "Pricebook 4 - Premier Package",
+					"resourceDiscriminator": "StringAttributeType",
+				},
+				"assignedResourcePublicId": "Pricebook4PremierPackage",
+				"minimumOccurrences":       1,
+			},
+		},
+	}}
+	c, m := newClient(t, m)
+
+	out, err := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:       "Business Associate Agreement",
+		AssetType:  btTypeName,
+		Domain:     glossaryDomain,
+		Attributes: []create_asset.InputAttribute{{Name: defAttrName, Value: "A legally binding contract."}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != create_asset.StatusSuccess {
+		t.Fatalf("scoped assignment covering another domain must not block the create, got %q (%s)", out.Status, out.Message)
+	}
+	if len(m.createdAssets) != 1 {
+		t.Fatalf("expected 1 POST /assets, got %d", len(m.createdAssets))
+	}
+}
+
+func TestCreateAsset_OwnLevelDoesNotGovernTarget_RefusedNotClimbed(t *testing.T) {
+	const otherTypeID = "00000000-0000-0000-0000-0000000100aa"
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assetTypes/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/rest/2.0/assetTypes/")
+		switch path {
+		case "publicId/" + acronymTypePublicID, acronymTypeID:
+			writeJSON(w, http.StatusOK, map[string]any{
+				"id": acronymTypeID, "publicId": acronymTypePublicID, "name": acronymTypeName,
+				"parent": map[string]any{"id": btTypeID, "name": btTypeName},
+			})
+		case "publicId/" + btTypePublicID, btTypeID:
+			writeJSON(w, http.StatusOK, map[string]any{"id": btTypeID, "publicId": btTypePublicID, "name": btTypeName})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	mux.HandleFunc("GET /rest/2.0/assetTypes", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}, "total": 0})
+	})
+	mux.HandleFunc("GET /rest/2.0/domains/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/domains/")
+		if id == glossaryDomainID {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"id": glossaryDomainID, "name": glossaryDomain,
+				"type": map[string]string{"id": glossaryTypeID, "name": glossaryTypeName},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	})
+	mux.HandleFunc("GET /rest/2.0/domains", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{
+			map[string]any{"id": glossaryDomainID, "name": glossaryDomain,
+				"type": map[string]string{"id": glossaryTypeID, "name": glossaryTypeName}},
+		}, "total": 1})
+	})
+	mux.HandleFunc("GET /rest/2.0/assignments/assetType/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/assignments/assetType/")
+		switch id {
+		case acronymTypeID:
+			writeJSON(w, http.StatusOK, []map[string]any{{
+				"id":          "asgn-acronym-own",
+				"domainTypes": []map[string]string{{"id": otherTypeID, "name": "Other Domain Type"}},
+			}})
+		case btTypeID:
+			writeJSON(w, http.StatusOK, []map[string]any{{
+				"id":          "asgn-bt",
+				"domainTypes": []map[string]string{{"id": glossaryTypeID, "name": glossaryTypeName}},
+			}})
+		default:
+			writeJSON(w, http.StatusOK, []any{})
+		}
+	})
+	created := 0
+	mux.HandleFunc("/rest/2.0/assets", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			created++
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}, "total": 0})
+	})
+	mux.HandleFunc("GET /rest/2.0/statuses", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}, "total": 0})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	c := testutil.NewClient(srv)
+
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name: "MRR", AssetType: acronymTypeName, Domain: glossaryDomain,
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("create must be refused on the own level's coverage, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, "isn't allowed in domain") {
+		t.Errorf("expected not-here-branch message, got %q", out.Message)
+	}
+	if created != 0 {
+		t.Errorf("no create must be attempted; the ancestor's Glossary assignment must NOT be climbed to, got %d creates", created)
 	}
 }

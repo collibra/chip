@@ -11,6 +11,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/check_user_data_object_access"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_data_access_request"
+	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_assessment"
@@ -57,6 +58,11 @@ var CopilotToolNames = []string{
 	"discover_business_glossary",
 }
 
+// DataQualityFeatureName gates the create_data_quality_job tool (discovery + preview + create in one)
+// behind --experimental. It WRITES to Collibra (creates and queues jobs), so it stays opt-in — like the
+// Data Product skills — until it graduates. Off by default.
+const DataQualityFeatureName = "data-quality"
+
 func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.ServerToolConfig) error {
 	toolRegister(server, toolConfig, discover_data_assets.NewTool(client))
 	toolRegister(server, toolConfig, discover_business_glossary.NewTool(client))
@@ -95,6 +101,9 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
+	}
+	if toolConfig.IsExperimentalEnabled(DataQualityFeatureName) {
+		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
 	}
 
 	if toolConfig.EnableDebugTools {

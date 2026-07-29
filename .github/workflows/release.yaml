@@ -1,16 +1,36 @@
 name: release
-run-name: release - ${{github.event.pull_request.title || github.event.head_commit.message || github.head_ref || github.ref}}
+run-name: release - ${{ inputs.tag }} - triggered by ${{ github.actor }}
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g. v0.0.45)'
+        required: true
+        type: string
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Verify tag exists
+        run: |
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${{ inputs.tag }}" > /dev/null; then
+            echo "ERROR: Tag ${{ inputs.tag }} does not exist"
+            exit 1
+          fi
+
   build:
+    needs: validate
     uses: ./.github/workflows/build.yaml
+    with:
+      ref: ${{ inputs.tag }}
+
   release:
-    needs: build
+    needs: [validate, build]
     runs-on:
       - runs-on
       - run-id=${{ github.run_id }}
@@ -24,6 +44,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       - name: Setup Go
@@ -36,7 +57,7 @@ jobs:
 
       - name: Set version
         run: |
-          VERSION=${{ github.ref_name }}
+          VERSION=${{ inputs.tag }}
           VERSION=${VERSION#v}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
@@ -112,7 +133,7 @@ jobs:
           version: latest
           args: release --clean --verbose
         env:
-          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JSIGN_JAR_PATH: ${{ env.JSIGN_JAR_PATH }}
           CODE_SIGNING_CERT_CHAIN_FILE: ${{ env.CODE_SIGNING_CERT_CHAIN_FILE }}
@@ -124,4 +145,3 @@ jobs:
         run: |
           rm -rf /tmp/chip-signing ~/.aws
           echo "Cleanup completed"
-

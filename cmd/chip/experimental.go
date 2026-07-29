@@ -19,6 +19,7 @@ import (
 var knownExperimentalFeatures = map[string]string{
 	skills.FeatureName:                 "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
 	tools.ContextSpecificationsFeature: "Context specification tools: list_context_specifications, get_context_specification, and contextSpecificationId parameter on get_asset_details.",
+	tools.DataQualityFeatureName:       "Data Quality job tool (create_data_quality_job: discovery + preview + create in one) that creates and queues DQ jobs.",
 }
 
 // validateExperimental warns (without exiting) when the user enabled an

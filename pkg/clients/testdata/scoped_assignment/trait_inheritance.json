@@ -1,0 +1,47 @@
+{
+  "description": "Trait merging, closest wins. The direct Trait adds Trait Attr and a relation. The ancestor Trait adds Ancestor Attr and a relation. Shared is on the own assignment (min 2) and on the direct Trait (min 1): the own slot wins whole. Shared 2 is on the direct Trait (min 3) and on the ancestor Trait (min 1): the direct Trait wins.",
+  "assetTypes": [
+    { "id": "03000000-0000-0000-0000-000000000001", "name": "Business Term" }
+  ],
+  "domainTypes": [
+    { "id": "04000000-0000-0000-0000-000000000001", "name": "Glossary" }
+  ],
+  "organization": [
+    { "id": "02000000-0000-0000-0000-000000000001", "name": "Root", "type": "Community" },
+    { "id": "01000000-0000-0000-0000-000000000001", "name": "Business Glossary", "type": "Domain", "parent": "Root", "domainType": "Glossary" }
+  ],
+  "assignments": [
+    {
+      "id": "06000000-0000-0000-0000-000000000001",
+      "assetType": "Business Term",
+      "domainTypes": ["Glossary"],
+      "attributes": [
+        { "id": "07000000-0000-0000-0000-000000000001", "name": "Own Attr", "min": 1 },
+        { "id": "07000000-0000-0000-0000-000000000002", "name": "Shared", "min": 2 }
+      ],
+      "traits": [
+        {
+          "attributes": [
+            { "id": "07000000-0000-0000-0000-000000000003", "name": "Trait Attr", "min": 1 },
+            { "id": "07000000-0000-0000-0000-000000000002", "name": "Shared", "min": 1 },
+            { "id": "07000000-0000-0000-0000-000000000004", "name": "Shared 2", "min": 3 }
+          ],
+          "relations": [
+            { "id": "08000000-0000-0000-0000-000000000001" }
+          ]
+        }
+      ],
+      "ancestorTraits": [
+        {
+          "attributes": [
+            { "id": "07000000-0000-0000-0000-000000000005", "name": "Ancestor Attr", "min": 1 },
+            { "id": "07000000-0000-0000-0000-000000000004", "name": "Shared 2", "min": 1 }
+          ],
+          "relations": [
+            { "id": "08000000-0000-0000-0000-000000000002" }
+          ]
+        }
+      ]
+    }
+  ]
+}
