@@ -20,6 +20,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`get_lineage_entity`](pkg/tools/get_lineage_entity/) - Get metadata about a specific entity in the technical lineage graph
 - [`get_lineage_transformation`](pkg/tools/get_lineage_transformation/) - Get details and logic of a specific data transformation
 - [`get_lineage_upstream`](pkg/tools/get_lineage_upstream/) - Get upstream technical lineage (sources) for a data entity
+- [`get_maestro_agent`](pkg/tools/get_maestro_agent/) - Read the configuration of an existing AI Maestro agent: name, handle, description, instructions, color, welcome message, sample questions, tools, knowledge base views, sharing, ownership, plus its status and whether its definition is complete. The connecting user must be able to see the agent
 - [`get_measure_data`](pkg/tools/get_measure_data/) - Trace a measure back to its underlying physical columns and tables
 - [`get_table_semantics`](pkg/tools/get_table_semantics/) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
 - [`list_asset_types`](pkg/tools/list_asset_types/) - List available asset types
@@ -44,6 +45,8 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
     - `set_owner` - set the owner by user UUID
     - `set_assignees` - replace the assignee list with the given users/groups
     - `set_visibility` - set whether the assessment is visible to everyone
+- [`create_maestro_agent`](pkg/tools/create_maestro_agent/) - Create an AI Maestro agent. Only `name` and `handle` are required; description, instructions, color, welcome message, sample questions, tools, sharing and ownership are optional. The agent is created in DRAFT status with the connecting user as its creator and owner, and has to be submitted and approved in AI Maestro before end users can use it. Its knowledge base and status are not settable here
+- [`edit_maestro_agent`](pkg/tools/edit_maestro_agent/) - Edit an existing AI Maestro agent as a partial update: pass only the fields to change and the rest keep their stored values. Lists (`sampleQuestions`, `tools`, `sharing`, `ownership`) are replaced wholesale, and an empty list clears them. Any edit returns the agent to DRAFT, so a published agent leaves Collibra Copilot until it is approved again. The connecting user must be an owner of the agent, or hold the permission to manage all AI agents
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `set_attribute`, `add_attribute`, `remove_attribute` - set an attribute value (creates if empty, updates if present), append an extra value to a multi-valued attribute, or clear one (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
