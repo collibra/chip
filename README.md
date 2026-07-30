@@ -20,6 +20,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`get_lineage_entity`](pkg/tools/get_lineage_entity/) - Get metadata about a specific entity in the technical lineage graph
 - [`get_lineage_transformation`](pkg/tools/get_lineage_transformation/) - Get details and logic of a specific data transformation
 - [`get_lineage_upstream`](pkg/tools/get_lineage_upstream/) - Get upstream technical lineage (sources) for a data entity
+- [`get_maestro_agent`](pkg/tools/get_maestro_agent/) - Read the configuration of an existing AI Maestro agent as a YAML document, for editing it and writing it back. The connecting user must be an owner of the agent, or hold the permission to manage all AI agents
 - [`get_measure_data`](pkg/tools/get_measure_data/) - Trace a measure back to its underlying physical columns and tables
 - [`get_table_semantics`](pkg/tools/get_table_semantics/) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
 - [`list_asset_types`](pkg/tools/list_asset_types/) - List available asset types

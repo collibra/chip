@@ -24,6 +24,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
 	"github.com/collibra/chip/pkg/tools/get_lineage_upstream"
+	"github.com/collibra/chip/pkg/tools/get_maestro_agent"
 	"github.com/collibra/chip/pkg/tools/get_measure_data"
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/init_data_contract"
@@ -78,6 +79,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_lineage_entity.NewTool(client))
 	toolRegister(server, toolConfig, get_lineage_transformation.NewTool(client))
 	toolRegister(server, toolConfig, get_lineage_upstream.NewTool(client))
+	toolRegister(server, toolConfig, get_maestro_agent.NewTool(client))
 	toolRegister(server, toolConfig, get_measure_data.NewTool(client))
 	toolRegister(server, toolConfig, get_table_semantics.NewTool(client))
 	toolRegister(server, toolConfig, search_lineage_entities.NewTool(client))
