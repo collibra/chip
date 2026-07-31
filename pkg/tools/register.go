@@ -10,10 +10,12 @@ import (
 	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
+	"github.com/collibra/chip/pkg/tools/create_maestro_agent"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_assessment"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
+	"github.com/collibra/chip/pkg/tools/edit_maestro_agent"
 	"github.com/collibra/chip/pkg/tools/get_assessment"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
@@ -24,6 +26,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
 	"github.com/collibra/chip/pkg/tools/get_lineage_upstream"
+	"github.com/collibra/chip/pkg/tools/get_maestro_agent"
 	"github.com/collibra/chip/pkg/tools/get_measure_data"
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/init_data_contract"
@@ -78,6 +81,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_lineage_entity.NewTool(client))
 	toolRegister(server, toolConfig, get_lineage_transformation.NewTool(client))
 	toolRegister(server, toolConfig, get_lineage_upstream.NewTool(client))
+	toolRegister(server, toolConfig, get_maestro_agent.NewTool(client))
 	toolRegister(server, toolConfig, get_measure_data.NewTool(client))
 	toolRegister(server, toolConfig, get_table_semantics.NewTool(client))
 	toolRegister(server, toolConfig, search_lineage_entities.NewTool(client))
@@ -88,6 +92,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
+	toolRegister(server, toolConfig, create_maestro_agent.NewTool(client))
+	toolRegister(server, toolConfig, edit_maestro_agent.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
