@@ -149,3 +149,19 @@ func TestNextAvailableDqJobName(t *testing.T) {
 		}
 	}
 }
+
+func TestIsCancellableDqRunState(t *testing.T) {
+	cancellable := []string{"RUNNING", "SUBMITTED", "WAITING", "DISPATCHED", "SETUP", "SENDING",
+		"running", " Running ", "dispatched"}
+	for _, s := range cancellable {
+		if !IsCancellableDqRunState(s) {
+			t.Errorf("expected %q to be cancellable (nonterminal)", s)
+		}
+	}
+	terminal := []string{"FINISHED", "COMPLETED", "FAILED", "CANCELLED", "ABORTED", "ERROR", "", "  ", "bogus"}
+	for _, s := range terminal {
+		if IsCancellableDqRunState(s) {
+			t.Errorf("expected %q to be non-cancellable (terminal/unknown)", s)
+		}
+	}
+}

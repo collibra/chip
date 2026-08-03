@@ -7,6 +7,7 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/cancel_dq_job_run"
 	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
@@ -111,6 +112,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
 		toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
 		toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
+		toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
 	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
