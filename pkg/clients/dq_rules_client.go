@@ -37,31 +37,12 @@ type CreateDQRuleResponse struct {
 
 // CreateDQRule creates a data quality rule (monitor) on an existing DQ job.
 func CreateDQRule(ctx context.Context, client *http.Client, request CreateDQRuleRequest) (*CreateDQRuleResponse, error) {
-	body, err := json.Marshal(request)
+	respBody, status, err := dqDo(ctx, client, http.MethodPost, "/rest/dq/internal/v1/monitoring/monitor", request)
 	if err != nil {
-		return nil, fmt.Errorf("creating dq rule: marshaling request: %w", err)
+		return nil, fmt.Errorf("creating dq rule: %w", err)
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "/rest/dq/internal/v1/monitoring/monitor", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("creating dq rule: building request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("creating dq rule: sending request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("creating dq rule: reading response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		switch resp.StatusCode {
+	if status != http.StatusOK {
+		switch status {
 		case http.StatusBadRequest:
 			return nil, fmt.Errorf("creating dq rule: bad request (invalid rule definition): %s", string(respBody))
 		case http.StatusForbidden:
@@ -71,7 +52,7 @@ func CreateDQRule(ctx context.Context, client *http.Client, request CreateDQRule
 		case http.StatusUnprocessableEntity:
 			return nil, fmt.Errorf("creating dq rule: rule creation not allowed for this job (e.g. dataset is not of type PUSHDOWN): %s", string(respBody))
 		default:
-			return nil, fmt.Errorf("creating dq rule: unexpected status %d: %s", resp.StatusCode, string(respBody))
+			return nil, fmt.Errorf("creating dq rule: unexpected status %d: %s", status, string(respBody))
 		}
 	}
 
@@ -79,7 +60,6 @@ func CreateDQRule(ctx context.Context, client *http.Client, request CreateDQRule
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("creating dq rule: decoding response: %w", err)
 	}
-
 	return &result, nil
 }
 

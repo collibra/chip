@@ -105,6 +105,9 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if s := strings.TrimSpace(input.NameContains); s != "" {
 			filters = append(filters, clients.DQMonitorFilter{Field: fieldMonitorName, Operator: opContains, Values: []string{s}})
 		}
+		if len(filters) == 0 {
+			return Output{Status: StatusValidationError, Message: "Provide at least one filter (jobName, columnName, or nameContains) — an unfiltered search would page through every rule on the instance."}, nil
+		}
 
 		res, err := clients.FindDQRules(ctx, collibraClient, filters, input.Offset, limit)
 		if err != nil {

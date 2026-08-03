@@ -12,7 +12,7 @@ new API surface.
 
 Relationship to the other DQ skills:
 - **`collibra/dq-rules`** — the mechanics of a single rule on an existing job
-  (validate → create → run → observe, edit/delete). This workbench reuses those
+  (validate → create → inspect → read results). This workbench reuses those
   rules and defers to that skill for the per-rule detail.
 - **Job creation** — when a column has no suitable job, this flow calls
   `prepare_create_data_quality_job` + `create_data_quality_job` (see their tool descriptions).

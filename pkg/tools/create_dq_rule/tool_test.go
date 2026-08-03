@@ -79,6 +79,7 @@ func TestCreateDQRule_InactiveMapsToZero(t *testing.T) {
 		MonitorName:  "R",
 		MonitorType:  "SIMPLE_SQL",
 		MonitorValue: "NAME IS NOT NULL",
+		ColumnName:   "NAME",
 		Active:       &inactive,
 		Confirm:      true,
 	})
@@ -158,5 +159,41 @@ func TestCreateDQRule_PreviewByDefault_CreatesNothing(t *testing.T) {
 	// The DQ endpoint must not have been called (nothing written).
 	if got.MonitorName != "" {
 		t.Fatalf("expected no create request in preview mode, but server was called: %+v", got)
+	}
+}
+
+func TestCreateDQRule_InvalidMonitorName(t *testing.T) {
+	var got clients.CreateDQRuleRequest
+	c := server(t, http.StatusOK, &got)
+
+	out, _ := create_dq_rule.NewTool(c).Handler(t.Context(), create_dq_rule.Input{
+		JobName:      "DS",
+		MonitorName:  "bad name!", // space and '!' are not allowed
+		MonitorType:  "FREEFORM_SQL",
+		MonitorValue: "SELECT 1",
+		Confirm:      true,
+	})
+	if out.Status != create_dq_rule.StatusValidationError {
+		t.Fatalf("status = %q, want validation_error", out.Status)
+	}
+	if got.MonitorName != "" {
+		t.Fatalf("expected no request for an invalid name")
+	}
+}
+
+func TestCreateDQRule_SimpleSQLRequiresColumn(t *testing.T) {
+	var got clients.CreateDQRuleRequest
+	c := server(t, http.StatusOK, &got)
+
+	out, _ := create_dq_rule.NewTool(c).Handler(t.Context(), create_dq_rule.Input{
+		JobName:      "DS",
+		MonitorName:  "R",
+		MonitorType:  "SIMPLE_SQL",
+		MonitorValue: "NAME IS NOT NULL",
+		// columnName omitted
+		Confirm: true,
+	})
+	if out.Status != create_dq_rule.StatusValidationError {
+		t.Fatalf("status = %q, want validation_error (SIMPLE_SQL needs columnName)", out.Status)
 	}
 }

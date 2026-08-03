@@ -8,12 +8,21 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// monitorNameRe is the server's rule-name constraint: letters, digits, '-' and
+// '_', 1-256 characters. Enforced up front so a bad name is a cheap,
+// self-correcting error rather than a downstream 400.
+var monitorNameRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,256}$`)
+
+// maxDescriptionLen is the server's description length cap.
+const maxDescriptionLen = 256
 
 // OutputStatus is the overall outcome of a create_dq_rule call.
 type OutputStatus string
@@ -45,7 +54,7 @@ type Input struct {
 	MonitorType  string   `json:"monitorType" jsonschema:"Required. Rule type: 'FREEFORM_SQL' for a full SQL expression, or 'SIMPLE_SQL' for a single-column check."`
 	MonitorValue string   `json:"monitorValue" jsonschema:"Required. The rule's SQL. For FREEFORM_SQL this is a full query (e.g. 'SELECT * FROM @PUBLIC.SAMPLE_DATASET WHERE NAME IS NULL'); for SIMPLE_SQL it is the column predicate."`
 	FilterQuery  string   `json:"filterQuery,omitempty" jsonschema:"Optional. Additional WHERE-clause filter applied to the rule (e.g. ' where NAME IS NULL')."`
-	ColumnName   string   `json:"columnName,omitempty" jsonschema:"Optional. Target column name; used with SIMPLE_SQL rules."`
+	ColumnName   string   `json:"columnName,omitempty" jsonschema:"The single column the check targets. Required for SIMPLE_SQL rules; not needed for FREEFORM_SQL (the column(s) live in the SQL)."`
 	Description  string   `json:"description,omitempty" jsonschema:"Optional. Human-readable description; max 256 characters."`
 	Dimensions   []string `json:"dimensions,omitempty" jsonschema:"Optional. Data quality dimensions — categories such as Accuracy, Completeness, Validity — to associate with the rule (e.g. ['Accuracy','Completeness'])."`
 	Tolerance    int      `json:"tolerance,omitempty" jsonschema:"Optional. Number of failing ('breaking') records allowed before the rule is considered failed — a count, NOT a percentage. Defaults to 0."`
@@ -56,6 +65,8 @@ type Input struct {
 }
 
 // RulePreview is the composed rule echoed back for review when confirm is false.
+// It mirrors every field that will be written, so the confirm checkpoint shows
+// the complete rule.
 type RulePreview struct {
 	JobName      string   `json:"jobName"`
 	MonitorName  string   `json:"monitorName"`
@@ -63,10 +74,12 @@ type RulePreview struct {
 	MonitorValue string   `json:"monitorValue" jsonschema:"The rule's SQL that will be saved — review this with the user before confirming."`
 	FilterQuery  string   `json:"filterQuery,omitempty"`
 	ColumnName   string   `json:"columnName,omitempty"`
+	Description  string   `json:"description,omitempty"`
 	Dimensions   []string `json:"dimensions,omitempty"`
 	Tolerance    int      `json:"tolerance"`
 	Active       bool     `json:"active"`
 	Suppressed   bool     `json:"suppressed"`
+	TemplateID   string   `json:"templateId,omitempty"`
 }
 
 // Output is the typed response.
@@ -131,10 +144,12 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 					MonitorValue: request.MonitorValue,
 					FilterQuery:  request.FilterQuery,
 					ColumnName:   request.ColumnName,
+					Description:  request.Description,
 					Dimensions:   request.Dimensions,
 					Tolerance:    request.Tolerance,
 					Active:       request.IsActive == 1,
 					Suppressed:   request.IsSuppressed,
+					TemplateID:   request.TemplateID,
 				},
 			}, nil
 		}
@@ -159,14 +174,23 @@ func validate(input Input) *Output {
 	if strings.TrimSpace(input.JobName) == "" {
 		return &Output{Status: StatusValidationError, Message: "jobName is required."}
 	}
-	if strings.TrimSpace(input.MonitorName) == "" {
+	if name := strings.TrimSpace(input.MonitorName); name == "" {
 		return &Output{Status: StatusValidationError, Message: "monitorName is required."}
+	} else if !monitorNameRe.MatchString(name) {
+		return &Output{Status: StatusValidationError, Message: "monitorName may contain only letters, digits, '-' and '_', and must be 1-256 characters."}
 	}
 	if strings.TrimSpace(input.MonitorValue) == "" {
 		return &Output{Status: StatusValidationError, Message: "monitorValue is required."}
 	}
+	if len(input.Description) > maxDescriptionLen {
+		return &Output{Status: StatusValidationError, Message: fmt.Sprintf("description must be at most %d characters.", maxDescriptionLen)}
+	}
 	switch input.MonitorType {
-	case monitorTypeFreeformSQL, monitorTypeSimpleSQL:
+	case monitorTypeFreeformSQL:
+	case monitorTypeSimpleSQL:
+		if strings.TrimSpace(input.ColumnName) == "" {
+			return &Output{Status: StatusValidationError, Message: "columnName is required for a SIMPLE_SQL rule (the single column the check targets)."}
+		}
 	default:
 		return &Output{
 			Status:  StatusValidationError,
