@@ -45,7 +45,7 @@ type CandidateRun struct {
 	JobRunID  string `json:"jobRunId" jsonschema:"Re-call the tool with this jobRunId to cancel this run."`
 	JobName   string `json:"jobName,omitempty" jsonschema:"The job this run belongs to."`
 	Status    string `json:"status,omitempty" jsonschema:"The run's current (nonterminal) state."`
-	StartedAt string `json:"startedAt,omitempty" jsonschema:"When the run started, if known."`
+	StartedAt string `json:"startedAt,omitempty" jsonschema:"When the run started (UTC), if known."`
 }
 
 type Output struct {
@@ -147,14 +147,14 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			default:
 				candidates := make([]CandidateRun, 0, len(runs))
 				for _, r := range runs {
-					candidates = append(candidates, CandidateRun{JobRunID: r.JobRunID, JobName: r.JobName, Status: r.Status, StartedAt: r.StartedAt})
+					candidates = append(candidates, CandidateRun{JobRunID: r.JobRunID, JobName: r.JobName, Status: r.Status, StartedAt: r.StartTime})
 				}
 				return Output{
 					Status:        StatusNeedsInput,
 					JobName:       jobName,
 					CandidateRuns: candidates,
 					Message:       fmt.Sprintf("Found %d cancellable runs matching job name %q.", len(runs), jobName),
-					Guidance:      "Pick one from candidateRuns and re-call this tool with its jobRunId.",
+					Guidance:      "Pick one from candidateRuns and re-call this tool with its jobRunId. Note: dates and times are shown in the format returned by the API and may not match the formatting displayed in the Collibra application's UI.",
 				}, nil
 			}
 		}

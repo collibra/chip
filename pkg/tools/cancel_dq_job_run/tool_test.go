@@ -194,7 +194,7 @@ func TestByNameMultipleRunsNeedsSelection(t *testing.T) {
 	// cancel nil -> must not be reached; the tool should ask the caller to pick one.
 	server := newServer(t, handlers{
 		search: jsonHandler(http.StatusOK, map[string]any{"results": []map[string]any{
-			{"jobRunId": "r-1", "jobName": "sales.orders", "status": "RUNNING"},
+			{"jobRunId": "r-1", "jobName": "sales.orders", "status": "RUNNING", "startTime": "2025-10-22T13:50:05Z"},
 			{"jobRunId": "r-2", "jobName": "sales.orders", "status": "SUBMITTED"},
 		}}),
 	})
@@ -209,6 +209,13 @@ func TestByNameMultipleRunsNeedsSelection(t *testing.T) {
 	}
 	if out.CandidateRuns[0].JobRunID != "r-1" || out.CandidateRuns[1].JobRunID != "r-2" {
 		t.Errorf("unexpected candidate ids: %+v", out.CandidateRuns)
+	}
+	// startedAt comes from the run's startTime as the API returned it; a run without one stays blank.
+	if out.CandidateRuns[0].StartedAt != "2025-10-22T13:50:05Z" {
+		t.Errorf("expected startedAt from the run's startTime, got %q", out.CandidateRuns[0].StartedAt)
+	}
+	if out.CandidateRuns[1].StartedAt != "" {
+		t.Errorf("expected a blank startedAt when the run has no startTime, got %q", out.CandidateRuns[1].StartedAt)
 	}
 }
 

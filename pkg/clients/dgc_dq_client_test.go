@@ -165,3 +165,18 @@ func TestIsCancellableDqRunState(t *testing.T) {
 		}
 	}
 }
+
+func TestIsDeletableDqRunState(t *testing.T) {
+	deletable := []string{"FINISHED", "CANCELLED", "FAILED", "UNKNOWN", "finished", " Failed ", "bogus"}
+	for _, s := range deletable {
+		if !IsDeletableDqRunState(s) {
+			t.Errorf("expected %q to be deletable (not in progress)", s)
+		}
+	}
+	inProgress := append([]string{"", "  ", "running", " Setup "}, DqCancellableRunStates...)
+	for _, s := range inProgress {
+		if IsDeletableDqRunState(s) {
+			t.Errorf("expected %q to be non-deletable (in progress or unknowable)", s)
+		}
+	}
+}
