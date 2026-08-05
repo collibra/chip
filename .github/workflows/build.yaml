@@ -41,3 +41,33 @@ jobs:
         uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9  # v8
         with:
           version: v2.4.0
+
+  # Every green build of main is tagged with the next patch version.
+  # The release workflow then publishes a chosen tag on demand.
+  tag:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Serialize tagging so concurrent main builds cannot compute the same next version
+    concurrency:
+      group: tag-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Tag next patch version
+        run: |
+          LATEST=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          LATEST=${LATEST:-v0.0.0}
+          VERSION=${LATEST#v}
+          IFS=. read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEXT="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${NEXT}" "${GITHUB_SHA}" -m "Release ${NEXT#v}"
+          git push origin "refs/tags/${NEXT}"
+          echo "Tagged ${GITHUB_SHA} as ${NEXT} (previous: ${LATEST})"
