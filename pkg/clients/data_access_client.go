@@ -118,12 +118,6 @@ func GetDataAccessControl(ctx context.Context, httpClient *http.Client, id strin
 	return details, nil
 }
 
-// SearchDataAccessControlsResult holds a page of access controls and an optional next-page cursor.
-type SearchDataAccessControlsResult struct {
-	Items      []*DataAccessControlDetails `json:"items"`
-	NextCursor *string                     `json:"nextCursor,omitempty"`
-}
-
 func mapToDataAccessWhatItem(w *types.AccessWhatAccessControlItem) DataAccessWhatItem {
 	item := DataAccessWhatItem{
 		ExpiresAt: w.ExpiresAt,

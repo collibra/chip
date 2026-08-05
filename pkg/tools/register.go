@@ -25,6 +25,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
 	"github.com/collibra/chip/pkg/tools/get_context_specification"
+	"github.com/collibra/chip/pkg/tools/get_data_access_control_details"
 	"github.com/collibra/chip/pkg/tools/get_data_access_data_source"
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
@@ -106,6 +107,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, create_data_access_request.NewTool(client))
 	toolRegister(server, toolConfig, check_user_data_object_access.NewTool(client))
 	toolRegister(server, toolConfig, get_data_access_data_source.NewTool(client))
+	toolRegister(server, toolConfig, get_data_access_control_details.NewTool(client))
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))

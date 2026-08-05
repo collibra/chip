@@ -14,7 +14,7 @@ Data Access is the system that manages who can access what data, through grants,
 
 ## Search identities
 
-`search_data_access_identities` is a tool to search for Data Access users (identities) by name and/or email. Providing `email` performs an exact lookup via `GetUserByEmail`. Providing `name` performs a server-side case-insensitive contains search via `SearchUsers`. Both can be combined: email resolves the user, name filters the result client-side. Name-only searches are paginated (25 per page) — use the returned `nextCursor` to fetch subsequent pages.
+`search_data_access_identities` is a tool to search for Data Access users (identities) by name and/or email. Providing `email` performs an exact lookup via `GetUserByEmail`. Providing `name` performs a server-side case-insensitive contains search via `SearchUsers`. Both can be combined: email resolves the user, name filters the result client-side. Name-only searches return up to `pageSize` matches (default 25, max 25); narrow the `name` filter to find results beyond that cap.
 
 ## Search Data Access objects
 
@@ -42,6 +42,10 @@ Data Access is the system that manages who can access what data, through grants,
 - **WHAT** must be resolved via `search_data_access_objects` — pass the returned data object IDs in `what[].dataObjectId`. Per item, `permissions` should be empty and `globalPermissions` must always be READ.
 - **Purpose** is mandatory and must come from the user — it is the business justification for the request. If the user has not stated a purpose, ask them for one before calling the tool. Do not invent a purpose. The tool always appends a note stating that the request was created by AI.
 - **Name** is optional. If the user does not provide one, omit `name` on the first call. The tool will return status `needs_name_confirmation` with a `suggestedName` derived from the purpose — present that suggestion to the user, get their confirmation (or an alternative), and call again with the confirmed value in `name`.
+
+## Inspect an access control
+
+`get_data_access_control_details` fetches a single Collibra Data Access control by its **ID**, returning its name, description, state (`ACTIVE`/`INACTIVE`/`DELETED`), action type (`GRANT`/`MASK`/`FILTER`/`SHARE`/`GROUP`/`FILTERRULE`), grant category, policy rule, external-management status, and the full `what`/`who` scope lists. Use this to inspect an individual access control once you have its ID — for example, from a `roles` entry returned by `check_user_data_object_access`.
 
 ## Common follow-ups
 
