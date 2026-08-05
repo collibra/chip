@@ -28,10 +28,11 @@ type SearchDataAccessObjectsOutput struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[SearchDataAccessObjectsInput, SearchDataAccessObjectsOutput] {
 	return &chip.Tool[SearchDataAccessObjectsInput, SearchDataAccessObjectsOutput]{
 		Name:        "search_data_access_objects",
+		Title:       "Search Data Access Objects",
 		Description: "Search for data objects in Collibra Data Access. Data objects represent tables, columns, schemas, views, and other entities tracked in registered data sources. Filters can be combined: name (case-insensitive contains), dataSources (data source IDs), types (e.g. table, column), parents/ancestors (other data object IDs), and includeDeleted. Returns up to pageSize matches (default 25, max 25). Each result also includes its applicablePermissions — the source-system permissions (with name and description) that can be requested on the object.",
 		Handler:     handleSearchDataAccessObjects(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false)},
 	}
 }
 

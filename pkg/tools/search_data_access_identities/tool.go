@@ -24,10 +24,11 @@ type SearchDataAccessIdentitiesOutput struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[SearchDataAccessIdentitiesInput, SearchDataAccessIdentitiesOutput] {
 	return &chip.Tool[SearchDataAccessIdentitiesInput, SearchDataAccessIdentitiesOutput]{
 		Name:        "search_data_access_identities",
+		Title:       "Search Data Access Identities",
 		Description: "Search for Data Access users (identities) by name and/or email. Providing email performs an exact lookup; providing name performs a case-insensitive contains search via ListUsers. Both can be combined: email resolves the user, name filters the result client-side.",
 		Handler:     handleSearchDataAccessIdentities(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false)},
 	}
 }
 

@@ -42,10 +42,11 @@ type Output struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:        "create_data_access_request",
+		Title:       "Create Data Access Request",
 		Description: "Create a new Collibra Data Access request. Requires the WHO (beneficiary user IDs, obtained via search_data_access_identities), the WHAT (data objects, obtained via search_data_access_objects), and a user-supplied purpose that is used as the description. If no name is supplied, the tool returns a suggested name derived from the purpose with status needs_name_confirmation — confirm the suggestion (or get a replacement) with the user, then call again with name set. The description always ends with a note stating that the request was created by AI.",
 		Handler:     handle(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}
 }
 

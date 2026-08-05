@@ -23,10 +23,11 @@ type DataAccessControlOutput struct {
 func NewTool(collibraClient *http.Client) *chip.Tool[DataAccessControlInput, DataAccessControlOutput] {
 	return &chip.Tool[DataAccessControlInput, DataAccessControlOutput]{
 		Name:        "get_data_access_control_details",
+		Title:       "Get Data Access Control Details",
 		Description: "Retrieve detailed information about a specific Collibra Data Access control by its id. Returns the access control's name, description, state (ACTIVE, INACTIVE, DELETED), action type (GRANT, MASK, FILTER, SHARE, GROUP, FILTERRULE), grant category, policy rule, external management status, ABAC scope parse status, and timestamps. Use this to inspect an individual access control when you know its ID.",
 		Handler:     handleGetDataAccessControlDetails(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false)},
 	}
 }
 
