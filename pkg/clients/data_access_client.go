@@ -123,10 +123,10 @@ func mapToDataAccessWhatItem(w *types.AccessWhatAccessControlItem) DataAccessWha
 		ExpiresAt: w.ExpiresAt,
 	}
 	if w.AccessControl != nil {
-		item.ID = w.AccessControl.AccessControl.Id
-		item.Name = w.AccessControl.AccessControl.Name
-		item.State = string(w.AccessControl.AccessControl.State)
-		item.Action = string(w.AccessControl.AccessControl.Action)
+		item.ID = w.AccessControl.Id
+		item.Name = w.AccessControl.Name
+		item.State = string(w.AccessControl.State)
+		item.Action = string(w.AccessControl.Action)
 	}
 	return item
 }
@@ -141,10 +141,10 @@ func mapToDataAccessWhoItem(w *types.AccessWhoItem) DataAccessWhoItem {
 	switch v := w.Item.(type) {
 	case *types.AccessWhoItemItemUser:
 		item.ItemType = "User"
-		item.ItemID = v.User.Id
-		item.ItemName = v.User.Name
-		item.Email = v.User.Email
-		item.UserType = string(v.User.Type)
+		item.ItemID = v.Id
+		item.ItemName = v.Name
+		item.Email = v.Email
+		item.UserType = string(v.Type)
 	case *types.AccessWhoItemItemAccessControl:
 		item.ItemType = "AccessControl"
 		item.ItemID = v.Id
@@ -508,11 +508,11 @@ func mapToUserDataObjectAccess(item *types.GroupedDataAccessReturnItem) *UserDat
 		}
 		if ac.Category != nil {
 			role.Category = &DataAccessGrantCategory{
-				ID:         ac.Category.GrantCategory.Id,
-				Name:       ac.Category.GrantCategory.Name,
-				NamePlural: ac.Category.GrantCategory.NamePlural,
-				IsSystem:   ac.Category.GrantCategory.IsSystem,
-				IsDefault:  ac.Category.GrantCategory.IsDefault,
+				ID:         ac.Category.Id,
+				Name:       ac.Category.Name,
+				NamePlural: ac.Category.NamePlural,
+				IsSystem:   ac.Category.IsSystem,
+				IsDefault:  ac.Category.IsDefault,
 			}
 		}
 		access.Roles = append(access.Roles, role)
@@ -678,11 +678,11 @@ func mapToDataAccessControlDetails(ctx context.Context, ac *types.AccessControl)
 
 	if ac.Category != nil {
 		details.Category = &DataAccessGrantCategory{
-			ID:         ac.Category.GrantCategory.Id,
-			Name:       ac.Category.GrantCategory.Name,
-			NamePlural: ac.Category.GrantCategory.NamePlural,
-			IsSystem:   ac.Category.GrantCategory.IsSystem,
-			IsDefault:  ac.Category.GrantCategory.IsDefault,
+			ID:         ac.Category.Id,
+			Name:       ac.Category.Name,
+			NamePlural: ac.Category.NamePlural,
+			IsSystem:   ac.Category.IsSystem,
+			IsDefault:  ac.Category.IsDefault,
 		}
 	}
 
