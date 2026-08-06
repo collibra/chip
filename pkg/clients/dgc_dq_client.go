@@ -355,6 +355,57 @@ func CreateDqJob(ctx context.Context, collibraHttpClient *http.Client, request C
 	return &resp, nil
 }
 
+// DqJobDefinition is the subset of the public JobDefinition (GET /rest/dq/1.0/jobs/{jobName}) needed
+// to describe an existing job — enough to confirm which job is about to be deleted.
+type DqJobDefinition struct {
+	JobName            string                `json:"jobName"`
+	JobType            string                `json:"jobType,omitempty"`
+	DataLocation       DqDataLocation        `json:"dataLocation"`
+	SourceQuery        string                `json:"sourceQuery,omitempty"`
+	RunDate            *DqPublicRunDate      `json:"runDate,omitempty"`
+	SchedulingSettings *DqSchedulingSettings `json:"schedulingSettings,omitempty"`
+}
+
+// RunDateValue returns the job's configured run date, or "" when it carries none.
+func (j *DqJobDefinition) RunDateValue() string {
+	if j == nil || j.RunDate == nil {
+		return ""
+	}
+	return j.RunDate.Value
+}
+
+// GetDqJob reads a single job definition by name via the PUBLIC GET /rest/dq/1.0/jobs/{jobName}.
+// The HTTP status is returned alongside the error so callers can map it to actionable guidance.
+func GetDqJob(ctx context.Context, collibraHttpClient *http.Client, jobName string) (*DqJobDefinition, int, error) {
+	endpoint := "/rest/dq/1.0/jobs/" + url.PathEscape(jobName)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var job DqJobDefinition
+	if err := json.Unmarshal(body, &job); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job response: %w", err)
+	}
+	return &job, code, nil
+}
+
+// DeleteDqJob permanently deletes a job definition and everything hanging off it (runs, rules,
+// results) via the PUBLIC DELETE /rest/dq/1.0/jobs/{jobName}.
+func DeleteDqJob(ctx context.Context, collibraHttpClient *http.Client, jobName string) (int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Deleting DQ job '%s'", jobName))
+	endpoint := "/rest/dq/1.0/jobs/" + url.PathEscape(jobName)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", endpoint, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	_, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	return code, err
+}
+
 var DqCancellableRunStates = []string{"RUNNING", "SUBMITTED", "WAITING", "DISPATCHED", "SETUP", "SENDING"}
 
 var DqTerminalRunStates = []string{"FINISHED", "CANCELLED", "FAILED"}

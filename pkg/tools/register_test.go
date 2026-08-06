@@ -42,6 +42,7 @@ var dataQualityToolNames = []string{
 	"search_catalog_columns",
 	"dq_cancel_job_run",
 	"dq_delete_job_run",
+	"dq_delete_job",
 }
 
 func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {

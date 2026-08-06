@@ -12,6 +12,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
+	"github.com/collibra/chip/pkg/tools/delete_dq_job"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job_run"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
@@ -115,6 +116,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
 		toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
 		toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
 	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
