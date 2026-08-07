@@ -73,7 +73,9 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"If the job does not exist, or you lack permission to read or delete it, the tool reports that " +
 			"instead of deleting anything. If the job has a run in progress the service may refuse the delete " +
 			"— cancel the run first with dq_cancel_job_run, then retry.\n\n" +
-			"To delete a single run rather than the whole job, use dq_delete_job_run instead.\n\n" +
+			"To delete a single run rather than the whole job, use dq_delete_job_run instead. To CHANGE a job's " +
+			"configuration (schedule, monitors, notifications, scan SQL, data location) rather than remove it, use " +
+			"dq_update_job — deleting and recreating a job destroys its run history, results and monitor baselines.\n\n" +
 			"Example user requests: \"Delete the data quality job sales.orders\"; \"Remove the DQ job for my " +
 			"customers table\"; \"Tear down the quality check we set up on public.transactions.\"",
 		Handler:     handler(collibraClient),

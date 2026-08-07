@@ -1,6 +1,11 @@
 package clients
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/collibra/chip/pkg/chip"
+)
 
 func TestBuildProfileMonitorsMapsKeysToFields(t *testing.T) {
 	pm, unknown := BuildProfileMonitors([]string{"rowCount", "MIN", " uniqueness ", "descriptiveStatistics"})
@@ -178,5 +183,87 @@ func TestIsDeletableDqRunState(t *testing.T) {
 		if IsDeletableDqRunState(s) {
 			t.Errorf("expected %q to be non-deletable (in progress or unknowable)", s)
 		}
+	}
+}
+
+// The whole point of the UpdateDqJobRequest patch types: a field the caller did not touch must
+// marshal away entirely. A zero value on the wire is an instruction to the server, not an absence.
+func TestUpdateDqJobRequestOmitsUntouchedFields(t *testing.T) {
+	body, err := json.Marshal(UpdateDqJobRequest{
+		JobName:            "sales.orders",
+		SchedulingSettings: &DqSchedulingSettings{SchedulerMode: "DAILY", ScheduledRunTime: "04:00:00", IsActive: true},
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("failed to parse marshalled request: %v", err)
+	}
+	for _, field := range []string{"sourceQuery", "runDate", "runDateEnd", "dataLocation", "jobSettings", "monitoringSettings", "notifications"} {
+		if _, present := got[field]; present {
+			t.Errorf("%q should be absent from a schedule-only patch, got %s", field, body)
+		}
+	}
+	if _, present := got["schedulingSettings"]; !present {
+		t.Errorf("schedulingSettings should be present, got %s", body)
+	}
+}
+
+// dataLookBack and learningPhase are pointers because 0 is a MEANINGFUL value (no look back / no
+// learning phase), so a plain int could not express "leave this one alone".
+func TestAdaptiveMonitorSettingsPatchDistinguishesZeroFromUnset(t *testing.T) {
+	body, err := json.Marshal(DqAdaptiveMonitorSettingsPatch{DataLookBack: chip.Ptr(0)})
+	if err != nil {
+		t.Fatalf("failed to marshal settings: %v", err)
+	}
+	if got, want := string(body), `{"dataLookBack":0}`; got != want {
+		t.Errorf("marshalled = %s, want %s (an explicit 0 must survive, learningPhase must be omitted)", got, want)
+	}
+}
+
+// numPartitions has the same problem: 0 means "let Spark decide".
+func TestLoadOptionsPatchKeepsExplicitZeroPartitions(t *testing.T) {
+	body, err := json.Marshal(DqLoadOptionsPatch{NumPartitions: chip.Ptr(0)})
+	if err != nil {
+		t.Fatalf("failed to marshal load options: %v", err)
+	}
+	if got, want := string(body), `{"numPartitions":0}`; got != want {
+		t.Errorf("marshalled = %s, want %s", got, want)
+	}
+}
+
+// The update path's monitor toggles are authoritative, so every one is always on the wire —
+// otherwise an omitted toggle would read as "unchanged" and the selection could not turn one off.
+func TestPatchAdaptiveMonitorsFromProfileSendsEveryToggle(t *testing.T) {
+	profile, _ := BuildProfileMonitors([]string{"rowCount", "min"})
+	body, err := json.Marshal(PatchAdaptiveMonitorsFromProfile(profile))
+	if err != nil {
+		t.Fatalf("failed to marshal monitors: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("failed to parse marshalled monitors: %v", err)
+	}
+	for _, key := range MonitorKeys() {
+		if _, present := got[key]; !present {
+			t.Errorf("%q should always be sent so the selection is authoritative, got %s", key, body)
+		}
+	}
+	if got["rowCount"] != true || got["min"] != true {
+		t.Errorf("selected monitors should be true, got %s", body)
+	}
+	if got["nullValues"] != false {
+		t.Errorf("unselected monitors should be false, got %s", body)
+	}
+}
+
+func TestEnabledPublicMonitorKeysReadsJobsCurrentSelection(t *testing.T) {
+	keys := EnabledPublicMonitorKeys(&DqPublicAdaptiveMonitors{RowCount: true, Uniqueness: true})
+	if len(keys) != 2 || keys[0] != "rowCount" || keys[1] != "uniqueness" {
+		t.Errorf("keys = %v, want [rowCount uniqueness] in catalog order", keys)
+	}
+	if EnabledPublicMonitorKeys(nil) != nil {
+		t.Error("a job with no adaptive monitors should yield no keys")
 	}
 }
