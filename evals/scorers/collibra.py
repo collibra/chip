@@ -1,8 +1,25 @@
 """Thin Collibra DGC REST 2.0 client for eval scorers and cleanup.
 
-Credentials resolve the same way chip's own config does, so a working local
-chip setup needs no extra configuration: COLLIBRA_MCP_API_* env vars first,
-then the repo-root mcp.yaml.
+Credentials resolve in chip's own precedence order, so a working local chip
+setup needs no extra configuration:
+
+    1. COLLIBRA_MCP_API_URL / _USR / _PWD environment variables
+    2. ./mcp.yaml            (repo root)
+    3. ~/.config/collibra/mcp.yaml
+    4. /etc/collibra/mcp.yaml
+
+Steps 2-4 mirror the viper search path in cmd/chip/config.go. Earlier
+versions stopped after the repo root, which meant a machine configured the
+normal way — credentials in ~/.config/collibra — could not run any eval at
+all, and the failure looked like missing credentials rather than a client
+that never looked for them.
+
+One deliberate divergence: viper stops at the first config file it finds,
+while this fills each field from the first source that supplies it, so a
+partial env var set or a partial mcp.yaml is topped up rather than discarded.
+That is more forgiving than chip, which means these scorers can authenticate
+in a split-config setup where chip itself would not — worth knowing if an eval
+passes and the server does not.
 """
 
 import os
@@ -13,22 +30,36 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Same order chip's viper config uses (cmd/chip/config.go).
+CONFIG_PATHS = (
+    REPO_ROOT / "mcp.yaml",
+    Path.home() / ".config" / "collibra" / "mcp.yaml",
+    Path("/etc/collibra/mcp.yaml"),
+)
+
 
 def collibra_config() -> tuple[str, str, str]:
     url = os.environ.get("COLLIBRA_MCP_API_URL", "")
     usr = os.environ.get("COLLIBRA_MCP_API_USR", "")
     pwd = os.environ.get("COLLIBRA_MCP_API_PWD", "")
+
+    for config_path in CONFIG_PATHS:
+        if url and usr and pwd:
+            break
+        if not config_path.exists():
+            continue
+        api = (yaml.safe_load(config_path.read_text()) or {}).get("api", {}) or {}
+        # Per-field fallback, so a partial env var set is topped up rather
+        # than discarded.
+        url = url or api.get("url", "")
+        usr = usr or api.get("username", "")
+        pwd = pwd or api.get("password", "")
+
     if not (url and usr and pwd):
-        mcp_yaml = REPO_ROOT / "mcp.yaml"
-        if mcp_yaml.exists():
-            api = (yaml.safe_load(mcp_yaml.read_text()) or {}).get("api", {})
-            url = url or api.get("url", "")
-            usr = usr or api.get("username", "")
-            pwd = pwd or api.get("password", "")
-    if not (url and usr and pwd):
+        searched = "\n  ".join(str(p) for p in CONFIG_PATHS)
         raise RuntimeError(
-            "Collibra credentials not found: set COLLIBRA_MCP_API_URL/USR/PWD "
-            "or provide an mcp.yaml at the repo root"
+            "Collibra credentials not found: set COLLIBRA_MCP_API_URL/USR/PWD, "
+            f"or provide an mcp.yaml at one of:\n  {searched}"
         )
     return url.rstrip("/"), usr, pwd
 
