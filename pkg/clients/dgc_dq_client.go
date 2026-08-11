@@ -355,6 +355,118 @@ func CreateDqJob(ctx context.Context, collibraHttpClient *http.Client, request C
 	return &resp, nil
 }
 
+var DqCancellableRunStates = []string{"RUNNING", "SUBMITTED", "WAITING", "DISPATCHED", "SETUP", "SENDING"}
+
+var DqTerminalRunStates = []string{"FINISHED", "CANCELLED", "FAILED"}
+
+func IsCancellableDqRunState(s string) bool {
+	s = strings.TrimSpace(s)
+	for _, st := range DqCancellableRunStates {
+		if strings.EqualFold(s, st) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsDeletableDqRunState(s string) bool {
+	return strings.TrimSpace(s) != "" && !IsCancellableDqRunState(s)
+}
+
+type DqJobRun struct {
+	JobRunID  string           `json:"jobRunId"`
+	JobName   string           `json:"jobName"`
+	Status    string           `json:"status"`
+	RunDate   *DqPublicRunDate `json:"runDate,omitempty"`
+	StartTime string           `json:"startTime,omitempty"`
+	EndTime   string           `json:"endTime,omitempty"`
+	UpdatedAt string           `json:"updatedAt,omitempty"`
+}
+
+// RunDateValue returns the run's date/timestamp, or "" when the run carries none.
+func (r *DqJobRun) RunDateValue() string {
+	if r == nil || r.RunDate == nil {
+		return ""
+	}
+	return r.RunDate.Value
+}
+
+type dqJobRunListResponse struct {
+	Results []DqJobRun `json:"results"`
+}
+
+func GetDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (*DqJobRun, int, error) {
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var run DqJobRun
+	if err := json.Unmarshal(body, &run); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job run response: %w", err)
+	}
+	return &run, code, nil
+}
+
+func SearchCancellableDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobName string) ([]DqJobRun, int, error) {
+	return searchDqJobRunsByName(ctx, collibraHttpClient, jobName, DqCancellableRunStates)
+}
+
+func SearchDeletableDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobName string) ([]DqJobRun, int, error) {
+	return searchDqJobRunsByName(ctx, collibraHttpClient, jobName, DqTerminalRunStates)
+}
+
+// searchDqJobRunsByName runs the public job-run search (GET /rest/dq/1.0/jobRuns) for a
+// case-insensitive substring match on jobName, restricted to the given statuses.
+func searchDqJobRunsByName(ctx context.Context, collibraHttpClient *http.Client, jobName string, statuses []string) ([]DqJobRun, int, error) {
+	params := url.Values{}
+	params.Set("jobName", jobName)
+	params.Set("nameMatchMode", "CONTAINS")
+	for _, st := range statuses {
+		params.Add("status", st)
+	}
+	endpoint := "/rest/dq/1.0/jobRuns?" + params.Encode()
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var resp dqJobRunListResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job runs response: %w", err)
+	}
+	return resp.Results, code, nil
+}
+
+func CancelDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Cancelling DQ job run '%s'", jobRunID))
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID) + "/cancel"
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	_, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	return code, err
+}
+
+func DeleteDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Deleting DQ job run '%s'", jobRunID))
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", endpoint, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	_, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	return code, err
+}
+
 // DqParallelJdbcOptions is the wizard's "Parallel JDBC" advanced-sizing control (PULLUP). mode is the
 // ParallelJdbcMode enum (udq-app): AUTO (column + partition count both auto), AUTO_COLUMN (column auto,
 // partitionNumber required), MANUAL (partitionColumn + partitionNumber both required). Validator rules

@@ -222,9 +222,14 @@ func buildUrl(basePath string, params interface{}) (string, error) {
 }
 
 func executeRequest(client *http.Client, req *http.Request) ([]byte, error) {
+	body, _, err := executeRequestWithStatus(client, req)
+	return body, err
+}
+
+func executeRequestWithStatus(client *http.Client, req *http.Request) ([]byte, int, error) {
 	response, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, 0, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
@@ -232,12 +237,12 @@ func executeRequest(client *http.Client, req *http.Request) ([]byte, error) {
 
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, response.StatusCode, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
+		return responseBody, response.StatusCode, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
 	}
 
-	return responseBody, nil
+	return responseBody, response.StatusCode, nil
 }

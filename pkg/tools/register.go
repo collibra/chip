@@ -7,10 +7,12 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/cancel_dq_job_run"
 	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
+	"github.com/collibra/chip/pkg/tools/delete_dq_job_run"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
@@ -58,7 +60,7 @@ const ContextSpecificationsFeature = "context-specifications"
 // DataQualityFeatureName gates the data-quality rule tools (create/validate/read rules,
 // rule templates, Text2SQL and catalog column search) behind --experimental. Some WRITE to
 // Collibra (create rules, deploy templates), so they stay opt-in until they graduate. Off by
-// default. Shared with the data-quality job-creation tools.
+// default. Shared with the data-quality job-creation and job run tools.
 const DataQualityFeatureName = "data-quality"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
@@ -111,6 +113,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
 		toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
 		toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
+		toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
 	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
