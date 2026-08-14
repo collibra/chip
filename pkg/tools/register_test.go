@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/chip"
+	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -65,9 +66,10 @@ func TestRegisterAll_DataQualityToolsVisibleWhenEnabled(t *testing.T) {
 }
 
 func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
+	// Every gate on, so a feature-flagged tool can't skip the annotation check.
 	cfg := &chip.ServerToolConfig{
 		EnableDebugTools: true,
-		Experimental:     []string{tools.ContextSpecificationsFeature, "skills"},
+		Experimental:     []string{tools.ContextSpecificationsFeature, tools.DataQualityFeatureName, skills.FeatureName},
 	}
 	for _, tool := range listTools(t, cfg) {
 		if tool.Title == "" {
