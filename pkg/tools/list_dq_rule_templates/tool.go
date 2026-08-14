@@ -66,7 +66,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"dimension (a data-quality category such as Accuracy or Completeness), and isSystem (built-in vs custom). Paginated (offset/limit).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

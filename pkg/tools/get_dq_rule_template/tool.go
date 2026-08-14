@@ -59,7 +59,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"default tolerance (number of failing records allowed before a rule fails; a count, not a percentage), whether it is built-in (system) vs custom, and how many rules have been deployed from it.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

@@ -85,7 +85,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"The deploy is partial-success: each target is deployed or skipped independently, and the per-target outcomes (with skip reasons) are returned.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(false)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

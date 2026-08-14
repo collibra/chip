@@ -78,7 +78,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"a rule-name substring. Returns each rule's job, column, type, status and SQL. Paginated (offset/limit).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

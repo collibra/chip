@@ -74,7 +74,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"pass/fail status and any exception for each run. Paginated (offset/limit), newest first by default.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 
