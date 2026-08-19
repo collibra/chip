@@ -74,7 +74,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"A broad lone substring filter (e.g. description alone) can exceed the Knowledge Graph query timeout — combine with a domain or another selective filter.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

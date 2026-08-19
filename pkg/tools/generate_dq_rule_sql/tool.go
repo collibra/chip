@@ -54,7 +54,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Requires edgeSiteId and connectionId — the connection to the source database (edgeSiteId = the Collibra Edge runtime/site that reaches the source, connectionId = the specific database connection), from prepare_create_data_quality_job — and uses Collibra DQ AI.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

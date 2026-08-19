@@ -63,7 +63,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Returns the rule's type, SQL, filter, tolerance (count of failing records allowed before it fails) and active/suppressed (kept but not scored) state.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

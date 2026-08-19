@@ -105,7 +105,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Note: requires permission to create rules on the target job.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: chip.Ptr(false)},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

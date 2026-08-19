@@ -219,6 +219,45 @@ func PublicAdaptiveMonitorsFromProfile(pm *DqProfileMonitors) *DqPublicAdaptiveM
 	}
 }
 
+// PatchAdaptiveMonitorsFromProfile maps the (shared) DqProfileMonitors toggle set onto the UPDATE
+// path's adaptiveMonitors shape, so callers keep using BuildProfileMonitors for the selection. As on
+// create the selection is authoritative: every toggle is sent, so anything not selected is turned off.
+func PatchAdaptiveMonitorsFromProfile(pm *DqProfileMonitors) *DqAdaptiveMonitorsPatch {
+	if pm == nil {
+		return nil
+	}
+	return &DqAdaptiveMonitorsPatch{
+		DescriptiveStatistics: pm.DescriptiveStatistics,
+		EmptyFields:           pm.EmptyFields,
+		ExecutionTime:         pm.ExecutionTime,
+		Max:                   pm.Max,
+		Mean:                  pm.Mean,
+		Min:                   pm.Min,
+		NullValues:            pm.NullValues,
+		RowCount:              pm.RowCount,
+		Uniqueness:            pm.Uniqueness,
+	}
+}
+
+// EnabledPublicMonitorKeys returns the catalog keys enabled in a job's existing adaptiveMonitors, in
+// catalog order — the read-side counterpart of EnabledMonitorKeys, for describing a job as it stands.
+func EnabledPublicMonitorKeys(am *DqPublicAdaptiveMonitors) []string {
+	if am == nil {
+		return nil
+	}
+	return EnabledMonitorKeys(&DqProfileMonitors{
+		DescriptiveStatistics: am.DescriptiveStatistics,
+		EmptyFields:           am.EmptyFields,
+		ExecutionTime:         am.ExecutionTime,
+		Max:                   am.Max,
+		Mean:                  am.Mean,
+		Min:                   am.Min,
+		NullValues:            am.NullValues,
+		RowCount:              am.RowCount,
+		Uniqueness:            am.Uniqueness,
+	})
+}
+
 // CreateDqJobResponse is the public create response (JobDefinitionCreateResponse): the created job
 // definition plus the queued run id.
 type CreateDqJobResponse struct {
@@ -227,6 +266,92 @@ type CreateDqJobResponse struct {
 	JobRunID     string         `json:"jobRunId"`
 	DataLocation DqDataLocation `json:"dataLocation"`
 	SourceQuery  string         `json:"sourceQuery,omitempty"`
+}
+
+// UpdateDqJobRequest is the body for PATCH /rest/dq/1.0/jobs/{jobName} — the PUBLIC partial update
+// (JobDefinitionUpdateRequest in dq/udq-app-client/oas/dq-v1-public-oas-spec.yaml). "Include only the
+// fields you wish to update, omitted fields will remain unchanged", so every field here is a pointer
+// or omitempty: an absent field must marshal away entirely rather than send a zero value.
+//
+// The spec has NO jobType (a job's type is immutable), no backrun (that lives on POST /jobs/{name}/run)
+// and no queueRun. It also does NOT clear anything: per the spec, null and omitted are treated the same,
+// so there is no way to unset a field — a schedule is switched off with schedulingSettings.isActive=false.
+//
+// MERGE GRANULARITY IS NOT UNIFORM, which is why the *Patch types below exist:
+//   - jobSettings / monitoringSettings use real *Patch schemas (nullable leaves) → merged per field.
+//   - notifications / schedulingSettings / dataLocation reuse the NON-patch schemas, each with its own
+//     `required` list → sending one REPLACES the whole object. Callers should therefore compose these
+//     from the current definition (GetDqJob) plus their changes.
+type UpdateDqJobRequest struct {
+	JobName            string                     `json:"jobName,omitempty"`
+	SourceQuery        string                     `json:"sourceQuery,omitempty"`
+	RunDate            *DqPublicRunDate           `json:"runDate,omitempty"`
+	RunDateEnd         *DqPublicRunDate           `json:"runDateEnd,omitempty"`
+	DataLocation       *DqDataLocation            `json:"dataLocation,omitempty"`
+	JobSettings        *DqJobSettingsPatch        `json:"jobSettings,omitempty"`
+	MonitoringSettings *DqMonitoringSettingsPatch `json:"monitoringSettings,omitempty"`
+	Notifications      *DqJobNotifications        `json:"notifications,omitempty"`
+	SchedulingSettings *DqSchedulingSettings      `json:"schedulingSettings,omitempty"`
+}
+
+// DqJobSettingsPatch is jobSettings on the update path (JobSettingsPatch) — the same shape as
+// DqPublicJobSettings but with every leaf omissible, since the patch variant strips all defaults.
+type DqJobSettingsPatch struct {
+	DateFormat       string                   `json:"dateFormat,omitempty"` // DATE | TIMESTAMP
+	PushdownSettings *DqPushdownSettingsPatch `json:"pushdownSettings,omitempty"`
+	PullupSettings   *DqPullupSettingsPatch   `json:"pullupSettings,omitempty"`
+}
+
+// DqPushdownSettingsPatch is PushdownSettingsPatch. Pointers, not ints: the create-side defaults
+// (connections 10, threads 2) must NOT be re-asserted by an update that only touches one of them.
+type DqPushdownSettingsPatch struct {
+	Connections *int `json:"connections,omitempty"`
+	Threads     *int `json:"threads,omitempty"`
+}
+
+// DqPullupSettingsPatch is PullupSettingsPatch. sparkJobSizing reuses the create struct, which is
+// already fully omitempty; omitting it leaves the job's existing sizing alone.
+type DqPullupSettingsPatch struct {
+	LoadOptions        *DqLoadOptionsPatch     `json:"loadOptions,omitempty"`
+	SparkJobSizing     *DqPublicSparkJobSizing `json:"sparkJobSizing,omitempty"`
+	SparkSqlProperties map[string]string       `json:"sparkSqlProperties,omitempty"`
+}
+
+// DqLoadOptionsPatch is LoadOptionsPatch. numPartitions is a pointer because 0 is a MEANINGFUL value
+// here ("let Spark decide"), so it cannot double as "unset".
+type DqLoadOptionsPatch struct {
+	NumPartitions       *int                   `json:"numPartitions,omitempty"`
+	ParallelJdbcOptions *DqParallelJdbcOptions `json:"parallelJdbcOptions,omitempty"`
+}
+
+// DqMonitoringSettingsPatch is monitoringSettings on the update path (JobMonitoringSettingsPatch).
+// customMonitors is deliberately unmodeled — DQ rules are managed by the rule tools, not here.
+type DqMonitoringSettingsPatch struct {
+	AdaptiveMonitors *DqAdaptiveMonitorsPatch `json:"adaptiveMonitors,omitempty"`
+}
+
+// DqAdaptiveMonitorsPatch is AdaptiveMonitorsPatch. The nine toggles are plain bools with no
+// omitempty — as on create, the monitor selection is AUTHORITATIVE, so the whole set is sent and
+// anything the caller left out is turned off. Only `settings` is per-field optional.
+type DqAdaptiveMonitorsPatch struct {
+	DescriptiveStatistics bool                            `json:"descriptiveStatistics"`
+	EmptyFields           bool                            `json:"emptyFields"`
+	ExecutionTime         bool                            `json:"executionTime"`
+	Max                   bool                            `json:"max"`
+	Mean                  bool                            `json:"mean"`
+	Min                   bool                            `json:"min"`
+	NullValues            bool                            `json:"nullValues"`
+	RowCount              bool                            `json:"rowCount"`
+	Uniqueness            bool                            `json:"uniqueness"`
+	Settings              *DqAdaptiveMonitorSettingsPatch `json:"settings,omitempty"`
+}
+
+// DqAdaptiveMonitorSettingsPatch is AdaptiveMonitorSettingsPatch. Both fields are pointers because
+// the spec's minimum is 0 and 0 is meaningful (no look back / no learning phase), so a plain int
+// would silently overwrite the other value with 0 when only one is being changed.
+type DqAdaptiveMonitorSettingsPatch struct {
+	DataLookBack  *int `json:"dataLookBack,omitempty"`
+	LearningPhase *int `json:"learningPhase,omitempty"`
 }
 
 // ListDqConnections returns all data-quality connections on the instance.
@@ -353,6 +478,196 @@ func CreateDqJob(ctx context.Context, collibraHttpClient *http.Client, request C
 		return nil, fmt.Errorf("failed to parse create job response: %w", err)
 	}
 	return &resp, nil
+}
+
+// DqJobDefinition is the subset of the public JobDefinition (GET /rest/dq/1.0/jobs/{jobName}) needed
+// to describe an existing job — enough to confirm which job is about to be deleted, and to diff the
+// current configuration against a requested partial update (see UpdateDqJobRequest).
+type DqJobDefinition struct {
+	JobName            string                      `json:"jobName"`
+	JobType            string                      `json:"jobType,omitempty"`
+	DataLocation       DqDataLocation              `json:"dataLocation"`
+	SourceQuery        string                      `json:"sourceQuery,omitempty"`
+	RunDate            *DqPublicRunDate            `json:"runDate,omitempty"`
+	RunDateEnd         *DqPublicRunDate            `json:"runDateEnd,omitempty"`
+	JobSettings        *DqPublicJobSettings        `json:"jobSettings,omitempty"`
+	MonitoringSettings *DqPublicMonitoringSettings `json:"monitoringSettings,omitempty"`
+	Notifications      *DqJobNotifications         `json:"notifications,omitempty"`
+	SchedulingSettings *DqSchedulingSettings       `json:"schedulingSettings,omitempty"`
+}
+
+// RunDateValue returns the job's configured run date, or "" when it carries none.
+func (j *DqJobDefinition) RunDateValue() string {
+	if j == nil || j.RunDate == nil {
+		return ""
+	}
+	return j.RunDate.Value
+}
+
+// GetDqJob reads a single job definition by name via the PUBLIC GET /rest/dq/1.0/jobs/{jobName}.
+// The HTTP status is returned alongside the error so callers can map it to actionable guidance.
+func GetDqJob(ctx context.Context, collibraHttpClient *http.Client, jobName string) (*DqJobDefinition, int, error) {
+	endpoint := "/rest/dq/1.0/jobs/" + url.PathEscape(jobName)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var job DqJobDefinition
+	if err := json.Unmarshal(body, &job); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job response: %w", err)
+	}
+	return &job, code, nil
+}
+
+// UpdateDqJob applies a PARTIAL update to an existing job definition via the PUBLIC
+// PATCH /rest/dq/1.0/jobs/{jobName}. Fields absent from the request are left unchanged server-side.
+// A success is 200 with no response body, so only the HTTP status is returned; it comes back
+// alongside the error so callers can map it to actionable guidance.
+func UpdateDqJob(ctx context.Context, collibraHttpClient *http.Client, jobName string, request UpdateDqJobRequest) (int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Updating DQ job '%s'", jobName))
+
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal update job request: %w", err)
+	}
+	endpoint := "/rest/dq/1.0/jobs/" + url.PathEscape(jobName)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	_, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	return code, err
+}
+
+// DeleteDqJob permanently deletes a job definition and everything hanging off it (runs, rules,
+// results) via the PUBLIC DELETE /rest/dq/1.0/jobs/{jobName}.
+func DeleteDqJob(ctx context.Context, collibraHttpClient *http.Client, jobName string) (int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Deleting DQ job '%s'", jobName))
+	endpoint := "/rest/dq/1.0/jobs/" + url.PathEscape(jobName)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", endpoint, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	_, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	return code, err
+}
+
+var DqCancellableRunStates = []string{"RUNNING", "SUBMITTED", "WAITING", "DISPATCHED", "SETUP", "SENDING"}
+
+var DqTerminalRunStates = []string{"FINISHED", "CANCELLED", "FAILED"}
+
+func IsCancellableDqRunState(s string) bool {
+	s = strings.TrimSpace(s)
+	for _, st := range DqCancellableRunStates {
+		if strings.EqualFold(s, st) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsDeletableDqRunState(s string) bool {
+	return strings.TrimSpace(s) != "" && !IsCancellableDqRunState(s)
+}
+
+type DqJobRun struct {
+	JobRunID  string           `json:"jobRunId"`
+	JobName   string           `json:"jobName"`
+	Status    string           `json:"status"`
+	RunDate   *DqPublicRunDate `json:"runDate,omitempty"`
+	StartTime string           `json:"startTime,omitempty"`
+	EndTime   string           `json:"endTime,omitempty"`
+	UpdatedAt string           `json:"updatedAt,omitempty"`
+}
+
+// RunDateValue returns the run's date/timestamp, or "" when the run carries none.
+func (r *DqJobRun) RunDateValue() string {
+	if r == nil || r.RunDate == nil {
+		return ""
+	}
+	return r.RunDate.Value
+}
+
+type dqJobRunListResponse struct {
+	Results []DqJobRun `json:"results"`
+}
+
+func GetDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (*DqJobRun, int, error) {
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var run DqJobRun
+	if err := json.Unmarshal(body, &run); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job run response: %w", err)
+	}
+	return &run, code, nil
+}
+
+func SearchCancellableDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobName string) ([]DqJobRun, int, error) {
+	return searchDqJobRunsByName(ctx, collibraHttpClient, jobName, DqCancellableRunStates)
+}
+
+func SearchDeletableDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobName string) ([]DqJobRun, int, error) {
+	return searchDqJobRunsByName(ctx, collibraHttpClient, jobName, DqTerminalRunStates)
+}
+
+// searchDqJobRunsByName runs the public job-run search (GET /rest/dq/1.0/jobRuns) for a
+// case-insensitive substring match on jobName, restricted to the given statuses.
+func searchDqJobRunsByName(ctx context.Context, collibraHttpClient *http.Client, jobName string, statuses []string) ([]DqJobRun, int, error) {
+	params := url.Values{}
+	params.Set("jobName", jobName)
+	params.Set("nameMatchMode", "CONTAINS")
+	for _, st := range statuses {
+		params.Add("status", st)
+	}
+	endpoint := "/rest/dq/1.0/jobRuns?" + params.Encode()
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var resp dqJobRunListResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job runs response: %w", err)
+	}
+	return resp.Results, code, nil
+}
+
+func CancelDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Cancelling DQ job run '%s'", jobRunID))
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID) + "/cancel"
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	_, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	return code, err
+}
+
+func DeleteDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Deleting DQ job run '%s'", jobRunID))
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", endpoint, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	_, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	return code, err
 }
 
 // DqParallelJdbcOptions is the wizard's "Parallel JDBC" advanced-sizing control (PULLUP). mode is the
