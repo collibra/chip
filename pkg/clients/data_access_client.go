@@ -2,9 +2,11 @@ package clients
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	sdk "github.com/collibra/data-access-go-sdk"
 	"github.com/collibra/data-access-go-sdk/services"
 	"github.com/collibra/data-access-go-sdk/types"
+	"github.com/google/uuid"
 )
 
 // DataAccessControlDetails holds the details of a single data access control.
@@ -77,9 +80,8 @@ type DataAccessGrantCategory struct {
 	IsDefault  bool   `json:"isDefault" jsonschema:"Whether this is the default grant category for new access controls"`
 }
 
-// GetDataAccessControl retrieves a single data access control by ID.
-// It creates an sdk.CollibraClient using chip's existing HTTP client via sdk.WithHTTPClient,
-// so URL routing and authentication are handled by chip's RoundTripper.
+// GetDataAccessControl retrieves a single data access control by ID, with its WHAT and WHO
+// lists.
 func GetDataAccessControl(ctx context.Context, httpClient *http.Client, id string) (*DataAccessControlDetails, error) {
 	collibraHost, ok := chip.GetCollibraHost(ctx)
 	if !ok {
@@ -177,8 +179,6 @@ type DataAccessDataSource struct {
 }
 
 // GetDataAccessDataSource retrieves a single Data Access data source by ID.
-// It creates an sdk.CollibraClient using chip's existing HTTP client via sdk.WithHTTPClient,
-// so URL routing and authentication are handled by chip's RoundTripper.
 func GetDataAccessDataSource(ctx context.Context, httpClient *http.Client, id string) (*DataAccessDataSource, error) {
 	collibraHost, ok := chip.GetCollibraHost(ctx)
 	if !ok {
@@ -230,11 +230,8 @@ type SearchDataAccessIdentitiesResult struct {
 	Items []*DataAccessIdentity
 }
 
-// SearchDataAccessIdentities searches for Data Access users by name and/or email.
-// When email is provided, an exact lookup via GetUserByEmail is performed. Name is then applied
-// as an optional client-side case-insensitive contains filter on the result.
-// When only name is provided, ListUsers is called with the Search filter (case-insensitive
-// contains). The returned list is capped at pageSize items (default 25).
+// SearchDataAccessIdentities searches for Data Access users by name and/or email. Email is an
+// exact match, name a contains match; results are capped at pageSize.
 func SearchDataAccessIdentities(ctx context.Context, httpClient *http.Client, name, email string, pageSize int) (*SearchDataAccessIdentitiesResult, error) {
 	collibraHost, ok := chip.GetCollibraHost(ctx)
 	if !ok {
@@ -314,9 +311,8 @@ type SearchDataAccessObjectsResult struct {
 	Items []*DataAccessObject `json:"items"`
 }
 
-// SearchDataAccessObjects returns a list of data objects matching the supplied filters.
-// Name search is case-insensitive contains. The returned list is capped at pageSize items
-// (default 25), drawn from the SDK's ListDataObjects iterator.
+// SearchDataAccessObjects returns the data objects matching the supplied filters, capped at
+// pageSize.
 func SearchDataAccessObjects(ctx context.Context, httpClient *http.Client, name string, dataSources []string, dataObjectTypes []string, parents []string, ancestors []string, includeDeleted bool, pageSize int) (*SearchDataAccessObjectsResult, error) {
 	collibraHost, ok := chip.GetCollibraHost(ctx)
 	if !ok {
@@ -409,12 +405,8 @@ type CheckUserDataObjectAccessResult struct {
 	Unresolved []*UnresolvedObjectID `json:"unresolved,omitempty" jsonschema:"IDs that did not resolve to a data object. Ask the user to correct or drop these."`
 }
 
-// CheckUserDataObjectAccess looks up each supplied data object ID and reports the access the user
-// has on it, including the access controls (roles) that grant the access.
-//
-// The user is resolved as: userID if set, otherwise the user with email, otherwise the current
-// user. IDs that do not correspond to an existing data object are returned in Unresolved so the
-// caller can ask the user to correct or drop them. Resolve names to IDs via search_data_access_objects.
+// CheckUserDataObjectAccess reports the access a user has on each of the given data objects,
+// and the roles granting it. Unknown object IDs come back in Unresolved.
 func CheckUserDataObjectAccess(ctx context.Context, httpClient *http.Client, objectIDs []string, userID, email string) (*CheckUserDataObjectAccessResult, error) {
 	collibraHost, ok := chip.GetCollibraHost(ctx)
 	if !ok {
@@ -470,7 +462,7 @@ func CheckUserDataObjectAccess(ctx context.Context, httpClient *http.Client, obj
 	return result, nil
 }
 
-// resolveDataAccessUser resolves the user to check access for: by ID, then by email, then the
+// resolveDataAccessUser resolves the user to check access for: by ID, then email, then the
 // current user.
 func resolveDataAccessUser(ctx context.Context, collibraClient *sdk.CollibraClient, userID, email string) (*types.User, error) {
 	switch {
@@ -535,22 +527,6 @@ func derefStrings(in []*string) []string {
 	return out
 }
 
-// CreateDataAccessRequestWhatInput describes a single WHAT item (a data object) for a new
-// data access request, with optional requested permissions.
-type CreateDataAccessRequestWhatInput struct {
-	DataObjectID      string   `json:"dataObjectId" jsonschema:"The ID of the data object the requesters want access to. Obtain via search_data_access_objects."`
-	Permissions       []string `json:"permissions,omitempty" jsonschema:"Source-system permissions requested on this data object (e.g. SELECT). Should always be empty."`
-	GlobalPermissions []string `json:"globalPermissions,omitempty" jsonschema:"Global permissions requested on this data object. Must always be READ."`
-}
-
-// CreateDataAccessRequestInput holds the parameters required to create a new data access request.
-type CreateDataAccessRequestInput struct {
-	Name        *string
-	Description string
-	UserIDs     []string
-	What        []CreateDataAccessRequestWhatInput
-}
-
 // DataAccessRequestSummary is the simplified result of creating an access request.
 type DataAccessRequestSummary struct {
 	ID          string  `json:"id" jsonschema:"Unique identifier of the created access request"`
@@ -559,56 +535,6 @@ type DataAccessRequestSummary struct {
 	Status      string  `json:"status" jsonschema:"Current status of the access request (e.g. Created, Approval, Implementation, Closed)"`
 	Outcome     string  `json:"outcome" jsonschema:"Current outcome of the access request"`
 	Url         string  `json:"url" jsonschema:"Url in the Collibra UI to view access request"`
-}
-
-// CreateDataAccessRequest creates a new Data Access request via the SDK's AccessRequestClient.
-func CreateDataAccessRequest(ctx context.Context, httpClient *http.Client, input CreateDataAccessRequestInput) (*DataAccessRequestSummary, error) {
-	collibraHost, ok := chip.GetCollibraHost(ctx)
-	if !ok {
-		return nil, fmt.Errorf("collibra host not configured in context")
-	}
-	dataAccessURL := strings.TrimSuffix(collibraHost, "/") + "/dataAccess"
-
-	collibraClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create data access client: %w", err)
-	}
-
-	what := make([]types.AccessRequestWhatInput, 0, len(input.What))
-	for _, w := range input.What {
-		what = append(what, types.AccessRequestWhatInput{
-			DataObject: &types.AccessRequestDataObjectWhatInput{
-				Id:                w.DataObjectID,
-				Permissions:       w.Permissions,
-				GlobalPermissions: w.GlobalPermissions,
-			},
-		})
-	}
-
-	req := types.AccessRequestInput{
-		Name:        input.Name,
-		Description: &input.Description,
-		Who: &types.AccessRequestWhoInput{
-			Users: input.UserIDs,
-		},
-		What: what,
-	}
-
-	ar, err := collibraClient.AccessRequest().CreateAccessRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	uiURL := buildUiUrl(ctx, "access-requests", ar.Id)
-
-	return &DataAccessRequestSummary{
-		ID:          ar.Id,
-		Name:        ar.Name,
-		Description: ar.Description,
-		Status:      string(ar.Status),
-		Outcome:     string(ar.Outcome),
-		Url:         uiURL,
-	}, nil
 }
 
 func mapToDataAccessObject(ctx context.Context, o *types.DataObject) *DataAccessObject {
@@ -704,4 +630,466 @@ func buildUiUrl(ctx context.Context, resourceType string, id string) string {
 		return ""
 	}
 	return strings.TrimSuffix(collibraHost, "/") + "/data-access/" + resourceType + "/" + id
+}
+
+// Well-known identifiers of the out-of-the-box Collibra Data Product operating model.
+const (
+	// DataProductAssetTypeID is the asset type of a Data Product.
+	DataProductAssetTypeID = "00000000-0000-0000-0000-000000050000"
+	// dataProductHasOutputPortPublicID is the relation type linking a Data Product to its
+	// output ports.
+	dataProductHasOutputPortPublicID = "DataProductHasOutputPort"
+	// dataProductRelationsLimit caps the relations fetched for a single Data Product.
+	dataProductRelationsLimit = 1000
+	// groupSearchScanLimit caps the access controls scanned when looking up a group by name.
+	groupSearchScanLimit = 200
+)
+
+// CatalogAssetRef identifies a Collibra catalog asset and its asset type.
+type CatalogAssetRef struct {
+	ID       string `json:"id" jsonschema:"UUID of the asset"`
+	Name     string `json:"name" jsonschema:"Display name of the asset"`
+	TypeID   string `json:"typeId" jsonschema:"UUID of the asset's type"`
+	TypeName string `json:"typeName" jsonschema:"Name of the asset's type"`
+}
+
+// DataProductOutputPort is one output port of a Data Product.
+type DataProductOutputPort struct {
+	ID   string `json:"id" jsonschema:"UUID of the output port asset"`
+	Name string `json:"name" jsonschema:"Display name of the output port"`
+}
+
+// CatalogAssetRole is the Data Access role — an access control — linked to a catalog asset.
+// It is the WHAT of an access request raised on that asset.
+type CatalogAssetRole struct {
+	ID       string                   `json:"id" jsonschema:"Unique identifier of the access control (role) linked to the asset"`
+	Name     string                   `json:"name" jsonschema:"Name of the role"`
+	Action   string                   `json:"action" jsonschema:"Action type of the access control. A role is a Grant."`
+	State    string                   `json:"state" jsonschema:"State of the access control: Active, Inactive, or Deleted"`
+	Category *DataAccessGrantCategory `json:"category,omitempty" jsonschema:"Grant category of the role, present for Grant action types"`
+}
+
+// UnresolvedBeneficiary is a requested beneficiary that could not be mapped into Data Access.
+type UnresolvedBeneficiary struct {
+	Input  string `json:"input" jsonschema:"The supplied identifier"`
+	Reason string `json:"reason" jsonschema:"Why it could not be mapped into Data Access"`
+}
+
+// DataAccessGroup is a group of users in Collibra Data Access.
+type DataAccessGroup struct {
+	ID   string `json:"id" jsonschema:"Unique identifier of the group"`
+	Name string `json:"name" jsonschema:"Name of the group"`
+}
+
+// CreateAssetAccessRequestInput holds the parameters for an access request on a catalog
+// asset.
+type CreateAssetAccessRequestInput struct {
+	Name                    *string
+	Description             string
+	UserIDs                 []string
+	GroupIDs                []string
+	RoleID                  string
+	CatalogAsset            CatalogAssetRef
+	ImplementationExpiresAt time.Time
+}
+
+// GetCatalogAsset fetches a Collibra asset's name and type, or nil when no asset with that id
+// exists.
+func GetCatalogAsset(ctx context.Context, client *http.Client, assetID string) (*CatalogAssetRef, error) {
+	reqURL := fmt.Sprintf("/rest/2.0/assets/%s", url.PathEscape(assetID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building get asset request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	body, status, err := executeRequestWithStatus(client, req)
+	if status == http.StatusNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting asset %s: %w", assetID, err)
+	}
+
+	var raw struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		DisplayName string `json:"displayName"`
+		Type        struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"type"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("decoding asset response: %w", err)
+	}
+	if raw.ID == "" {
+		return nil, nil
+	}
+
+	return &CatalogAssetRef{
+		ID:       raw.ID,
+		Name:     firstNonEmpty(raw.DisplayName, raw.Name),
+		TypeID:   raw.Type.ID,
+		TypeName: raw.Type.Name,
+	}, nil
+}
+
+// ListDataProductOutputPorts returns the output ports of a Data Product.
+func ListDataProductOutputPorts(ctx context.Context, client *http.Client, dataProductID string) ([]DataProductOutputPort, error) {
+	relations, err := listOutgoingRelations(ctx, client, dataProductID)
+	if err != nil {
+		return nil, err
+	}
+
+	publicIDs := make(map[string]string, 4)
+	ports := make([]DataProductOutputPort, 0, 4)
+	for _, rel := range relations {
+		if rel.Type.ID == "" || rel.Target.ID == "" {
+			continue
+		}
+		publicID, cached := publicIDs[rel.Type.ID]
+		if !cached {
+			relType, err := GetRelationTypeFull(ctx, client, rel.Type.ID)
+			if err != nil {
+				return nil, fmt.Errorf("resolving relation type %s: %w", rel.Type.ID, err)
+			}
+			publicID = relType.PublicID
+			publicIDs[rel.Type.ID] = publicID
+		}
+		if publicID != dataProductHasOutputPortPublicID {
+			continue
+		}
+		ports = append(ports, DataProductOutputPort{
+			ID:   rel.Target.ID,
+			Name: firstNonEmpty(rel.Target.DisplayName, rel.Target.Name),
+		})
+	}
+	return ports, nil
+}
+
+// ListAssetRoles returns the Data Access roles linked to a Collibra asset, empty when it has
+// none.
+func ListAssetRoles(ctx context.Context, httpClient *http.Client, assetID string) ([]CatalogAssetRole, error) {
+	collibraClient, err := newDataAccessSDKClient(ctx, httpClient)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := &types.AccessControlFilterInput{AssetIds: []string{assetID}}
+
+	roles := make([]CatalogAssetRole, 0, 1)
+	for accessControl, err := range collibraClient.AccessControl().ListAccessControls(ctx, services.WithAccessControlListFilter(filter)) {
+		if err != nil {
+			return nil, fmt.Errorf("listing the roles linked to asset %s: %w", assetID, err)
+		}
+		if accessControl == nil {
+			continue
+		}
+		roles = append(roles, mapToCatalogAssetRole(accessControl))
+	}
+	return roles, nil
+}
+
+func mapToCatalogAssetRole(ac *types.AccessControl) CatalogAssetRole {
+	role := CatalogAssetRole{
+		ID:     ac.Id,
+		Name:   ac.Name,
+		Action: string(ac.Action),
+		State:  string(ac.State),
+	}
+	if ac.Category != nil {
+		role.Category = &DataAccessGrantCategory{
+			ID:         ac.Category.Id,
+			Name:       ac.Category.Name,
+			NamePlural: ac.Category.NamePlural,
+			IsSystem:   ac.Category.IsSystem,
+			IsDefault:  ac.Category.IsDefault,
+		}
+	}
+	return role
+}
+
+// catalogAssetRelation is the subset of a /rest/2.0/relations result this flow needs.
+type catalogAssetRelation struct {
+	ID   string `json:"id"`
+	Type struct {
+		ID string `json:"id"`
+	} `json:"type"`
+	Target struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		DisplayName string `json:"displayName"`
+	} `json:"target"`
+}
+
+// listOutgoingRelations returns the relations where the given asset is the head.
+func listOutgoingRelations(ctx context.Context, client *http.Client, assetID string) ([]catalogAssetRelation, error) {
+	endpoint, err := buildUrl("/rest/2.0/relations", RelationsQueryParams{
+		SourceID: assetID,
+		Limit:    dataProductRelationsLimit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("building relations request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building relations request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	body, err := executeRequest(client, req)
+	if err != nil {
+		return nil, fmt.Errorf("listing relations of asset %s: %w", assetID, err)
+	}
+
+	var response struct {
+		Results []catalogAssetRelation `json:"results"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("decoding relations response: %w", err)
+	}
+	return response.Results, nil
+}
+
+// ResolveDataAccessUsers maps Collibra users, given as email addresses or usernames, to Data
+// Access users by email. Entries that do not map are returned separately.
+func ResolveDataAccessUsers(ctx context.Context, httpClient *http.Client, identifiers []string) ([]*DataAccessIdentity, []UnresolvedBeneficiary, error) {
+	collibraClient, err := newDataAccessSDKClient(ctx, httpClient)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resolved := make([]*DataAccessIdentity, 0, len(identifiers))
+	unresolved := make([]UnresolvedBeneficiary, 0)
+	seen := make(map[string]struct{}, len(identifiers))
+
+	for _, identifier := range identifiers {
+		trimmed := strings.TrimSpace(identifier)
+		if trimmed == "" {
+			continue
+		}
+
+		email, reason, err := resolveCollibraUserEmail(ctx, httpClient, trimmed)
+		if err != nil {
+			return nil, nil, err
+		}
+		if reason != "" {
+			unresolved = append(unresolved, UnresolvedBeneficiary{Input: trimmed, Reason: reason})
+			continue
+		}
+
+		user, err := collibraClient.User().GetUserByEmail(ctx, email)
+		if err != nil {
+			var notFound *types.ErrNotFound
+			if errors.As(err, &notFound) {
+				unresolved = append(unresolved, UnresolvedBeneficiary{
+					Input:  trimmed,
+					Reason: fmt.Sprintf("no Data Access user with email address %q", email),
+				})
+				continue
+			}
+			return nil, nil, err
+		}
+		if _, duplicate := seen[user.Id]; duplicate {
+			continue
+		}
+		seen[user.Id] = struct{}{}
+		resolved = append(resolved, mapToDataAccessIdentity(ctx, user))
+	}
+
+	return resolved, unresolved, nil
+}
+
+// resolveCollibraUserEmail turns an email address or Collibra username into the email to look
+// up in Data Access. A non-empty reason means it could not be resolved.
+func resolveCollibraUserEmail(ctx context.Context, httpClient *http.Client, identifier string) (email string, reason string, err error) {
+	if strings.Contains(identifier, "@") {
+		return identifier, "", nil
+	}
+
+	user, err := FindUserByUsername(ctx, httpClient, identifier)
+	if err != nil {
+		return "", "", err
+	}
+	if user == nil {
+		return "", fmt.Sprintf("no Collibra user with username %q — supply an email address instead", identifier), nil
+	}
+	if strings.TrimSpace(user.EmailAddress) == "" {
+		return "", fmt.Sprintf("Collibra user %q has no email address, so it cannot be mapped to a Data Access user", identifier), nil
+	}
+	return user.EmailAddress, "", nil
+}
+
+// ResolveDataAccessGroups maps Collibra groups, given as names or UUIDs, to Data Access groups
+// by name. Entries that do not map are returned separately.
+func ResolveDataAccessGroups(ctx context.Context, httpClient *http.Client, identifiers []string) ([]*DataAccessGroup, []UnresolvedBeneficiary, error) {
+	resolved := make([]*DataAccessGroup, 0, len(identifiers))
+	unresolved := make([]UnresolvedBeneficiary, 0)
+	seen := make(map[string]struct{}, len(identifiers))
+
+	for _, identifier := range identifiers {
+		trimmed := strings.TrimSpace(identifier)
+		if trimmed == "" {
+			continue
+		}
+
+		name, reason, err := resolveCollibraGroupName(ctx, httpClient, trimmed)
+		if err != nil {
+			return nil, nil, err
+		}
+		if reason != "" {
+			unresolved = append(unresolved, UnresolvedBeneficiary{Input: trimmed, Reason: reason})
+			continue
+		}
+
+		group, reason, err := findDataAccessGroupByName(ctx, httpClient, name)
+		if err != nil {
+			return nil, nil, err
+		}
+		if reason != "" {
+			unresolved = append(unresolved, UnresolvedBeneficiary{Input: trimmed, Reason: reason})
+			continue
+		}
+		if _, duplicate := seen[group.ID]; duplicate {
+			continue
+		}
+		seen[group.ID] = struct{}{}
+		resolved = append(resolved, group)
+	}
+
+	return resolved, unresolved, nil
+}
+
+// resolveCollibraGroupName turns a group name or Collibra group UUID into the name to look up
+// in Data Access. A non-empty reason means it could not be resolved.
+func resolveCollibraGroupName(ctx context.Context, httpClient *http.Client, identifier string) (name string, reason string, err error) {
+	if _, parseErr := uuid.Parse(identifier); parseErr != nil {
+		return identifier, "", nil
+	}
+
+	groupName, err := GetUserGroupName(ctx, httpClient, identifier)
+	if err != nil {
+		return "", fmt.Sprintf("no Collibra group with id %q — supply the group name instead", identifier), nil
+	}
+	if strings.TrimSpace(groupName) == "" {
+		return "", fmt.Sprintf("Collibra group %q has no name, so it cannot be mapped to a Data Access group", identifier), nil
+	}
+	return groupName, "", nil
+}
+
+// findDataAccessGroupByName looks up a Data Access group by its exact name. Groups are the
+// access controls with the Group action, and name is the only identifier they share with
+// Collibra. A non-empty reason means no single group matched.
+func findDataAccessGroupByName(ctx context.Context, httpClient *http.Client, name string) (*DataAccessGroup, string, error) {
+	collibraClient, err := newDataAccessSDKClient(ctx, httpClient)
+	if err != nil {
+		return nil, "", err
+	}
+
+	filter := &types.AccessControlFilterInput{
+		Actions: []types.AccessControlAction{types.AccessControlActionGroup},
+		Search:  &name,
+	}
+
+	matches := make([]*DataAccessGroup, 0, 1)
+	scanned := 0
+	for accessControl, err := range collibraClient.AccessControl().ListAccessControls(ctx, services.WithAccessControlListFilter(filter)) {
+		if err != nil {
+			return nil, "", fmt.Errorf("searching for Data Access group %q: %w", name, err)
+		}
+		if accessControl == nil {
+			continue
+		}
+		if strings.EqualFold(accessControl.Name, name) {
+			matches = append(matches, &DataAccessGroup{ID: accessControl.Id, Name: accessControl.Name})
+		}
+		scanned++
+		if scanned >= groupSearchScanLimit {
+			break
+		}
+	}
+
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Sprintf("no Data Access group named %q", name), nil
+	case 1:
+		return matches[0], "", nil
+	default:
+		return nil, fmt.Sprintf("several Data Access groups are named %q, so it is unclear which one is meant", name), nil
+	}
+}
+
+// CreateAssetAccessRequest creates an access request for the role linked to a Collibra asset.
+func CreateAssetAccessRequest(ctx context.Context, httpClient *http.Client, input CreateAssetAccessRequestInput) (*DataAccessRequestSummary, error) {
+	collibraClient, err := newDataAccessSDKClient(ctx, httpClient)
+	if err != nil {
+		return nil, err
+	}
+
+	assetID, err := uuid.Parse(input.CatalogAsset.ID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid catalog asset id %q: %w", input.CatalogAsset.ID, err)
+	}
+	assetTypeID, err := uuid.Parse(input.CatalogAsset.TypeID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid catalog asset type id %q: %w", input.CatalogAsset.TypeID, err)
+	}
+
+	expiresAt := input.ImplementationExpiresAt
+	req := types.AccessRequestInput{
+		Name:        input.Name,
+		Description: &input.Description,
+		Who: &types.AccessRequestWhoInput{
+			Users:          input.UserIDs,
+			AccessControls: input.GroupIDs,
+		},
+		What: []types.AccessRequestWhatInput{{
+			AccessControl: &types.AccessRequestAccessControlWhatInput{Id: input.RoleID},
+		}},
+		CatalogAsset: &types.CatalogAssetInput{
+			AssetId:     assetID,
+			AssetTypeId: assetTypeID,
+		},
+		ImplementationExpiresAt: &expiresAt,
+	}
+
+	ar, err := collibraClient.AccessRequest().CreateAccessRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DataAccessRequestSummary{
+		ID:          ar.Id,
+		Name:        ar.Name,
+		Description: ar.Description,
+		Status:      string(ar.Status),
+		Outcome:     string(ar.Outcome),
+		Url:         buildUiUrl(ctx, "access-requests", ar.Id),
+	}, nil
+}
+
+// newDataAccessSDKClient builds a Data Access SDK client on top of chip's HTTP client.
+func newDataAccessSDKClient(ctx context.Context, httpClient *http.Client) (*sdk.CollibraClient, error) {
+	collibraHost, ok := chip.GetCollibraHost(ctx)
+	if !ok {
+		return nil, fmt.Errorf("collibra host not configured in context")
+	}
+	dataAccessURL := strings.TrimSuffix(collibraHost, "/") + "/dataAccess"
+
+	collibraClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data access client: %w", err)
+	}
+	return collibraClient, nil
+}
+
+// firstNonEmpty returns the first value that is not empty after trimming.
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }

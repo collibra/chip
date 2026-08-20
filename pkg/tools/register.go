@@ -8,10 +8,10 @@ import (
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/cancel_dq_job_run"
-	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/check_user_data_object_access"
+	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
-	"github.com/collibra/chip/pkg/tools/create_data_access_request"
+	"github.com/collibra/chip/pkg/tools/create_asset_access_request"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job"
@@ -108,7 +108,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
 	toolRegister(server, toolConfig, search_data_access_identities.NewTool(client))
 	toolRegister(server, toolConfig, search_data_access_objects.NewTool(client))
-	toolRegister(server, toolConfig, create_data_access_request.NewTool(client))
+	toolRegister(server, toolConfig, create_asset_access_request.NewTool(client))
 	toolRegister(server, toolConfig, check_user_data_object_access.NewTool(client))
 	toolRegister(server, toolConfig, get_data_access_data_source.NewTool(client))
 	toolRegister(server, toolConfig, get_data_access_control_details.NewTool(client))

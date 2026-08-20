@@ -1,9 +1,9 @@
 module github.com/collibra/chip
 
-go 1.26.5
+go 1.26.6
 
 require (
-	github.com/collibra/data-access-go-sdk v0.0.71
+	github.com/collibra/data-access-go-sdk v0.0.73
 	github.com/google/go-querystring v1.2.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
@@ -14,7 +14,7 @@ require (
 )
 
 require (
-	github.com/Khan/genqlient v0.8.2-0.20260527022710-6bbde3684dd6 // indirect
+	github.com/Khan/genqlient v0.8.2-0.20260808220311-f53a04c8e9d2 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
