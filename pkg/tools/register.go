@@ -27,6 +27,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
 	"github.com/collibra/chip/pkg/tools/get_context_specification"
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
+	"github.com/collibra/chip/pkg/tools/get_dq_job"
+	"github.com/collibra/chip/pkg/tools/get_dq_job_run"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_results"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_template"
@@ -119,6 +121,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
 		toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
 		toolRegister(server, toolConfig, update_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
 	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
