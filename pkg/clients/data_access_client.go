@@ -632,18 +632,8 @@ func buildUiUrl(ctx context.Context, resourceType string, id string) string {
 	return strings.TrimSuffix(collibraHost, "/") + "/data-access/" + resourceType + "/" + id
 }
 
-// Well-known identifiers of the out-of-the-box Collibra Data Product operating model.
-const (
-	// DataProductAssetTypeID is the asset type of a Data Product.
-	DataProductAssetTypeID = "00000000-0000-0000-0000-000000050000"
-	// dataProductHasOutputPortPublicID is the relation type linking a Data Product to its
-	// output ports.
-	dataProductHasOutputPortPublicID = "DataProductHasOutputPort"
-	// dataProductRelationsLimit caps the relations fetched for a single Data Product.
-	dataProductRelationsLimit = 1000
-	// groupSearchScanLimit caps the access controls scanned when looking up a group by name.
-	groupSearchScanLimit = 200
-)
+// groupSearchScanLimit caps the access controls scanned when looking up a group by name.
+const groupSearchScanLimit = 200
 
 // CatalogAssetRef identifies a Collibra catalog asset and its asset type.
 type CatalogAssetRef struct {
@@ -651,12 +641,6 @@ type CatalogAssetRef struct {
 	Name     string `json:"name" jsonschema:"Display name of the asset"`
 	TypeID   string `json:"typeId" jsonschema:"UUID of the asset's type"`
 	TypeName string `json:"typeName" jsonschema:"Name of the asset's type"`
-}
-
-// DataProductOutputPort is one output port of a Data Product.
-type DataProductOutputPort struct {
-	ID   string `json:"id" jsonschema:"UUID of the output port asset"`
-	Name string `json:"name" jsonschema:"Display name of the output port"`
 }
 
 // CatalogAssetRole is the Data Access role — an access control — linked to a catalog asset.
@@ -735,39 +719,6 @@ func GetCatalogAsset(ctx context.Context, client *http.Client, assetID string) (
 	}, nil
 }
 
-// ListDataProductOutputPorts returns the output ports of a Data Product.
-func ListDataProductOutputPorts(ctx context.Context, client *http.Client, dataProductID string) ([]DataProductOutputPort, error) {
-	relations, err := listOutgoingRelations(ctx, client, dataProductID)
-	if err != nil {
-		return nil, err
-	}
-
-	publicIDs := make(map[string]string, 4)
-	ports := make([]DataProductOutputPort, 0, 4)
-	for _, rel := range relations {
-		if rel.Type.ID == "" || rel.Target.ID == "" {
-			continue
-		}
-		publicID, cached := publicIDs[rel.Type.ID]
-		if !cached {
-			relType, err := GetRelationTypeFull(ctx, client, rel.Type.ID)
-			if err != nil {
-				return nil, fmt.Errorf("resolving relation type %s: %w", rel.Type.ID, err)
-			}
-			publicID = relType.PublicID
-			publicIDs[rel.Type.ID] = publicID
-		}
-		if publicID != dataProductHasOutputPortPublicID {
-			continue
-		}
-		ports = append(ports, DataProductOutputPort{
-			ID:   rel.Target.ID,
-			Name: firstNonEmpty(rel.Target.DisplayName, rel.Target.Name),
-		})
-	}
-	return ports, nil
-}
-
 // ListAssetRoles returns the Data Access roles linked to a Collibra asset, empty when it has
 // none.
 func ListAssetRoles(ctx context.Context, httpClient *http.Client, assetID string) ([]CatalogAssetRole, error) {
@@ -808,48 +759,6 @@ func mapToCatalogAssetRole(ac *types.AccessControl) CatalogAssetRole {
 		}
 	}
 	return role
-}
-
-// catalogAssetRelation is the subset of a /rest/2.0/relations result this flow needs.
-type catalogAssetRelation struct {
-	ID   string `json:"id"`
-	Type struct {
-		ID string `json:"id"`
-	} `json:"type"`
-	Target struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		DisplayName string `json:"displayName"`
-	} `json:"target"`
-}
-
-// listOutgoingRelations returns the relations where the given asset is the head.
-func listOutgoingRelations(ctx context.Context, client *http.Client, assetID string) ([]catalogAssetRelation, error) {
-	endpoint, err := buildUrl("/rest/2.0/relations", RelationsQueryParams{
-		SourceID: assetID,
-		Limit:    dataProductRelationsLimit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("building relations request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("building relations request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	body, err := executeRequest(client, req)
-	if err != nil {
-		return nil, fmt.Errorf("listing relations of asset %s: %w", assetID, err)
-	}
-
-	var response struct {
-		Results []catalogAssetRelation `json:"results"`
-	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("decoding relations response: %w", err)
-	}
-	return response.Results, nil
 }
 
 // ResolveDataAccessUsers maps Collibra users, given as email addresses or usernames, to Data

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/chip"
-	"github.com/collibra/chip/pkg/clients"
 	tool "github.com/collibra/chip/pkg/tools/create_asset_access_request"
 	"github.com/collibra/chip/pkg/tools/testutil"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -21,14 +20,10 @@ import (
 const gqlPath = "/dataAccess/query"
 
 const (
-	dataProductID   = "11111111-1111-1111-1111-111111111111"
-	outputPortID    = "019d76fb-42c5-7568-8050-eab61c198ec2"
-	secondPortID    = "22222222-2222-2222-2222-222222222222"
+	assetID         = "019d76fb-42c5-7568-8050-eab61c198ec2"
 	tableID         = "33333333-3333-3333-3333-333333333333"
-	outputPortRelID = "44444444-4444-4444-4444-444444444444"
-	inputPortRelID  = "55555555-5555-5555-5555-555555555555"
 	tableTypeID     = "00000000-0000-0000-0000-000000031007"
-	outputPortType  = "00000000-0000-0000-0000-000000050004"
+	assetTypeID     = "00000000-0000-0000-0000-000000050004"
 	roleID          = "ac-1"
 	collibraGroupID = "66666666-6666-6666-6666-666666666666"
 	expiry          = "2099-12-31"
@@ -38,8 +33,6 @@ const (
 // touches, and records the create mutation so tests can assert what was sent.
 type fakeCollibra struct {
 	assets              map[string]string
-	relations           map[string]string
-	relationTypes       map[string]string
 	rolesByAsset        map[string][]string
 	groupsByName        map[string][]string
 	collibraGroupsByID  map[string]string
@@ -53,23 +46,11 @@ type fakeCollibra struct {
 func newFake() *fakeCollibra {
 	return &fakeCollibra{
 		assets: map[string]string{
-			dataProductID: assetJSON(dataProductID, "Sales Orders", clients.DataProductAssetTypeID, "Data Product"),
-			outputPortID:  assetJSON(outputPortID, "Sales Orders — Table", outputPortType, "Data Product Port"),
-			secondPortID:  assetJSON(secondPortID, "Sales Orders — API", outputPortType, "Data Product Port"),
-			tableID:       assetJSON(tableID, "customer_orders", tableTypeID, "Table"),
-		},
-		relations: map[string]string{
-			dataProductID: relationsJSON(
-				relationJSON(outputPortRelID, outputPortID, "Sales Orders — Table"),
-				relationJSON(inputPortRelID, tableID, "customer_orders"),
-			),
-		},
-		relationTypes: map[string]string{
-			outputPortRelID: relationTypeJSON(outputPortRelID, "DataProductHasOutputPort", "exposes data as"),
-			inputPortRelID:  relationTypeJSON(inputPortRelID, "DataProductHasInputPort", "consumes data through"),
+			assetID: assetJSON(assetID, "Sales Orders", assetTypeID, "Data Set"),
+			tableID: assetJSON(tableID, "customer_orders", tableTypeID, "Table"),
 		},
 		rolesByAsset: map[string][]string{
-			outputPortID: {accessControlJSON(roleID, "Sales Orders Consumers", "Grant", "Active")},
+			assetID: {accessControlJSON(roleID, "Sales Orders Consumers", "Grant", "Active")},
 		},
 		groupsByName: map[string][]string{
 			"Finance": {accessControlJSON("group-1", "Finance", "Group", "Active")},
@@ -105,7 +86,7 @@ func (f *fakeCollibra) server(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("/rest/2.0/assetTypes", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, `{"total":2,"offset":0,"limit":1000,"results":[`+
-			`{"id":"`+outputPortType+`","publicId":"DataProductPort","name":"Data Product Port"},`+
+			`{"id":"`+assetTypeID+`","publicId":"DataSet","name":"Data Set"},`+
 			`{"id":"`+tableTypeID+`","publicId":"Table","name":"Table"}]}`)
 	})
 
@@ -123,24 +104,6 @@ func (f *fakeCollibra) server(t *testing.T) *httptest.Server {
 		body, ok := f.collibraUsersByName[r.URL.Query().Get("name")]
 		if !ok {
 			body = `{"total":0,"offset":0,"limit":100,"results":[]}`
-		}
-		writeJSON(w, body)
-	})
-
-	mux.HandleFunc("/rest/2.0/relations", func(w http.ResponseWriter, r *http.Request) {
-		body, ok := f.relations[r.URL.Query().Get("sourceId")]
-		if !ok {
-			body = relationsJSON()
-		}
-		writeJSON(w, body)
-	})
-
-	mux.HandleFunc("/rest/2.0/relationTypes/", func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/relationTypes/")
-		body, ok := f.relationTypes[id]
-		if !ok {
-			http.Error(w, `{"statusCode":404}`, http.StatusNotFound)
-			return
 		}
 		writeJSON(w, body)
 	})
@@ -224,7 +187,7 @@ func (f *fakeCollibra) run(t *testing.T, input tool.Input) tool.Output {
 
 func validInput() tool.Input {
 	return tool.Input{
-		AssetID:   outputPortID,
+		AssetID:   assetID,
 		Users:     []string{"alice@example.com"},
 		Purpose:   "Quarterly revenue reporting",
 		ExpiresAt: expiry,
@@ -232,7 +195,7 @@ func validInput() tool.Input {
 	}
 }
 
-func TestCreateFromOutputPort(t *testing.T) {
+func TestCreateForAsset(t *testing.T) {
 	fake := newFake()
 	output := fake.run(t, validInput())
 
@@ -248,8 +211,8 @@ func TestCreateFromOutputPort(t *testing.T) {
 	if output.Role == nil || output.Role.ID != roleID {
 		t.Fatalf("Expected role %s, got: %+v", roleID, output.Role)
 	}
-	if output.Asset == nil || output.Asset.ID != outputPortID {
-		t.Fatalf("Expected output port %s, got: %+v", outputPortID, output.Asset)
+	if output.Asset == nil || output.Asset.ID != assetID {
+		t.Fatalf("Expected asset %s, got: %+v", assetID, output.Asset)
 	}
 	if len(output.Users) != 1 || output.Users[0].ID != "da-user-1" {
 		t.Fatalf("Expected the mapped data access user, got: %+v", output.Users)
@@ -258,7 +221,7 @@ func TestCreateFromOutputPort(t *testing.T) {
 	sent := fake.createRequest
 	for _, want := range []string{
 		`"what":[{"accessControl":{"id":"ac-1"}}]`,
-		`"catalogAsset":{"assetId":"` + outputPortID + `","assetTypeId":"` + outputPortType + `"}`,
+		`"catalogAsset":{"assetId":"` + assetID + `","assetTypeId":"` + assetTypeID + `"}`,
 		`"who":{"users":["da-user-1"]}`,
 		`"implementationExpiresAt":"2099-12-31T23:59:59Z"`,
 		"This access request was created by AI.",
@@ -269,99 +232,6 @@ func TestCreateFromOutputPort(t *testing.T) {
 	}
 	if strings.Contains(sent, `"dataObject"`) {
 		t.Fatalf("Expected no data object in the WHAT, got: %s", sent)
-	}
-}
-
-func TestDataProductWithSeveralPortsAsksForSelection(t *testing.T) {
-	fake := newFake()
-	fake.relations[dataProductID] = relationsJSON(
-		relationJSON(outputPortRelID, outputPortID, "Sales Orders — Table"),
-		relationJSON(outputPortRelID, secondPortID, "Sales Orders — API"),
-	)
-
-	input := validInput()
-	input.AssetID = dataProductID
-	output := fake.run(t, input)
-
-	if output.Status != "needs_port_selection" {
-		t.Fatalf("Expected needs_port_selection, got: %q (%s)", output.Status, output.Error)
-	}
-	if len(output.OutputPorts) != 2 {
-		t.Fatalf("Expected 2 candidate ports, got: %+v", output.OutputPorts)
-	}
-	if fake.createRequest != "" {
-		t.Fatal("Expected nothing to be created while a port is still to be chosen")
-	}
-}
-
-func TestDataProductWithOnePortSelectsIt(t *testing.T) {
-	fake := newFake()
-
-	input := validInput()
-	input.AssetID = dataProductID
-	output := fake.run(t, input)
-
-	if output.Status != "created" {
-		t.Fatalf("Expected status created, got: %q (%s)", output.Status, output.Error)
-	}
-	if output.Asset == nil || output.Asset.ID != outputPortID {
-		t.Fatalf("Expected the product's only output port, got: %+v", output.Asset)
-	}
-}
-
-func TestDataProductWithItsOwnRoleIsRequestedDirectly(t *testing.T) {
-	fake := newFake()
-	fake.rolesByAsset[dataProductID] = []string{accessControlJSON("ac-dp", "Sales Orders Consumers", "Grant", "Active")}
-	fake.relations[dataProductID] = relationsJSON(
-		relationJSON(outputPortRelID, outputPortID, "Sales Orders — Table"),
-		relationJSON(outputPortRelID, secondPortID, "Sales Orders — API"),
-	)
-
-	input := validInput()
-	input.AssetID = dataProductID
-	output := fake.run(t, input)
-
-	if output.Status != "created" {
-		t.Fatalf("Expected status created, got: %q (%s)", output.Status, output.Error)
-	}
-	if output.Asset == nil || output.Asset.ID != dataProductID {
-		t.Fatalf("Expected the data product itself to be requested, got: %+v", output.Asset)
-	}
-	if !strings.Contains(fake.createRequest, `"catalogAsset":{"assetId":"`+dataProductID+`","assetTypeId":"`+clients.DataProductAssetTypeID+`"}`) {
-		t.Fatalf("Expected the data product to be the catalog asset, got: %s", fake.createRequest)
-	}
-}
-
-func TestNamingAPortOverridesADataProductWithItsOwnRole(t *testing.T) {
-	fake := newFake()
-	fake.rolesByAsset[dataProductID] = []string{accessControlJSON("ac-dp", "Sales Orders Consumers", "Grant", "Active")}
-
-	input := validInput()
-	input.AssetID = dataProductID
-	input.OutputPortID = outputPortID
-	output := fake.run(t, input)
-
-	if output.Status != "created" {
-		t.Fatalf("Expected status created, got: %q (%s)", output.Status, output.Error)
-	}
-	if output.Asset == nil || output.Asset.ID != outputPortID {
-		t.Fatalf("Expected the named port to win over the product, got: %+v", output.Asset)
-	}
-}
-
-func TestPortOfAnotherDataProductIsRejected(t *testing.T) {
-	fake := newFake()
-
-	input := validInput()
-	input.AssetID = dataProductID
-	input.OutputPortID = secondPortID
-	output := fake.run(t, input)
-
-	if !strings.Contains(output.Error, "not an output port of data product") {
-		t.Fatalf("Expected the port to be rejected, got: %q", output.Error)
-	}
-	if fake.createRequest != "" {
-		t.Fatal("Expected nothing to be created")
 	}
 }
 
@@ -411,20 +281,6 @@ func TestAssetWithoutALinkedRole(t *testing.T) {
 	}
 }
 
-func TestOutputPortIdOnlyAppliesToADataProduct(t *testing.T) {
-	fake := newFake()
-	fake.rolesByAsset[tableID] = []string{accessControlJSON("ac-table", "Customer Orders Readers", "Grant", "Active")}
-
-	input := validInput()
-	input.AssetID = tableID
-	input.OutputPortID = outputPortID
-	output := fake.run(t, input)
-
-	if !strings.Contains(output.Error, "outputPortId only applies when assetId is a Data Product") {
-		t.Fatalf("Expected outputPortId to be rejected, got: %q", output.Error)
-	}
-}
-
 func TestUnknownAsset(t *testing.T) {
 	fake := newFake()
 
@@ -434,20 +290,6 @@ func TestUnknownAsset(t *testing.T) {
 
 	if !strings.Contains(output.Error, "no asset found") {
 		t.Fatalf("Expected a not-found error, got: %q", output.Error)
-	}
-}
-
-func TestPortWithoutRole(t *testing.T) {
-	fake := newFake()
-	delete(fake.rolesByAsset, outputPortID)
-
-	output := fake.run(t, validInput())
-
-	if output.Status != "no_role_linked" {
-		t.Fatalf("Expected status no_role_linked, got: %q (%s)", output.Status, output.Error)
-	}
-	if fake.createRequest != "" {
-		t.Fatal("Expected nothing to be created")
 	}
 }
 
@@ -467,7 +309,7 @@ func TestRoleLookupPermissionDenied(t *testing.T) {
 
 func TestInactiveRoleIsNotRequestable(t *testing.T) {
 	fake := newFake()
-	fake.rolesByAsset[outputPortID] = []string{accessControlJSON(roleID, "Sales Orders Consumers", "Grant", "Inactive")}
+	fake.rolesByAsset[assetID] = []string{accessControlJSON(roleID, "Sales Orders Consumers", "Grant", "Inactive")}
 
 	output := fake.run(t, validInput())
 
@@ -487,7 +329,7 @@ func TestInactiveRoleIsNotRequestable(t *testing.T) {
 
 func TestNonGrantAccessControlIsNotRequestable(t *testing.T) {
 	fake := newFake()
-	fake.rolesByAsset[outputPortID] = []string{accessControlJSON(roleID, "Salary mask", "Mask", "Active")}
+	fake.rolesByAsset[assetID] = []string{accessControlJSON(roleID, "Salary mask", "Mask", "Active")}
 
 	output := fake.run(t, validInput())
 
@@ -501,7 +343,7 @@ func TestNonGrantAccessControlIsNotRequestable(t *testing.T) {
 
 func TestActiveGrantIsPickedFromSeveralLinkedControls(t *testing.T) {
 	fake := newFake()
-	fake.rolesByAsset[outputPortID] = []string{
+	fake.rolesByAsset[assetID] = []string{
 		accessControlJSON("ac-mask", "Salary mask", "Mask", "Active"),
 		accessControlJSON(roleID, "Sales Orders Consumers", "Grant", "Active"),
 	}
@@ -767,19 +609,6 @@ func writeJSON(w http.ResponseWriter, body string) {
 
 func assetJSON(id, name, typeID, typeName string) string {
 	return fmt.Sprintf(`{"id":%q,"name":%q,"displayName":%q,"type":{"id":%q,"name":%q}}`, id, name, name, typeID, typeName)
-}
-
-func relationsJSON(relations ...string) string {
-	return fmt.Sprintf(`{"total":%d,"offset":0,"limit":1000,"results":[%s]}`, len(relations), strings.Join(relations, ","))
-}
-
-func relationJSON(typeID, targetID, targetName string) string {
-	return fmt.Sprintf(`{"id":"rel-%s","type":{"id":%q},"target":{"id":%q,"name":%q,"displayName":%q}}`,
-		targetID, typeID, targetID, targetName, targetName)
-}
-
-func relationTypeJSON(id, publicID, role string) string {
-	return fmt.Sprintf(`{"id":%q,"publicId":%q,"role":%q,"coRole":""}`, id, publicID, role)
 }
 
 // accessControlJSON is one node of a ListAccessControls page.
