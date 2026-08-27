@@ -173,9 +173,27 @@ type DqPublicSparkJobSizing struct {
 	MemoryOverheadGb int `json:"memoryOverheadGb,omitempty"`
 }
 
-// DqPublicMonitoringSettings is monitoringSettings (currently only adaptive monitors).
+// DqPublicMonitoringSettings is monitoringSettings: adaptive monitors plus the custom monitors
+// (DQ rules) configured on the job. customMonitors is read-only here — DQ rules are created/edited via
+// the rule tools (create_data_quality_rule, deploy_data_quality_rule_template), not via job update.
 type DqPublicMonitoringSettings struct {
 	AdaptiveMonitors *DqPublicAdaptiveMonitors `json:"adaptiveMonitors,omitempty"`
+	CustomMonitors   []DqCustomMonitor         `json:"customMonitors,omitempty"`
+}
+
+// DqCustomMonitor is one user-defined custom monitor (DQ rule) as it appears embedded in a job's
+// monitoringSettings.customMonitors (JobDefinition's CustomMonitors schema). It mirrors the fields of
+// DQRule that are relevant when just listing/describing a job's configured monitors.
+type DqCustomMonitor struct {
+	MonitorName   string   `json:"monitorName"`
+	CustomQuery   string   `json:"customQuery,omitempty"`
+	FilterQuery   string   `json:"filterQuery,omitempty"`
+	PrimaryColumn string   `json:"primaryColumn,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	Dimensions    []string `json:"dimensions,omitempty"`
+	Tolerance     int      `json:"tolerance,omitempty"`
+	IsActive      bool     `json:"isActive,omitempty"`
+	IsSuppressed  bool     `json:"isSuppressed,omitempty"`
 }
 
 // DqPublicAdaptiveMonitors mirrors the public AdaptiveMonitors — the same toggle set as the internal
@@ -576,14 +594,26 @@ func IsDeletableDqRunState(s string) bool {
 	return strings.TrimSpace(s) != "" && !IsCancellableDqRunState(s)
 }
 
+// DqJobRun is the public JobRun (GET /rest/dq/1.0/jobRuns/{jobRunId} and the jobRuns search).
+// executionTimeSeconds/score/activeMonitors/breakingMonitors/rowCount/executedQuery are only populated
+// once the run reaches a terminal state (FINISHED/CANCELLED/FAILED); they are nil/zero otherwise.
 type DqJobRun struct {
-	JobRunID  string           `json:"jobRunId"`
-	JobName   string           `json:"jobName"`
-	Status    string           `json:"status"`
-	RunDate   *DqPublicRunDate `json:"runDate,omitempty"`
-	StartTime string           `json:"startTime,omitempty"`
-	EndTime   string           `json:"endTime,omitempty"`
-	UpdatedAt string           `json:"updatedAt,omitempty"`
+	JobRunID             string           `json:"jobRunId"`
+	JobName              string           `json:"jobName"`
+	Status               string           `json:"status"`
+	Activity             string           `json:"activity,omitempty"`
+	Exception            string           `json:"exception,omitempty"`
+	RunDate              *DqPublicRunDate `json:"runDate,omitempty"`
+	StartTime            string           `json:"startTime,omitempty"`
+	EndTime              string           `json:"endTime,omitempty"`
+	UpdatedAt            string           `json:"updatedAt,omitempty"`
+	ExecutionTimeSeconds *int64           `json:"executionTimeSeconds,omitempty"`
+	Score                *float64         `json:"score,omitempty"`
+	ActiveMonitors       *int             `json:"activeMonitors,omitempty"`
+	BreakingMonitors     *int             `json:"breakingMonitors,omitempty"`
+	RowCount             *int64           `json:"rowCount,omitempty"`
+	SourceQuery          string           `json:"sourceQuery,omitempty"`
+	ExecutedQuery        string           `json:"executedQuery,omitempty"`
 }
 
 // RunDateValue returns the run's date/timestamp, or "" when the run carries none.
@@ -613,6 +643,62 @@ func GetDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID 
 		return nil, code, fmt.Errorf("failed to parse job run response: %w", err)
 	}
 	return &run, code, nil
+}
+
+// DqAdaptiveMonitorResult is one adaptive monitor's outcome for a specific job run
+// (GET /rest/dq/1.0/jobRuns/{jobRunId}/monitors).
+type DqAdaptiveMonitorResult struct {
+	MonitorName   string   `json:"monitorName"`
+	MonitorType   string   `json:"monitorType"`
+	PrimaryColumn string   `json:"primaryColumn,omitempty"`
+	State         string   `json:"state"`
+	ObservedValue string   `json:"observedValue,omitempty"`
+	ExpectedMin   string   `json:"expectedMin,omitempty"`
+	ExpectedMax   string   `json:"expectedMax,omitempty"`
+	Tolerance     string   `json:"tolerance,omitempty"`
+	IsSuppressed  bool     `json:"isSuppressed,omitempty"`
+	Dimensions    []string `json:"dimensions,omitempty"`
+}
+
+// DqCustomMonitorResult is one custom monitor's (DQ rule's) outcome for a specific job run.
+type DqCustomMonitorResult struct {
+	MonitorName        string   `json:"monitorName"`
+	State              string   `json:"state"`
+	Score              float64  `json:"score"`
+	BreakingPercentage float64  `json:"breakingPercentage,omitempty"`
+	RowsPassing        int64    `json:"rowsPassing,omitempty"`
+	RowsBreaking       int64    `json:"rowsBreaking,omitempty"`
+	RowsTotal          int64    `json:"rowsTotal,omitempty"`
+	Exception          string   `json:"exception,omitempty"`
+	Dimensions         []string `json:"dimensions,omitempty"`
+	Tolerance          int      `json:"tolerance,omitempty"`
+}
+
+// DqJobRunMonitorsResult is the combined per-monitor result set for a job run
+// (JobRunMonitorsResult in dq-v1-public-oas-spec.yaml).
+type DqJobRunMonitorsResult struct {
+	AdaptiveMonitors []DqAdaptiveMonitorResult `json:"adaptiveMonitors"`
+	CustomMonitors   []DqCustomMonitorResult   `json:"customMonitors"`
+}
+
+// GetDqJobRunMonitors reads the per-monitor results (adaptive + custom) for a job run via the PUBLIC
+// GET /rest/dq/1.0/jobRuns/{jobRunId}/monitors. This is a separate call from GetDqJobRun because the
+// run's own resource carries only the aggregate score/rowCount, not the per-monitor breakdown.
+func GetDqJobRunMonitors(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (*DqJobRunMonitorsResult, int, error) {
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID) + "/monitors"
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var result DqJobRunMonitorsResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job run monitors response: %w", err)
+	}
+	return &result, code, nil
 }
 
 func SearchCancellableDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobName string) ([]DqJobRun, int, error) {
