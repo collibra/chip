@@ -12,6 +12,7 @@ Data Access is the system that manages who can access what data, through grants,
 1. Data Access users are not necessarily Collibra users. Data Access users are only also Collibra users if their email address is the same.
 2. A group in Data Access is an access control with action Group. A Collibra group maps to the access control via its name.
 3. Ownership of a data object does not mean that user has access to it.
+4. Access controls of type GRANT are called Roles. Never mention the term Grant.
 
 ## Search identities
 
@@ -36,8 +37,9 @@ Data Access is the system that manages who can access what data, through grants,
 
 ## Create an access request
 
-`create_asset_access_request` is the only tool that creates a Collibra Data Access request. Destructive. Access is requested on a **catalog asset**, through the Data Access **role** linked to it. Required behavior:
+`create_asset_access_request` is the only tool that creates a Collibra Data Access request. Destructive. Access is requested on an **asset**, through the Data Access **role** linked to it. Required behavior:
 
+- Verify first if each WHO already has access which means if it already part of the WHO list of the role linked to it. Each WHO that already has access should be omitted and report this. If every WHO already has access, don't create an access request.
 - **`assetId` is any asset that has a role linked to it.** Which assets those are is instance configuration, and the tool reads the roles actually linked — never assume from the asset type. Resolve the asset the user named to a UUID first (`search_asset_keyword`, or the UUID after `/asset/` if they gave a URL). When the user names something that is not itself requestable, ask which of its related assets they mean rather than guessing.
 - **Handle `no_role_linked`.** When the asset has no role that can be requested the tool returns that status (not an error), with the asset it rejected and `linkedRoles` — the access controls that are linked, if any. An empty `linkedRoles` means nothing is linked at all; a non-empty one means what is linked is not an active Grant (a mask, or a deactivated role), so say which. Ask the user for a different asset, or tell them an administrator has to link a role to this one. Never guess an alternative asset yourself.
 - **Never pass a role or a data object.** The WHAT is the role linked to the asset, and the tool resolves it.
@@ -46,11 +48,11 @@ Data Access is the system that manages who can access what data, through grants,
 - **`expiresAt` is mandatory** — an access request cannot be open-ended. Ask the user when the access should end and pass a date (`2026-12-31`, taken as the end of that day UTC) or an RFC 3339 timestamp. Never invent an expiration date.
 - **Purpose** is mandatory and must come from the user — it is the business justification for the request. If the user has not stated one, ask before calling the tool. Do not invent a purpose. The tool always appends a note stating the request was created by AI.
 - **Name** is optional. If the user does not provide one, omit `name` on the first call. The tool returns status `needs_name_confirmation` with a `suggestedName` derived from the purpose — present it, get confirmation or an alternative, and call again with the confirmed value in `name`.
-- **Report what was requested**, not just success: the asset, the role it was requested through, the mapped users and groups, and the expiration date are all returned.
+- **Report what was requested**, not just success: the asset, the role it was requested through, the mapped users and groups, and the expiration date are all returned. Also report the implementors of this access request which are the owners of the role.
 
 ## Inspect an access control
 
-`get_data_access_control_details` fetches a single Collibra Data Access control by its **ID**, returning its name, description, state (`ACTIVE`/`INACTIVE`/`DELETED`), action type (`GRANT`/`MASK`/`FILTER`/`SHARE`/`GROUP`/`FILTERRULE`), grant category, policy rule, external-management status, and the full `what`/`who` scope lists. Use this to inspect an individual access control once you have its ID — for example, from a `roles` entry returned by `check_user_data_object_access`.
+`get_data_access_control_details` fetches a single Collibra Data Access control by its **ID**, returning its name, description, state (`ACTIVE`/`INACTIVE`/`DELETED`), action type (`GRANT`/`MASK`/`FILTER`/`SHARE`/`GROUP`/`FILTERRULE`), grant category, policy rule, external-management status, `owners`, and the full `what`/`who` scope lists. Use this to inspect an individual access control once you have its ID — for example, from a `roles` entry returned by `check_user_data_object_access`. `owners` are the implementors of the access control: each entry has a `type` (`User` or `Group`), an `id`, a `name`, and — for users — an `email`. Owners that cannot be resolved are omitted, so an empty `owners` list means none were found or readable, not that the access control is unowned.
 
 ## Common follow-ups
 

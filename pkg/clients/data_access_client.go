@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,6 +18,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// ownerRoleID is the id of the Data Access role that marks a user or group as an owner of
+// an access control.
+const ownerRoleID = "OwnerRole"
+
+// Owner types reported on DataAccessOwner.
+const (
+	ownerTypeUser  = "User"
+	ownerTypeGroup = "Group"
+)
+
 // DataAccessControlDetails holds the details of a single data access control.
 type DataAccessControlDetails struct {
 	ID                string                   `json:"id" jsonschema:"Unique identifier of the access control"`
@@ -24,7 +35,7 @@ type DataAccessControlDetails struct {
 	Description       string                   `json:"description" jsonschema:"Detailed description of the access control"`
 	State             string                   `json:"state" jsonschema:"State of the access control: ACTIVE, INACTIVE, or DELETED"`
 	Action            string                   `json:"action" jsonschema:"Action type of the access control: GRANT, MASK, FILTER, SHARE, GROUP, or FILTERRULE"`
-	Category          *DataAccessGrantCategory `json:"category,omitempty" jsonschema:"Grant category details, present only for GRANT action type"`
+	Category          *DataAccessGrantCategory `json:"category,omitempty" jsonschema:"Role category details, present only for GRANT action type"`
 	External          bool                     `json:"external" jsonschema:"Whether the access control is managed externally in the data source rather than in Collibra Data Access"`
 	NamingHint        *string                  `json:"namingHint,omitempty" jsonschema:"Naming hint used for generating names in target systems"`
 	PolicyRule        *string                  `json:"policyRule,omitempty" jsonschema:"Policy rule string, used for imported row-level filters and column masks"`
@@ -37,6 +48,7 @@ type DataAccessControlDetails struct {
 	What              []DataAccessWhatItem     `json:"what" jsonschema:"List of access controls that this control applies to (the WHAT scope)"`
 	Who               []DataAccessWhoItem      `json:"who" jsonschema:"List of principals (users, access controls, data sources) that are granted access by this control"`
 	SyncData          []DataAccessSyncData     `json:"syncData" jsonschema:"Synchronization status per linked data source. Valid sync statuses: Notconnected, Failed, Outofdate, Inprogress, Synced, Outofsync."`
+	Owners            []DataAccessOwner        `json:"owners" jsonschema:"List of owners (users and groups) of this access control"`
 	Url               string                   `json:"url" jsonschema:"Url in the Collibra UI to view access control"`
 }
 
@@ -80,6 +92,15 @@ type DataAccessGrantCategory struct {
 	IsDefault  bool   `json:"isDefault" jsonschema:"Whether this is the default grant category for new access controls"`
 }
 
+// DataAccessOwner holds the details of an owner of an access control: either a data access
+// user, or a group (an access control with action Group).
+type DataAccessOwner struct {
+	Type  string  `json:"type" jsonschema:"Type of the owner: User or Group"`
+	ID    string  `json:"id" jsonschema:"Unique identifier of the owner"`
+	Name  string  `json:"name" jsonschema:"Display name of the owner"`
+	Email *string `json:"email,omitempty" jsonschema:"Email of the owner (present for User owners only)"`
+}
+
 // GetDataAccessControl retrieves a single data access control by ID, with its WHAT and WHO
 // lists.
 func GetDataAccessControl(ctx context.Context, httpClient *http.Client, id string) (*DataAccessControlDetails, error) {
@@ -89,12 +110,12 @@ func GetDataAccessControl(ctx context.Context, httpClient *http.Client, id strin
 	}
 	dataAccessURL := strings.TrimSuffix(collibraHost, "/") + "/dataAccess"
 
-	collibraClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
+	sdkClient, err := sdk.NewClient(dataAccessURL, sdk.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create data access client: %w", err)
 	}
 
-	accessControlClient := collibraClient.AccessControl()
+	accessControlClient := sdkClient.AccessControl()
 
 	ac, err := accessControlClient.GetAccessControl(ctx, id)
 	if err != nil {
@@ -105,19 +126,80 @@ func GetDataAccessControl(ctx context.Context, httpClient *http.Client, id strin
 
 	for whatItem, err := range accessControlClient.GetAccessControlWhatAccessControlList(ctx, id) {
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve what list: %w", err)
+			return nil, fmt.Errorf("failed to retrieve what list for role with id %q: %w", id, err)
 		}
 		details.What = append(details.What, mapToDataAccessWhatItem(whatItem))
 	}
 
 	for whoItem, err := range accessControlClient.GetAccessControlWhoList(ctx, id) {
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve who list: %w", err)
+			return nil, fmt.Errorf("failed to retrieve who list for role with id %q: %w", id, err)
 		}
 		details.Who = append(details.Who, mapToDataAccessWhoItem(whoItem))
 	}
 
+	details.Owners = getRoleOwners(ctx, sdkClient, id)
+
 	return details, nil
+}
+
+// getRoleOwners resolves the users and groups that hold the owner role on the access control
+// with the given id. Owner information is supplementary, so failures are logged and the
+// affected owners are skipped rather than failing the lookup of the access control itself.
+func getRoleOwners(ctx context.Context, sdkClient *sdk.CollibraClient, id string) []DataAccessOwner {
+	owners := []DataAccessOwner{}
+
+	roleAssignmentFilter := types.RoleAssignmentFilterInput{
+		Role: new(ownerRoleID),
+	}
+
+	for roleAssignment, err := range sdkClient.Role().ListRoleAssignmentsOnAccessControl(ctx, id, services.WithRoleAssignmentListFilter(&roleAssignmentFilter)) {
+		if err != nil {
+			slog.WarnContext(ctx, fmt.Sprintf("Failed to retrieve owners for role with id %q: %s", id, err.Error()))
+			return owners
+		}
+		if owner, ok := resolveRoleOwner(ctx, sdkClient, roleAssignment.GetTo()); ok {
+			owners = append(owners, owner)
+		}
+	}
+
+	return owners
+}
+
+// resolveRoleOwner resolves a single owner role assignee to its name and, for users, its email.
+// It reports false when the assignee cannot be resolved or is of an unsupported type.
+func resolveRoleOwner(ctx context.Context, sdkClient *sdk.CollibraClient, to types.RoleAssignmentTo) (DataAccessOwner, bool) {
+	switch assignee := to.(type) {
+	case *types.RoleAssignmentToUser:
+		userID := assignee.GetId()
+		user, err := sdkClient.User().GetUser(ctx, userID)
+		if err != nil {
+			slog.WarnContext(ctx, fmt.Sprintf("Failed to resolve owner user with id %q: %s", userID, err.Error()))
+			return DataAccessOwner{}, false
+		}
+		return DataAccessOwner{
+			Type:  ownerTypeUser,
+			ID:    user.GetId(),
+			Name:  user.GetName(),
+			Email: user.GetEmail(),
+		}, true
+	case *types.RoleAssignmentToAccessControl:
+		// A group in Data Access is an access control with action Group.
+		groupID := assignee.GetId()
+		group, err := sdkClient.AccessControl().GetAccessControl(ctx, groupID)
+		if err != nil {
+			slog.WarnContext(ctx, fmt.Sprintf("Failed to resolve owner group with id %q: %s", groupID, err.Error()))
+			return DataAccessOwner{}, false
+		}
+		return DataAccessOwner{
+			Type: ownerTypeGroup,
+			ID:   group.GetId(),
+			Name: group.GetName(),
+		}, true
+	default:
+		slog.WarnContext(ctx, fmt.Sprintf("Skipping owner role assignment with unsupported assignee type %T", to))
+		return DataAccessOwner{}, false
+	}
 }
 
 func mapToDataAccessWhatItem(w *types.AccessWhatAccessControlItem) DataAccessWhatItem {
