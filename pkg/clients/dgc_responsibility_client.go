@@ -47,6 +47,13 @@ type ResponsibilityQueryParams struct {
 	Offset           int    `url:"offset,omitempty"`
 }
 
+// userResponsibilityQueryParams filters responsibilities by owner (the holder) instead of by
+// resource — used to answer "what roles does this user hold, globally or on any resource".
+type userResponsibilityQueryParams struct {
+	OwnerIDs string `url:"ownerIds,omitempty"`
+	Limit    int    `url:"limit,omitempty"`
+}
+
 // UserResponse represents the response from the /rest/2.0/users/{userId} endpoint.
 type UserResponse struct {
 	ID        string `json:"id"`
@@ -71,6 +78,36 @@ func GetResponsibilities(ctx context.Context, collibraHttpClient *http.Client, a
 		Limit:            100,
 		Offset:           0,
 	}
+
+	endpoint, err := buildUrl("/rest/2.0/responsibilities", params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build endpoint: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf(errFailedToCreateRequest, err)
+	}
+
+	body, err := executeRequest(collibraHttpClient, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ResponsibilityPagedResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse responsibilities response: %w", err)
+	}
+
+	return response.Results, nil
+}
+
+// GetUserResponsibilities fetches every responsibility the given user holds — both global (no
+// baseResource) and resource-scoped — used to check whether they hold a specific role somewhere
+// relevant (e.g. one of a workflow definition's startRoles). Sibling to GetResponsibilities, which
+// filters by resource instead of by owner.
+func GetUserResponsibilities(ctx context.Context, collibraHttpClient *http.Client, userID string) ([]Responsibility, error) {
+	params := userResponsibilityQueryParams{OwnerIDs: userID, Limit: 1000}
 
 	endpoint, err := buildUrl("/rest/2.0/responsibilities", params)
 	if err != nil {

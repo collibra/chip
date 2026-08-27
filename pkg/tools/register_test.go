@@ -65,11 +65,27 @@ func TestRegisterAll_DataQualityToolsVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+const workflowsToolName = "start_collibra_workflow"
+
+func TestRegisterAll_WorkflowsToolHiddenByDefault(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	if slices.Contains(names, workflowsToolName) {
+		t.Fatalf("expected %q to be absent without the %q experimental feature; got tools=%v", workflowsToolName, tools.WorkflowsFeatureName, names)
+	}
+}
+
+func TestRegisterAll_WorkflowsToolVisibleWhenEnabled(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.WorkflowsFeatureName}})
+	if !slices.Contains(names, workflowsToolName) {
+		t.Fatalf("expected %q to be present with the %q experimental feature; got tools=%v", workflowsToolName, tools.WorkflowsFeatureName, names)
+	}
+}
+
 func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
 	// Every gate on, so a feature-flagged tool can't skip the annotation check.
 	cfg := &chip.ServerToolConfig{
 		EnableDebugTools: true,
-		Experimental:     []string{tools.ContextSpecificationsFeature, tools.DataQualityFeatureName, skills.FeatureName},
+		Experimental:     []string{tools.ContextSpecificationsFeature, tools.DataQualityFeatureName, tools.WorkflowsFeatureName, skills.FeatureName},
 	}
 	for _, tool := range listTools(t, cfg) {
 		if tool.Title == "" {

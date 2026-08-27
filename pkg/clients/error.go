@@ -24,9 +24,17 @@ type collibraStandardError struct {
 // machine-readable errorCode and user-facing userMessage so the calling model
 // can understand why the call failed.
 func executeCollibraRequest(client *http.Client, req *http.Request) ([]byte, error) {
+	body, _, err := executeCollibraRequestWithStatus(client, req)
+	return body, err
+}
+
+// executeCollibraRequestWithStatus is executeCollibraRequest plus the response's HTTP status code,
+// for callers that need to branch on 403/404/etc. (see executeRequestWithStatus for the
+// non-envelope-aware equivalent).
+func executeCollibraRequestWithStatus(client *http.Client, req *http.Request) ([]byte, int, error) {
 	response, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, 0, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func(body io.ReadCloser) {
 		_ = body.Close()
@@ -34,7 +42,7 @@ func executeCollibraRequest(client *http.Client, req *http.Request) ([]byte, err
 
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, response.StatusCode, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
@@ -47,10 +55,10 @@ func executeCollibraRequest(client *http.Client, req *http.Request) ([]byte, err
 			if errResp.HelpMessage != "" {
 				msg += ". Hint: " + errResp.HelpMessage
 			}
-			return nil, errors.New(msg)
+			return responseBody, response.StatusCode, errors.New(msg)
 		}
-		return nil, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
+		return responseBody, response.StatusCode, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
 	}
 
-	return responseBody, nil
+	return responseBody, response.StatusCode, nil
 }

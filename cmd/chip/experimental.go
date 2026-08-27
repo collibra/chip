@@ -20,6 +20,7 @@ var knownExperimentalFeatures = map[string]string{
 	skills.FeatureName:                 "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
 	tools.ContextSpecificationsFeature: "Context specification tools: list_context_specifications, get_context_specification, and contextSpecificationId parameter on get_asset_details.",
 	tools.DataQualityFeatureName:       "Data quality tools: create data quality jobs (create_data_quality_job: discovery + preview + create in one); cancel an in-progress job run (dq_cancel_job_run); delete a completed job run and its results (dq_delete_job_run); delete a job definition and everything attached to it (dq_delete_job); partially update an existing job's configuration — schedule, monitors, notifications, scan SQL, compute/sizing and data location (dq_update_job); create, validate, read and search rules; per-run rule results; rule templates (list, read, deploy); plain-language (Text2SQL) rule generation; and catalog column search.",
+	tools.WorkflowsFeatureName:         "Workflow tools: discover, inspect and start any Collibra workflow, OOTB or custom (start_collibra_workflow: authorization-filtered discovery + start-form introspection + preview + start in one, by workflowDefinitionId).",
 }
 
 // validateExperimental warns (without exiting) when the user enabled an

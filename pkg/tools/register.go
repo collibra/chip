@@ -51,6 +51,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/tools/start_collibra_workflow"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
 	"github.com/collibra/chip/pkg/tools/validate_dq_rule"
 )
@@ -64,6 +65,10 @@ const ContextSpecificationsFeature = "context-specifications"
 // Collibra (create rules, deploy templates), so they stay opt-in until they graduate. Off by
 // default. Shared with the data-quality job-creation and job run tools.
 const DataQualityFeatureName = "data-quality"
+
+// WorkflowsFeatureName gates start_collibra_workflow behind --experimental. It WRITES to Collibra
+// (starts a workflow instance), so it stays opt-in until it graduates. Off by default.
+const WorkflowsFeatureName = "workflows"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -123,6 +128,9 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
+	}
+	if toolConfig.IsExperimentalEnabled(WorkflowsFeatureName) {
+		toolRegister(server, toolConfig, start_collibra_workflow.NewTool(client))
 	}
 
 	if toolConfig.EnableDebugTools {
