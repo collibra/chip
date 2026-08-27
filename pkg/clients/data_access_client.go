@@ -143,14 +143,18 @@ func GetDataAccessControl(ctx context.Context, httpClient *http.Client, id strin
 	return details, nil
 }
 
-// getRoleOwners resolves the users and groups that hold the owner role on the access control
-// with the given id. Owner information is supplementary, so failures are logged and the
+// getRoleOwners resolves the users and groups that hold the owner role directly on the access
+// control with the given id, excluding owners inherited from ancestor resources.
+// Owner information is supplementary, so failures are logged and the
 // affected owners are skipped rather than failing the lookup of the access control itself.
 func getRoleOwners(ctx context.Context, sdkClient *sdk.CollibraClient, id string) []DataAccessOwner {
 	owners := []DataAccessOwner{}
 
 	roleAssignmentFilter := types.RoleAssignmentFilterInput{
 		Role: new(ownerRoleID),
+		// Only owners assigned directly on this access control are reported; assignments
+		// inherited from ancestor resources are excluded.
+		Inherited: new(false),
 	}
 
 	for roleAssignment, err := range sdkClient.Role().ListRoleAssignmentsOnAccessControl(ctx, id, services.WithRoleAssignmentListFilter(&roleAssignmentFilter)) {
