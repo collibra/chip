@@ -6,6 +6,7 @@ package create_asset_access_request
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/tools/validation"
+	sdktypes "github.com/collibra/data-access-go-sdk/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -21,17 +23,14 @@ import (
 // attributed to an AI agent.
 const aiDescriptionSuffix = "This access request was created by AI."
 
-// suggestedNameMaxLen caps the length of a name suggestion derived from the purpose.
-const suggestedNameMaxLen = 80
-
 // dateLayout is the date-only form accepted for expiresAt, in addition to RFC 3339.
 const dateLayout = "2006-01-02"
 
 // Status values returned in the Output.
 const (
-	statusNoRoleLinked          = "no_role_linked"
-	statusNeedsNameConfirmation = "needs_name_confirmation"
-	statusCreated               = "created"
+	statusNoRoleLinked = "no_role_linked"
+	statusNameConflict = "name_conflict"
+	statusCreated      = "created"
 )
 
 type Input struct {
@@ -40,14 +39,13 @@ type Input struct {
 	Groups    []string `json:"groups,omitempty" jsonschema:"The Collibra groups who need the access (part of the WHO). Each entry is a group name (preferred) or a Collibra group UUID; both are mapped to Data Access groups by name. Supply users, groups, or both — at least one beneficiary is required, and the request is not created unless every entry maps."`
 	Purpose   string   `json:"purpose" jsonschema:"Required. The user-supplied purpose / business justification for the access request. Used verbatim as the description. The tool always appends a note indicating the request was created by AI."`
 	ExpiresAt string   `json:"expiresAt" jsonschema:"Required. The date the access must expire, as a date (2026-12-31, interpreted as the end of that day UTC) or an RFC 3339 timestamp (2026-12-31T17:00:00Z). Must be in the future. Ask the user — never invent an expiration date."`
-	Name      string   `json:"name,omitempty" jsonschema:"Optional. Display name of the access request. If omitted, the tool returns a suggested name derived from the purpose and asks the agent to confirm it with the user before retrying."`
+	Name      string   `json:"name,omitempty" jsonschema:"Optional. Display name of the access request. Only set it when the user supplied a name — never invent one and never ask for one. When omitted, Data Access names the request itself."`
 }
 
 type Output struct {
-	Status           string                            `json:"status,omitempty" jsonschema:"Outcome of the call: no_role_linked (the asset has no Data Access role that can be requested — see linkedRoles), needs_name_confirmation (confirm the suggestedName with the user and call again with name set), or created (the request was successfully created)."`
+	Status           string                            `json:"status,omitempty" jsonschema:"Outcome of the call: no_role_linked (the asset has no Data Access role that can be requested — see linkedRoles), name_conflict (an access request with the supplied name already exists — call again with a different name or without one), or created (the request was successfully created)."`
 	Message          string                            `json:"message,omitempty" jsonschema:"Human-readable explanation of the status, including what the agent should do next."`
 	LinkedRoles      []clients.CatalogAssetRole        `json:"linkedRoles,omitempty" jsonschema:"The access controls linked to the asset. Present when status is no_role_linked and the asset has some, none of which is an active Grant; empty means nothing is linked to it at all. Use it to tell the user why the asset cannot be requested."`
-	SuggestedName    string                            `json:"suggestedName,omitempty" jsonschema:"Name suggestion derived from the purpose. Present only when status is needs_name_confirmation."`
 	Asset            *clients.CatalogAssetRef          `json:"asset,omitempty" jsonschema:"The asset the request is raised on."`
 	Role             *clients.CatalogAssetRole         `json:"role,omitempty" jsonschema:"The Data Access role linked to the asset — the WHAT of the request."`
 	Users            []*clients.DataAccessIdentity     `json:"users,omitempty" jsonschema:"The Data Access users the supplied Collibra users were mapped to — part of the WHO of the request."`
@@ -66,7 +64,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Create a Collibra Data Access request for a catalog asset. Supply `assetId`, the Collibra users and/or groups who need access, a user-supplied purpose, and a mandatory expiration date. " +
 			"The WHAT of the request is the Data Access role linked to the asset, which the tool resolves, so never pass a role or data object yourself. " +
 			"Any asset that has an active Grant linked to it can be requested; when none is linked the tool returns status no_role_linked with whatever is linked in `linkedRoles`, and nothing is created. " +
-			"If no name is supplied, the tool returns a suggested name with status needs_name_confirmation.",
+			"`name` is optional: pass it only when the user supplied one, and otherwise leave it out — never ask the user for a name.",
 		Handler:     handle(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), OpenWorldHint: new(false)},
@@ -121,19 +119,11 @@ func handle(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{Asset: asset, Role: role, Error: "none of the supplied beneficiaries resolved into Data Access"}, nil
 		}
 
-		name := strings.TrimSpace(input.Name)
-		if name == "" {
-			suggested := suggestNameFromPurpose(purpose)
-			return Output{
-				Status:        statusNeedsNameConfirmation,
-				Asset:         asset,
-				Role:          role,
-				Users:         users,
-				Groups:        groups,
-				SuggestedName: suggested,
-				Message: fmt.Sprintf("No name was supplied. Suggested name based on the purpose: %q. Confirm this with the user (or ask for a different name), then call create_asset_access_request again with the confirmed name in the `name` field.",
-					suggested),
-			}, nil
+		// The name is optional: when the user did not supply one, none is sent and Data
+		// Access names the request itself.
+		var name *string
+		if trimmed := strings.TrimSpace(input.Name); trimmed != "" {
+			name = &trimmed
 		}
 
 		return createRequest(ctx, collibraClient, createParams{
@@ -214,7 +204,7 @@ func describeRoles(linked []clients.CatalogAssetRole) string {
 }
 
 type createParams struct {
-	name      string
+	name      *string
 	purpose   string
 	asset     *clients.CatalogAssetRef
 	role      *clients.CatalogAssetRole
@@ -234,7 +224,7 @@ func createRequest(ctx context.Context, collibraClient *http.Client, params crea
 	}
 
 	request, err := clients.CreateAssetAccessRequest(ctx, collibraClient, clients.CreateAssetAccessRequestInput{
-		Name:                    &params.name,
+		Name:                    params.name,
 		Description:             buildDescription(params.purpose),
 		UserIDs:                 userIDs,
 		GroupIDs:                groupIDs,
@@ -243,13 +233,19 @@ func createRequest(ctx context.Context, collibraClient *http.Client, params crea
 		ImplementationExpiresAt: params.expiresAt,
 	})
 	if err != nil {
-		return Output{
+		failed := Output{
 			Asset:  params.asset,
 			Role:   params.role,
 			Users:  params.users,
 			Groups: params.groups,
-			Error:  fmt.Sprintf("Failed to create access request: %s", err.Error()),
 		}
+		if params.name != nil && isNameConflict(err) {
+			failed.Status = statusNameConflict
+			failed.Message = fmt.Sprintf("An access request named %q already exists, so nothing was created. Ask the user for a different name, or call again without `name` — Data Access then generates a unique one.", *params.name)
+			return failed
+		}
+		failed.Error = fmt.Sprintf("Failed to create access request: %s", err.Error())
+		return failed
 	}
 
 	return Output{
@@ -263,6 +259,17 @@ func createRequest(ctx context.Context, collibraClient *http.Client, params crea
 		Message: fmt.Sprintf("Access to %s %q was requested through role %q, expiring on %s.",
 			params.asset.TypeName, params.asset.Name, params.role.Name, params.expiresAt.Format(time.RFC3339)),
 	}
+}
+
+// isNameConflict reports whether Data Access rejected the request because another access
+// request already carries the supplied name. Access request names must be unique, and the
+// backend signals that as an InvalidInputError rather than a dedicated conflict type.
+func isNameConflict(err error) bool {
+	var invalidInput *sdktypes.ErrInvalidInput
+	if !errors.As(err, &invalidInput) {
+		return false
+	}
+	return strings.Contains(invalidInput.ServerMsg, "already exists")
 }
 
 // parseExpiresAt accepts an RFC 3339 timestamp or a plain date. A plain date is taken as the
@@ -296,31 +303,4 @@ func buildDescription(purpose string) string {
 		purpose = purpose + "."
 	}
 	return purpose + " " + aiDescriptionSuffix
-}
-
-// suggestNameFromPurpose derives a short, human-readable name from the purpose text: the
-// first sentence, trimmed to a word boundary, behind an "Access request:" prefix.
-func suggestNameFromPurpose(purpose string) string {
-	summary := strings.ReplaceAll(purpose, aiDescriptionSuffix, "")
-	summary = strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\r' || r == '\t' {
-			return ' '
-		}
-		return r
-	}, summary)
-	if idx := strings.IndexAny(summary, ".!?"); idx >= 0 {
-		summary = summary[:idx]
-	}
-	summary = strings.Join(strings.Fields(summary), " ")
-	if summary == "" {
-		return "Access request"
-	}
-	if len(summary) > suggestedNameMaxLen {
-		truncated := summary[:suggestedNameMaxLen]
-		if sp := strings.LastIndex(truncated, " "); sp > suggestedNameMaxLen/2 {
-			truncated = truncated[:sp]
-		}
-		summary = strings.TrimRight(truncated, " ,;:-")
-	}
-	return "Access request: " + summary
 }

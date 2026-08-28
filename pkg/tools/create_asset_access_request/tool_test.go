@@ -223,6 +223,7 @@ func TestCreateForAsset(t *testing.T) {
 		`"what":[{"accessControl":{"id":"ac-1"}}]`,
 		`"catalogAsset":{"assetId":"` + assetID + `","assetTypeId":"` + assetTypeID + `"}`,
 		`"who":{"users":["da-user-1"]}`,
+		`"name":"Access request: Quarterly revenue reporting"`,
 		`"implementationExpiresAt":"2099-12-31T23:59:59Z"`,
 		"This access request was created by AI.",
 	} {
@@ -542,21 +543,81 @@ func TestNoBeneficiaries(t *testing.T) {
 	}
 }
 
-func TestMissingNameIsSuggested(t *testing.T) {
+func TestNameIsOptional(t *testing.T) {
 	fake := newFake()
 
 	input := validInput()
 	input.Name = ""
 	output := fake.run(t, input)
 
-	if output.Status != "needs_name_confirmation" {
-		t.Fatalf("Expected needs_name_confirmation, got: %q (%s)", output.Status, output.Error)
+	if output.Status != "created" {
+		t.Fatalf("Expected status created, got: %q (%s)", output.Status, output.Error)
 	}
-	if output.SuggestedName != "Access request: Quarterly revenue reporting" {
-		t.Fatalf("Unexpected suggestion: %q", output.SuggestedName)
+	if strings.Contains(fake.createRequest, `"name"`) {
+		t.Fatalf("Expected no name in the create mutation, got: %s", fake.createRequest)
 	}
-	if fake.createRequest != "" {
-		t.Fatal("Expected nothing to be created before the name is confirmed")
+}
+
+func TestNameConflictIsReported(t *testing.T) {
+	fake := newFake()
+	fake.createResponse = `{"data":{"createAccessRequest":{"__typename":"InvalidInputError",` +
+		`"message":"An access request with the name \"A demo\" already exists. Please choose a different name."}}}`
+
+	output := fake.run(t, validInput())
+
+	if output.Status != "name_conflict" {
+		t.Fatalf("Expected status name_conflict, got: %q (%s)", output.Status, output.Error)
+	}
+	if output.Error != "" {
+		t.Fatalf("Expected the conflict to be a status, not an error, got: %q", output.Error)
+	}
+	if !strings.Contains(output.Message, "already exists") || !strings.Contains(output.Message, "without `name`") {
+		t.Fatalf("Expected the message to explain the conflict and the way out, got: %q", output.Message)
+	}
+	if output.Request != nil {
+		t.Fatalf("Expected no created request, got: %+v", output.Request)
+	}
+}
+
+func TestOtherInvalidInputStaysAnError(t *testing.T) {
+	fake := newFake()
+	fake.createResponse = `{"data":{"createAccessRequest":{"__typename":"InvalidInputError",` +
+		`"message":"The expiration date is not allowed for this role."}}}`
+
+	output := fake.run(t, validInput())
+
+	if output.Status == "name_conflict" {
+		t.Fatal("Expected an unrelated invalid input not to be reported as a name conflict")
+	}
+	if !strings.Contains(output.Error, "The expiration date is not allowed") {
+		t.Fatalf("Expected the backend message in the error, got: %q", output.Error)
+	}
+}
+
+func TestNameConflictWithoutASuppliedNameStaysAnError(t *testing.T) {
+	fake := newFake()
+	fake.createResponse = `{"data":{"createAccessRequest":{"__typename":"InvalidInputError",` +
+		`"message":"An access request with the name \"A demo\" already exists. Please choose a different name."}}}`
+
+	input := validInput()
+	input.Name = ""
+	output := fake.run(t, input)
+
+	if output.Status == "name_conflict" {
+		t.Fatal("Expected no name_conflict status when no name was supplied")
+	}
+	if output.Error == "" {
+		t.Fatal("Expected the failure to be reported as an error")
+	}
+}
+
+func TestNameIsNotRequiredInTheInputSchema(t *testing.T) {
+	schema, err := jsonschema.For[tool.Input](nil)
+	if err != nil {
+		t.Fatalf("Expected a schema, got: %v", err)
+	}
+	if slices.Contains(schema.Required, "name") {
+		t.Fatalf("Expected name to be optional, got: %v", schema.Required)
 	}
 }
 
