@@ -19,6 +19,7 @@ import (
 var knownExperimentalFeatures = map[string]string{
 	skills.FeatureName:                 "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
 	tools.ContextSpecificationsFeature: "Context specification tools: list_context_specifications, get_context_specification, and contextSpecificationId parameter on get_asset_details.",
+	tools.DataQualityExperimental:      "Experimental data quality tools: trigger a run of an existing data quality job, with an optional run-date window or backfill (dq_run_job). Generally-available data quality tools are always registered and are not affected by this flag.",
 }
 
 // validateExperimental warns (without exiting) when the user enabled an
