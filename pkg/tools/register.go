@@ -8,8 +8,10 @@ import (
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/cancel_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/check_user_data_object_access"
 	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
+	"github.com/collibra/chip/pkg/tools/create_asset_access_request"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job"
@@ -26,6 +28,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
 	"github.com/collibra/chip/pkg/tools/get_context_specification"
+	"github.com/collibra/chip/pkg/tools/get_data_access_control_details"
+	"github.com/collibra/chip/pkg/tools/get_data_access_data_source"
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_dq_job"
 	"github.com/collibra/chip/pkg/tools/get_dq_job_run"
@@ -49,6 +53,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
 	"github.com/collibra/chip/pkg/tools/search_catalog_columns"
+	"github.com/collibra/chip/pkg/tools/search_data_access_identities"
+	"github.com/collibra/chip/pkg/tools/search_data_access_objects"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
@@ -66,6 +72,12 @@ const ContextSpecificationsFeature = "context-specifications"
 // Collibra (create rules, deploy templates), so they stay opt-in until they graduate. Off by
 // default. Shared with the data-quality job-creation and job run tools.
 const DataQualityFeatureName = "data-quality"
+
+// DataAccessFeatureName gates the Collibra Data Access tools (search identities and data
+// objects, check a user's access, read a data source or an access control, and raise an access
+// request on an asset) behind --experimental. create_asset_access_request WRITES to Data
+// Access, so the set stays opt-in until it graduates. Off by default.
+const DataAccessFeatureName = "data-access"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -105,6 +117,14 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
+	if toolConfig.IsExperimentalEnabled(DataAccessFeatureName) {
+		toolRegister(server, toolConfig, search_data_access_identities.NewTool(client))
+		toolRegister(server, toolConfig, search_data_access_objects.NewTool(client))
+		toolRegister(server, toolConfig, create_asset_access_request.NewTool(client))
+		toolRegister(server, toolConfig, check_user_data_object_access.NewTool(client))
+		toolRegister(server, toolConfig, get_data_access_data_source.NewTool(client))
+		toolRegister(server, toolConfig, get_data_access_control_details.NewTool(client))
+	}
 	if toolConfig.IsExperimentalEnabled(DataQualityFeatureName) {
 		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
 		toolRegister(server, toolConfig, create_dq_rule.NewTool(client))

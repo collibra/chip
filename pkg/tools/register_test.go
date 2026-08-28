@@ -67,11 +67,38 @@ func TestRegisterAll_DataQualityToolsVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+var dataAccessToolNames = []string{
+	"search_data_access_identities",
+	"search_data_access_objects",
+	"create_asset_access_request",
+	"check_user_data_object_access",
+	"get_data_access_data_source",
+	"get_data_access_control_details",
+}
+
+func TestRegisterAll_DataAccessToolsHiddenByDefault(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range dataAccessToolNames {
+		if slices.Contains(names, name) {
+			t.Fatalf("expected %q to be absent without the %q experimental feature; got tools=%v", name, tools.DataAccessFeatureName, names)
+		}
+	}
+}
+
+func TestRegisterAll_DataAccessToolsVisibleWhenEnabled(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.DataAccessFeatureName}})
+	for _, name := range dataAccessToolNames {
+		if !slices.Contains(names, name) {
+			t.Fatalf("expected %q to be present with the %q experimental feature; got tools=%v", name, tools.DataAccessFeatureName, names)
+		}
+	}
+}
+
 func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
 	// Every gate on, so a feature-flagged tool can't skip the annotation check.
 	cfg := &chip.ServerToolConfig{
 		EnableDebugTools: true,
-		Experimental:     []string{tools.ContextSpecificationsFeature, tools.DataQualityFeatureName, skills.FeatureName},
+		Experimental:     []string{tools.ContextSpecificationsFeature, tools.DataQualityFeatureName, tools.DataAccessFeatureName, skills.FeatureName},
 	}
 	for _, tool := range listTools(t, cfg) {
 		if tool.Title == "" {
