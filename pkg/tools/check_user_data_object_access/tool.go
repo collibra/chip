@@ -29,7 +29,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title:       "Check User Data Object Access",
 		Description: "Checks if a user has access to a data object (database, schema, table, view, column, etc.) and through which access controls (ie roles). Takes one or more data object IDs (obtain them via search_data_access_objects). For every object it reports whether the user has access, the granted permissions, and the access controls (roles) that grant the access. Checks the current user unless userId or email is supplied (resolve names via search_data_access_identities). IDs that do not correspond to an existing data object are returned in result.unresolved with a message asking the user to correct or drop them.",
 		Handler:     handle(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.data-access-view-all-access-and-usage"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false)},
 	}
 }

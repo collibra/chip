@@ -29,6 +29,7 @@ const dateLayout = "2006-01-02"
 // Status values returned in the Output.
 const (
 	statusNoRoleLinked = "no_role_linked"
+	statusPreview      = "preview"
 	statusNameConflict = "name_conflict"
 	statusCreated      = "created"
 )
@@ -40,11 +41,26 @@ type Input struct {
 	Purpose   string   `json:"purpose" jsonschema:"Required. The user-supplied purpose / business justification for the access request. Used verbatim as the description. The tool always appends a note indicating the request was created by AI."`
 	ExpiresAt string   `json:"expiresAt" jsonschema:"Required. The date the access must expire, as a date (2026-12-31, interpreted as the end of that day UTC) or an RFC 3339 timestamp (2026-12-31T17:00:00Z). Must be in the future. Ask the user — never invent an expiration date."`
 	Name      string   `json:"name,omitempty" jsonschema:"Optional. Display name of the access request. Only set it when the user supplied a name — never invent one and never ask for one. When omitted, Data Access names the request itself."`
+	Confirm   bool     `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of the request — the asset, the role, the resolved beneficiaries, the description and the expiration date — WITHOUT creating it, so it can be reviewed with the user. Set true to actually create the request after the user has approved it."`
+}
+
+// RequestPreview is the composed access request echoed back for review when confirm is false.
+// It mirrors every field that will be sent to Data Access, so the confirm checkpoint shows the
+// complete request.
+type RequestPreview struct {
+	Asset       *clients.CatalogAssetRef      `json:"asset" jsonschema:"The asset the request will be raised on."`
+	Role        *clients.CatalogAssetRole     `json:"role" jsonschema:"The Data Access role the access will be requested through — the WHAT of the request."`
+	Users       []*clients.DataAccessIdentity `json:"users,omitempty" jsonschema:"The Data Access users the request will be raised for — part of the WHO."`
+	Groups      []*clients.DataAccessGroup    `json:"groups,omitempty" jsonschema:"The Data Access groups the request will be raised for — part of the WHO."`
+	Name        string                        `json:"name,omitempty" jsonschema:"The display name that will be saved. Absent means no name is sent and Data Access generates a unique one."`
+	Description string                        `json:"description" jsonschema:"The description that will be saved: the user's purpose with the note stating the request was created by AI appended."`
+	ExpiresAt   string                        `json:"expiresAt" jsonschema:"The expiration date that will be sent to Data Access, in RFC 3339."`
 }
 
 type Output struct {
-	Status           string                            `json:"status,omitempty" jsonschema:"Outcome of the call: no_role_linked (the asset has no Data Access role that can be requested — see linkedRoles), name_conflict (an access request with the supplied name already exists — call again with a different name or without one), or created (the request was successfully created)."`
+	Status           string                            `json:"status,omitempty" jsonschema:"Outcome of the call: no_role_linked (the asset has no Data Access role that can be requested — see linkedRoles), preview (confirm was not set — nothing was created; review the preview with the user and call again with confirm=true), name_conflict (an access request with the supplied name already exists — call again with a different name or without one), or created (the request was successfully created)."`
 	Message          string                            `json:"message,omitempty" jsonschema:"Human-readable explanation of the status, including what the agent should do next."`
+	Preview          *RequestPreview                   `json:"preview,omitempty" jsonschema:"The composed access request returned when confirm=false; nothing was created."`
 	LinkedRoles      []clients.CatalogAssetRole        `json:"linkedRoles,omitempty" jsonschema:"The access controls linked to the asset. Present when status is no_role_linked and the asset has some, none of which is an active Grant; empty means nothing is linked to it at all. Use it to tell the user why the asset cannot be requested."`
 	Asset            *clients.CatalogAssetRef          `json:"asset,omitempty" jsonschema:"The asset the request is raised on."`
 	Role             *clients.CatalogAssetRole         `json:"role,omitempty" jsonschema:"The Data Access role linked to the asset — the WHAT of the request."`
@@ -64,9 +80,10 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Create a Collibra Data Access request for a catalog asset. Supply `assetId`, the Collibra users and/or groups who need access, a user-supplied purpose, and a mandatory expiration date. " +
 			"The WHAT of the request is the Data Access role linked to the asset, which the tool resolves, so never pass a role or data object yourself. " +
 			"Any asset that has an active Grant linked to it can be requested; when none is linked the tool returns status no_role_linked with whatever is linked in `linkedRoles`, and nothing is created. " +
-			"`name` is optional: pass it only when the user supplied one, and otherwise leave it out — never ask the user for a name.",
+			"`name` is optional: pass it only when the user supplied one, and otherwise leave it out — never ask the user for a name. " +
+			"Built around a confirm checkpoint: confirm=false (default) resolves everything and returns a PREVIEW of the request without creating anything — review it with the user; confirm=true creates the request.",
 		Handler:     handle(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.data-access-view-all-access-and-usage", "dgc.data-access-create-access-controls"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}
 }
@@ -126,7 +143,7 @@ func handle(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			name = &trimmed
 		}
 
-		return createRequest(ctx, collibraClient, createParams{
+		params := createParams{
 			name:      name,
 			purpose:   purpose,
 			asset:     asset,
@@ -134,8 +151,55 @@ func handle(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			users:     users,
 			groups:    groups,
 			expiresAt: expiresAt,
-		}), nil
+		}
+
+		// Confirm checkpoint: without confirm, echo everything that would be written and
+		// create nothing.
+		if !input.Confirm {
+			return previewOutput(params), nil
+		}
+
+		return createRequest(ctx, collibraClient, params), nil
 	}
+}
+
+// previewOutput reports what would be sent to Data Access, so the user can approve the whole
+// request — beneficiaries and description included — before anything is created.
+func previewOutput(params createParams) Output {
+	preview := &RequestPreview{
+		Asset:       params.asset,
+		Role:        params.role,
+		Users:       params.users,
+		Groups:      params.groups,
+		Description: buildDescription(params.purpose),
+		ExpiresAt:   params.expiresAt.Format(time.RFC3339),
+	}
+	named := "Data Access will generate a unique name"
+	if params.name != nil {
+		preview.Name = *params.name
+		named = fmt.Sprintf("named %q", *params.name)
+	}
+
+	return Output{
+		Status:  statusPreview,
+		Preview: preview,
+		Message: fmt.Sprintf("Preview only — nothing created. Will request access to %s %q through role %q for %s, %s, expiring on %s. "+
+			"Review this with the user, then call again with confirm=true.",
+			params.asset.TypeName, params.asset.Name, params.role.Name, describeBeneficiaries(params.users, params.groups),
+			named, preview.ExpiresAt),
+	}
+}
+
+// describeBeneficiaries renders the WHO the request would be raised for.
+func describeBeneficiaries(users []*clients.DataAccessIdentity, groups []*clients.DataAccessGroup) string {
+	labels := make([]string, 0, len(users)+len(groups))
+	for _, u := range users {
+		labels = append(labels, u.Name)
+	}
+	for _, g := range groups {
+		labels = append(labels, fmt.Sprintf("group %s", g.Name))
+	}
+	return strings.Join(labels, ", ")
 }
 
 // resolveRequestAsset loads the asset the request is raised on and the role it goes through.

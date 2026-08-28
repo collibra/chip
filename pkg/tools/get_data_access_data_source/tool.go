@@ -29,7 +29,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title:       "Get Data Access Data Source",
 		Description: "Fetches a Collibra Data Access data source by its ID, returning its name, type, description, parent, and timestamps. Use this to resolve a data source ID (the dataSourceId carried by data objects from search_data_access_objects and check_user_data_object_access) to a human-readable data source name and type. If the ID does not correspond to an existing data source, a message asking the user to correct it is returned.",
 		Handler:     handle(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.data-access-view-all-access-and-usage"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false)},
 	}
 }

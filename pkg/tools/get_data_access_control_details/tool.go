@@ -26,7 +26,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[DataAccessControlInput, Dat
 		Title:       "Get Data Access Control Details",
 		Description: "Retrieve detailed information about a specific Collibra Data Access control by its id. Returns the access control's name, description, state (ACTIVE, INACTIVE, DELETED), action type (GRANT, MASK, FILTER, SHARE, GROUP, FILTERRULE), grant category, policy rule, external management status, ABAC scope parse status, owners (users and groups), and timestamps. Use this to inspect an individual access control when you know its ID.",
 		Handler:     handleGetDataAccessControlDetails(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.data-access-view-all-access-and-usage"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false)},
 	}
 }

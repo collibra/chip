@@ -192,6 +192,7 @@ func validInput() tool.Input {
 		Purpose:   "Quarterly revenue reporting",
 		ExpiresAt: expiry,
 		Name:      "Access request: Quarterly revenue reporting",
+		Confirm:   true,
 	}
 }
 
@@ -555,6 +556,77 @@ func TestNameIsOptional(t *testing.T) {
 	}
 	if strings.Contains(fake.createRequest, `"name"`) {
 		t.Fatalf("Expected no name in the create mutation, got: %s", fake.createRequest)
+	}
+}
+
+func TestWithoutConfirmNothingIsCreated(t *testing.T) {
+	fake := newFake()
+
+	input := validInput()
+	input.Confirm = false
+	output := fake.run(t, input)
+
+	if output.Status != "preview" {
+		t.Fatalf("Expected status preview, got: %q (%s)", output.Status, output.Error)
+	}
+	if fake.createRequest != "" {
+		t.Fatal("Expected nothing to be created without confirm")
+	}
+	if output.Request != nil {
+		t.Fatalf("Expected no created request, got: %+v", output.Request)
+	}
+	if !strings.Contains(output.Message, "confirm=true") {
+		t.Fatalf("Expected the message to tell the agent how to proceed, got: %q", output.Message)
+	}
+}
+
+func TestPreviewEchoesEveryFieldThatWillBeWritten(t *testing.T) {
+	fake := newFake()
+
+	input := validInput()
+	input.Confirm = false
+	input.Groups = []string{"Finance"}
+	preview := fake.run(t, input).Preview
+
+	if preview == nil {
+		t.Fatal("Expected a preview")
+	}
+	if preview.Asset == nil || preview.Asset.ID != assetID {
+		t.Fatalf("Expected the asset in the preview, got: %+v", preview.Asset)
+	}
+	if preview.Role == nil || preview.Role.ID != roleID {
+		t.Fatalf("Expected the role in the preview, got: %+v", preview.Role)
+	}
+	if len(preview.Users) != 1 || preview.Users[0].ID != "da-user-1" {
+		t.Fatalf("Expected the mapped user in the preview, got: %+v", preview.Users)
+	}
+	if len(preview.Groups) != 1 || preview.Groups[0].ID != "group-1" {
+		t.Fatalf("Expected the mapped group in the preview, got: %+v", preview.Groups)
+	}
+	if preview.Name != input.Name {
+		t.Fatalf("Expected the supplied name in the preview, got: %q", preview.Name)
+	}
+	if preview.Description != "Quarterly revenue reporting. This access request was created by AI." {
+		t.Fatalf("Expected the composed description in the preview, got: %q", preview.Description)
+	}
+	if preview.ExpiresAt != "2099-12-31T23:59:59Z" {
+		t.Fatalf("Expected the expiration date in the preview, got: %q", preview.ExpiresAt)
+	}
+}
+
+func TestPreviewWithoutANameSaysDataAccessGeneratesOne(t *testing.T) {
+	fake := newFake()
+
+	input := validInput()
+	input.Confirm = false
+	input.Name = ""
+	output := fake.run(t, input)
+
+	if output.Preview == nil || output.Preview.Name != "" {
+		t.Fatalf("Expected no name in the preview, got: %+v", output.Preview)
+	}
+	if !strings.Contains(output.Message, "generate a unique name") {
+		t.Fatalf("Expected the message to say Data Access names the request, got: %q", output.Message)
 	}
 }
 

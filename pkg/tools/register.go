@@ -73,6 +73,12 @@ const ContextSpecificationsFeature = "context-specifications"
 // default. Shared with the data-quality job-creation and job run tools.
 const DataQualityFeatureName = "data-quality"
 
+// DataAccessFeatureName gates the Collibra Data Access tools (search identities and data
+// objects, check a user's access, read a data source or an access control, and raise an access
+// request on an asset) behind --experimental. create_asset_access_request WRITES to Data
+// Access, so the set stays opt-in until it graduates. Off by default.
+const DataAccessFeatureName = "data-access"
+
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
 // instead of the standard DGC API.
@@ -108,15 +114,17 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
-	toolRegister(server, toolConfig, search_data_access_identities.NewTool(client))
-	toolRegister(server, toolConfig, search_data_access_objects.NewTool(client))
-	toolRegister(server, toolConfig, create_asset_access_request.NewTool(client))
-	toolRegister(server, toolConfig, check_user_data_object_access.NewTool(client))
-	toolRegister(server, toolConfig, get_data_access_data_source.NewTool(client))
-	toolRegister(server, toolConfig, get_data_access_control_details.NewTool(client))
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
+	if toolConfig.IsExperimentalEnabled(DataAccessFeatureName) {
+		toolRegister(server, toolConfig, search_data_access_identities.NewTool(client))
+		toolRegister(server, toolConfig, search_data_access_objects.NewTool(client))
+		toolRegister(server, toolConfig, create_asset_access_request.NewTool(client))
+		toolRegister(server, toolConfig, check_user_data_object_access.NewTool(client))
+		toolRegister(server, toolConfig, get_data_access_data_source.NewTool(client))
+		toolRegister(server, toolConfig, get_data_access_control_details.NewTool(client))
+	}
 	if toolConfig.IsExperimentalEnabled(DataQualityFeatureName) {
 		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
 		toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
