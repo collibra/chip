@@ -57,7 +57,7 @@ All of a domain's tools share a single feature name, across PRs and teams. Do no
 or per tool. Gate the registrations as a block in `pkg/tools/register.go`:
 
 ```go
-const DataQualityFeatureName = "data-quality"   // existing: "context-specifications"
+const YourDomainFeatureName = "your-domain"   // existing: "context-specifications"
 
 if toolConfig.IsExperimentalEnabled(YourDomainFeatureName) {
     toolRegister(server, toolConfig, your_tool.NewTool(client))
