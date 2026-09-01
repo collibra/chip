@@ -541,6 +541,67 @@ func GetDqJob(ctx context.Context, collibraHttpClient *http.Client, jobName stri
 	return &job, code, nil
 }
 
+// DqJobSearchFilters are the optional filters accepted by the PUBLIC GET /rest/dq/1.0/jobs
+// (searchJobs) endpoint. jobName is a fuzzy, case-insensitive %LIKE% match; the rest are exact.
+type DqJobSearchFilters struct {
+	JobName      string
+	SchemaName   string
+	TableName    string
+	EdgeSiteName string
+	JobType      string // PUSHDOWN | PULLUP
+}
+
+// DqJobSearchPage is one page of the PUBLIC GET /rest/dq/1.0/jobs (searchJobs) response.
+type DqJobSearchPage struct {
+	Results []DqJobDefinition
+	Total   int64
+	Offset  int
+	Limit   int
+}
+
+// SearchDqJobs searches job definitions via the PUBLIC GET /rest/dq/1.0/jobs (searchJobs),
+// applying the given filters (all ANDed, all optional) and pagination. The HTTP status is
+// returned alongside the error so callers can map it to actionable guidance.
+func SearchDqJobs(ctx context.Context, collibraHttpClient *http.Client, filters DqJobSearchFilters, offset, limit int) (*DqJobSearchPage, int, error) {
+	params := url.Values{}
+	if filters.JobName != "" {
+		params.Set("jobName", filters.JobName)
+	}
+	if filters.SchemaName != "" {
+		params.Set("schemaName", filters.SchemaName)
+	}
+	if filters.TableName != "" {
+		params.Set("tableName", filters.TableName)
+	}
+	if filters.EdgeSiteName != "" {
+		params.Set("edgeSiteName", filters.EdgeSiteName)
+	}
+	if filters.JobType != "" {
+		params.Set("jobType", filters.JobType)
+	}
+	params.Set("limit", strconv.Itoa(limit))
+	params.Set("offset", strconv.Itoa(offset))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "/rest/dq/1.0/jobs?"+params.Encode(), nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var resp struct {
+		Results []DqJobDefinition `json:"results"`
+		Total   int64             `json:"total"`
+		Offset  int               `json:"offset"`
+		Limit   int               `json:"limit"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, code, fmt.Errorf("failed to parse jobs search response: %w", err)
+	}
+	return &DqJobSearchPage{Results: resp.Results, Total: resp.Total, Offset: resp.Offset, Limit: resp.Limit}, code, nil
+}
+
 // UpdateDqJob applies a PARTIAL update to an existing job definition via the PUBLIC
 // PATCH /rest/dq/1.0/jobs/{jobName}. Fields absent from the request are left unchanged server-side.
 // A success is 200 with no response body, so only the HTTP status is returned; it comes back
@@ -600,6 +661,7 @@ func IsDeletableDqRunState(s string) bool {
 type DqJobRun struct {
 	JobRunID             string           `json:"jobRunId"`
 	JobName              string           `json:"jobName"`
+	JobType              string           `json:"jobType,omitempty"`
 	Status               string           `json:"status"`
 	Activity             string           `json:"activity,omitempty"`
 	Exception            string           `json:"exception,omitempty"`
@@ -732,6 +794,59 @@ func searchDqJobRunsByName(ctx context.Context, collibraHttpClient *http.Client,
 		return nil, code, fmt.Errorf("failed to parse job runs response: %w", err)
 	}
 	return resp.Results, code, nil
+}
+
+// DqJobRunSearchPage is one page of the PUBLIC GET /rest/dq/1.0/jobRuns (searchJobRuns) response.
+type DqJobRunSearchPage struct {
+	Results []DqJobRun
+	Total   int64
+	Offset  int
+	Limit   int
+}
+
+// SearchDqJobRuns searches job runs via the PUBLIC GET /rest/dq/1.0/jobRuns (searchJobRuns).
+// jobName is matched case-insensitively as a substring (nameMatchMode=CONTAINS) when set; statuses
+// and jobType are optional exact filters. The HTTP status is returned alongside the error so callers
+// can map it to actionable guidance.
+//
+// NOTE: per the public API spec, the JobRun shape returned by this list endpoint does not formally
+// declare jobType/endTime/score/etc. — those are only documented on the single-run GET
+// (GetDqJobRun). Results are still unmarshalled into the shared DqJobRun type: any of those fields
+// the live API does populate on the list response will come through; if it doesn't, they are simply
+// left zero-valued.
+func SearchDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobName string, statuses []string, jobType string, offset, limit int) (*DqJobRunSearchPage, int, error) {
+	params := url.Values{}
+	if jobName != "" {
+		params.Set("jobName", jobName)
+		params.Set("nameMatchMode", "CONTAINS")
+	}
+	for _, st := range statuses {
+		params.Add("status", st)
+	}
+	if jobType != "" {
+		params.Set("jobType", jobType)
+	}
+	params.Set("limit", strconv.Itoa(limit))
+	params.Set("offset", strconv.Itoa(offset))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "/rest/dq/1.0/jobRuns?"+params.Encode(), nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var resp struct {
+		Results []DqJobRun `json:"results"`
+		Total   int64      `json:"total"`
+		Offset  int        `json:"offset"`
+		Limit   int        `json:"limit"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job runs search response: %w", err)
+	}
+	return &DqJobRunSearchPage{Results: resp.Results, Total: resp.Total, Offset: resp.Offset, Limit: resp.Limit}, code, nil
 }
 
 func CancelDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (int, error) {
