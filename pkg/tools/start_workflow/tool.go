@@ -185,11 +185,15 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{Status: StatusError, WorkflowDefinitionID: def.ID, Name: def.Name, Message: fmt.Sprintf("Failed to fetch the start form for %q: %v", def.Name, formErr), Guidance: "Retry; if it persists, contact your Collibra administrator."}, nil
 		}
 
-		// Normalized once here, then used for validation, the preview and the write alike — see
-		// normalizeFormProperties for why that single source matters.
-		formProperties := normalizeFormProperties(input.FormProperties)
+		// One map, computed once, and from here on the ONLY one: it is validated, previewed and
+		// submitted. Every defect of this shape found in review came from deriving these
+		// separately and letting them drift — a value validated after trimming but sent raw, a
+		// required field reported missing although the form's own default would have filled it.
+		// Anything that changes what gets sent must change it here, above the validation, or the
+		// invariant test that pins validated == previewed == sent will fail.
+		effective := effectiveFormProperties(def, formFields, normalizeFormProperties(input.FormProperties))
 
-		missing, problems := validateFormProperties(formFields, formProperties)
+		missing, problems := validateFormProperties(formFields, effective)
 		if len(problems) > 0 {
 			return Output{
 				Status:               StatusNeedsInput,
@@ -203,10 +207,6 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				Guidance:             "Ask the user for the fields listed in missingFields (see formFields for their labels, types and allowed options), fix any invalid values, then re-call with formProperties populated.",
 			}, nil
 		}
-
-		// Exactly what the start request will carry — see effectiveFormProperties. Computed before
-		// the preview so the preview and the write cannot disagree.
-		effective := effectiveFormProperties(def, formFields, formProperties)
 
 		// Only echo (and only send) the business item when it is actually part of the request.
 		sentBusinessItemID := ""
@@ -467,17 +467,43 @@ func startInstance(ctx context.Context, collibraClient *http.Client, def *client
 // The legacy model is left alone: there the server applies the BPMN's own `default=` values, so
 // adding anything here would be duplicating work the engine already does.
 func effectiveFormProperties(def *clients.WorkflowDefinition, fields []clients.WorkflowFormField, supplied map[string]string) map[string]string {
+	multi := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		multi[f.ID] = f.MultiValue
+	}
+	canonical := func(key, value string) string {
+		if !multi[key] {
+			return value
+		}
+		// A multi-value field is a comma-separated list, and validation checks each part with the
+		// surrounding spaces removed. Submitting the raw string would send " b" where "b" was
+		// approved — the server splits on commas too and rejects the padded entry, after the user
+		// has already confirmed.
+		parts := strings.Split(value, ",")
+		for i, p := range parts {
+			parts[i] = strings.TrimSpace(p)
+		}
+		return strings.Join(parts, ",")
+	}
+
 	if !def.StartFormJSONModelAvailable {
-		return supplied
+		out := make(map[string]string, len(supplied))
+		for k, v := range supplied {
+			out[k] = canonical(k, v)
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
 	}
 	out := make(map[string]string, len(fields)+len(supplied))
 	for _, f := range fields {
 		if f.DefaultValue != "" {
-			out[f.ID] = f.DefaultValue
+			out[f.ID] = canonical(f.ID, f.DefaultValue)
 		}
 	}
 	for k, v := range supplied {
-		out[k] = v
+		out[k] = canonical(k, v)
 	}
 	if len(out) == 0 {
 		return nil
@@ -543,8 +569,20 @@ func startError(code int, err error, workflowName string) Output {
 		// Retrying the identical call cannot help, so do not suggest it.
 		return Output{Status: StatusError, Message: fmt.Sprintf("Collibra could not process the request to start %q (HTTP 422): %v", workflowName, err), Guidance: "The request was well-formed but rejected by this workflow's own rules — e.g. it is already running for that resource, or the resource does not satisfy its assignment rules. Do not retry unchanged; report the message to the user. Nothing was created."}
 	case 0:
-		return Output{Status: StatusError, Message: fmt.Sprintf("Failed to start %q: %v", workflowName, err), Guidance: "A network/transport error occurred contacting Collibra. Retry."}
-	default:
-		return Output{Status: StatusError, Message: fmt.Sprintf("Failed to start %q (HTTP %d): %v", workflowName, code, err), Guidance: "This is likely a server-side error. Collibra runs a workflow's own logic synchronously as part of starting it, so this failure means NO instance was created — it is not a partial start. Retry shortly; if it persists, contact your Collibra administrator."}
+		// The request never got a response — but that does NOT mean it never arrived. A dropped
+		// connection or a deadline that expires while the response is in flight looks identical
+		// here to a request that never left, and the workflow may well have started. Telling the
+		// model to retry would start it a second time; this tool is not idempotent.
+		return Output{Status: StatusError, Message: fmt.Sprintf("Lost contact with Collibra while starting %q, so the outcome is unknown: %v", workflowName, err), Guidance: "Do NOT retry blindly — the workflow may have started. Tell the user the outcome is unknown and ask them to check in Collibra whether an instance exists before trying again."}
 	}
+
+	// A 2xx that still produced an error means Collibra ACCEPTED the start and we could not read
+	// what it said back. The instance exists. Retrying would create a second one — the single
+	// worst outcome for a non-idempotent write tool, and the reason this case is handled before
+	// the generic server-error branch rather than falling into it.
+	if code >= 200 && code < 300 {
+		return Output{Status: StatusError, Message: fmt.Sprintf("Collibra accepted the request to start %q (HTTP %d) but its response could not be read: %v", workflowName, code, err), Guidance: "The workflow almost certainly STARTED — do not retry, or it will run twice. Tell the user it was started but that the instance id could not be captured, and point them at Collibra to find it."}
+	}
+
+	return Output{Status: StatusError, Message: fmt.Sprintf("Failed to start %q (HTTP %d): %v", workflowName, code, err), Guidance: "This is likely a server-side error. Collibra runs a workflow's own logic synchronously as part of starting it, so this failure means NO instance was created — it is not a partial start. Retry shortly; if it persists, contact your Collibra administrator."}
 }

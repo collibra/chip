@@ -2,6 +2,7 @@ package start_workflow_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1078,7 +1079,9 @@ func TestStartWorkflow_JSONStartKeepsKeysNotOnTheForm(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var sent map[string]any
-	_ = json.Unmarshal([]byte(body), &sent)
+	if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+		t.Fatalf("unparseable request body %q: %v", body, uerr)
+	}
 	props, _ := sent["formProperties"].(map[string]any)
 	if props["notOnTheForm"] != "keep me" {
 		t.Errorf("a caller-supplied key absent from the form was dropped: %v", props)
@@ -1127,7 +1130,9 @@ func TestStartWorkflow_UnsuppliedFieldSubmitsTheFormsDefaultNotNull(t *testing.T
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var sent map[string]any
-	_ = json.Unmarshal([]byte(body), &sent)
+	if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+		t.Fatalf("unparseable request body %q: %v", body, uerr)
+	}
 	props, _ := sent["formProperties"].(map[string]any)
 	if props["priority"] != "Normal" {
 		t.Errorf("priority = %v, want the form's default %q — dropping it silently diverges from the product", props["priority"], "Normal")
@@ -1154,7 +1159,9 @@ func TestStartWorkflow_ExplicitEmptyStringOverridesTheDefault(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var sent map[string]any
-	_ = json.Unmarshal([]byte(body), &sent)
+	if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+		t.Fatalf("unparseable request body %q: %v", body, uerr)
+	}
 	props, _ := sent["formProperties"].(map[string]any)
 	if props["priority"] != "" {
 		t.Errorf("priority = %v, want the caller's explicit empty value to win over the default", props["priority"])
@@ -1305,7 +1312,9 @@ func TestStartWorkflow_NonStringDefaultIsNotDropped(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var sent map[string]any
-	_ = json.Unmarshal([]byte(body), &sent)
+	if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+		t.Fatalf("unparseable request body %q: %v", body, uerr)
+	}
 	props, _ := sent["formProperties"].(map[string]any)
 	if props["urgent"] != true {
 		t.Errorf("urgent = %#v, want the boolean true — a non-string default must survive, and reach the engine typed", props["urgent"])
@@ -1331,7 +1340,9 @@ func TestStartWorkflow_BooleanValueIsSentTyped(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var sent map[string]any
-	_ = json.Unmarshal([]byte(body), &sent)
+	if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+		t.Fatalf("unparseable request body %q: %v", body, uerr)
+	}
 	props, _ := sent["formProperties"].(map[string]any)
 	if props["urgent"] != false {
 		t.Errorf("urgent = %#v (%T), want the boolean false — the string \"false\" is truthy in Groovy", props["urgent"], props["urgent"])
@@ -1493,5 +1504,218 @@ func TestStartWorkflow_OptionsExhaustiveReachesTheCaller(t *testing.T) {
 	}
 	if byID["open"].OptionsExhaustive {
 		t.Errorf("a non-fixed shortlist must be reported open, or the caller will refuse valid ids")
+	}
+}
+
+// --- Invariants ---
+//
+// These tests do not check one branch each. They assert a property across the whole space, because
+// the defects they guard kept coming back through NEW branches: three separate review rounds found
+// the same shape of bug in a different place. A per-case test only pins the case it names.
+
+// TestInvariant_NoStartFailureEverInvitesABlindRetryOfASucceededWrite sweeps every status code the
+// start call can plausibly return and enforces two rules that must hold for a non-idempotent write:
+//
+//   - a 2xx must never claim nothing was created, and must never advise a plain retry — Collibra
+//     accepted the request, so a retry starts the workflow a second time;
+//   - a lost connection (code 0) must not advise a plain retry either, because a request that was
+//     accepted and then lost is indistinguishable here from one that never arrived.
+//
+// Codes that genuinely mean "nothing happened" (4xx/5xx) may advise a retry.
+func TestInvariant_NoStartFailureEverInvitesABlindRetryOfASucceededWrite(t *testing.T) {
+	const wf = "22222222-2222-2222-2222-222222222222"
+	codes := []int{0, 200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503}
+
+	for _, code := range codes {
+		t.Run(http.StatusText(code)+"/"+itoa(code), func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /rest/2.0/workflowDefinitions/"+wf, func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(wireDefinition{ID: wf, Name: "W", Enabled: true, BusinessItemResourceType: "GLOBAL"})
+			})
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+			c := testutil.NewClient(srv)
+
+			if code == 0 {
+				// A real transport failure, not a status: the start endpoint is simply not
+				// reachable. Writing a 200 here (as an earlier version of this test did) exercised
+				// the success path instead and left the whole code-0 rule unverified.
+				mux.HandleFunc("POST /rest/2.0/workflowInstances", func(w http.ResponseWriter, r *http.Request) {
+					hj, ok := w.(http.Hijacker)
+					if !ok {
+						t.Skip("cannot simulate a dropped connection")
+					}
+					conn, _, _ := hj.Hijack()
+					_ = conn.Close() // accepted, then the connection dies before the response
+				})
+			} else {
+				mux.HandleFunc("POST /rest/2.0/workflowInstances", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(code)
+					// Deliberately unreadable: the shape that makes a 2xx reach the error path.
+					_, _ = w.Write([]byte(`[]`))
+				})
+			}
+
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: wf, Confirm: true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected transport error: %v", err)
+			}
+			if out.Status == start_workflow.StatusSuccess {
+				return // nothing to guard: it worked
+			}
+
+			guidance := strings.ToLower(out.Guidance)
+			advisesRetry := strings.Contains(guidance, "retry") &&
+				!strings.Contains(guidance, "do not retry") && !strings.Contains(guidance, "not retry")
+
+			mayHaveStarted := code == 0 || (code >= 200 && code < 300)
+			if mayHaveStarted {
+				if advisesRetry {
+					t.Errorf("HTTP %d may have started the workflow, but the guidance invites a retry: %q", code, out.Guidance)
+				}
+				if strings.Contains(out.Message, "NO instance was created") ||
+					strings.Contains(guidance, "no instance was created") {
+					t.Errorf("HTTP %d cannot claim nothing was created: %q / %q", code, out.Message, out.Guidance)
+				}
+			}
+			if out.WorkflowInstanceID != "" {
+				t.Errorf("HTTP %d produced no readable instance, so no id may be reported, got %q", code, out.WorkflowInstanceID)
+			}
+		})
+	}
+}
+
+func itoa(i int) string { return fmt.Sprintf("%d", i) }
+
+// TestInvariant_ValidatedEqualsPreviewedEqualsSent is the structural guard for the defect that
+// recurred in three separate review rounds: the value that gets validated, the value shown in the
+// preview and the value put on the wire were each derived separately and drifted apart — trimmed
+// here but not there, defaults applied after validation rather than before, a list normalised for
+// checking but submitted raw.
+//
+// Rather than pin each instance, this sweeps inputs that have historically broken and asserts the
+// three are identical. Any future change that reintroduces a second derivation fails here.
+func TestInvariant_ValidatedEqualsPreviewedEqualsSent(t *testing.T) {
+	const wf = "22222222-2222-2222-2222-222222222222"
+	model := `{"rows":[{"cols":[
+	  {"id":"a","type":"text","label":"Plain","isRequired":false,"value":"{{plain}}"},
+	  {"id":"b","type":"select","label":"Defaulted","isRequired":true,"value":"{{defaulted}}","defaultValue":"Normal"},
+	  {"id":"c","type":"select","label":"Tags","isRequired":false,"value":"{{tags}}","extraSettings":{"multi":true,"items":[{"value":"x","label":"X"},{"value":"y","label":"Y"}]}}]}]}`
+
+	for _, tc := range []struct {
+		name     string
+		supplied map[string]string
+	}{
+		{"nothing supplied — the required field's own default must satisfy it", nil},
+		{"padded scalar", map[string]string{"plain": "  hello  "}},
+		{"padded multi-value list", map[string]string{"tags": "x, y"}},
+		{"default overridden", map[string]string{"defaulted": "Urgent"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: wf, Name: "W", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+			handleJSONModelForm(mux, model)
+			var body string
+			handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, nil, http.StatusCreated)
+
+			tool := start_workflow.NewTool(c)
+			in := start_workflow.Input{WorkflowDefinitionID: wf, FormProperties: tc.supplied}
+
+			prev, err := tool.Handler(t.Context(), in)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			// Validation must not object to a payload it is itself going to send.
+			if prev.Status != start_workflow.StatusPreview {
+				t.Fatalf("status = %q, want preview — validation rejected values the tool would have submitted: %s", prev.Status, prev.Message)
+			}
+
+			in.Confirm = true
+			if _, err := tool.Handler(t.Context(), in); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var sent map[string]any
+			if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+				t.Fatalf("unparseable request body %q: %v", body, uerr)
+			}
+			props, ok := sent["formProperties"].(map[string]any)
+			if !ok {
+				t.Fatalf("request carried no formProperties object: %s", body)
+			}
+
+			// Internal consistency is not enough on its own: if BOTH the preview and the request
+			// carried the raw " y", they would agree with each other and still be wrong on the
+			// wire, because the server splits on commas too and would reject the padded entry.
+			for k, v := range prev.FormProperties {
+				if strings.Contains(v, ", ") {
+					t.Errorf("field %q is submitted as %q — a multi-value list must be canonicalised, or the server rejects the padded entry after the user approved it", k, v)
+				}
+			}
+
+			if len(props) != len(prev.FormProperties) {
+				t.Fatalf("previewed %d fields but sent %d: previewed=%v sent=%v", len(prev.FormProperties), len(props), prev.FormProperties, props)
+			}
+			for k, previewed := range prev.FormProperties {
+				got, present := props[k]
+				if !present {
+					t.Errorf("field %q was previewed as %q but never sent", k, previewed)
+					continue
+				}
+				if s, isString := got.(string); isString && s != previewed {
+					t.Errorf("field %q: previewed %q, sent %q — preview and request must not disagree", k, previewed, s)
+				}
+			}
+		})
+	}
+}
+
+// TestExplicitlyClearingARequiredFieldIsStillMissing is the other side of the default rule, and
+// the invariant sweep above surfaced it: leaving a defaulted field out means "use the default",
+// but explicitly setting it to empty means "I want it blank" — and for a REQUIRED field that has
+// to be refused, or the workflow starts with a mandatory value unset.
+func TestExplicitlyClearingARequiredFieldIsStillMissing(t *testing.T) {
+	const wf = "22222222-2222-2222-2222-222222222222"
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: wf, Name: "W", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+	handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"p","type":"select","label":"Priority","isRequired":true,"value":"{{priority}}","defaultValue":"Normal"}]}]}`)
+	started := false
+	handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", nil, &started, http.StatusCreated)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: wf,
+		FormProperties:       map[string]string{"priority": ""},
+		Confirm:              true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusNeedsInput {
+		t.Fatalf("status = %q, want needs_input — clearing a required field is not the same as leaving it to its default", out.Status)
+	}
+	if started {
+		t.Errorf("the workflow was started with a required field explicitly blanked")
+	}
+}
+
+// TestRequiredFieldWithADefaultIsNotReportedMissing: the form pre-fills it, so the caller omitting
+// it is not an omission — the schema for defaultValue explicitly invites leaving it out. Reporting
+// it missing produced a needs_input the caller could satisfy only by repeating the default back.
+func TestRequiredFieldWithADefaultIsNotReportedMissing(t *testing.T) {
+	const wf = "22222222-2222-2222-2222-222222222222"
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: wf, Name: "W", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+	handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"p","type":"select","label":"Priority","isRequired":true,"value":"{{priority}}","defaultValue":"Normal"}]}]}`)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: wf})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusPreview {
+		t.Fatalf("status = %q, want preview: a required field the form itself fills is not missing (missing=%v)", out.Status, out.MissingFields)
+	}
+	if out.FormProperties["priority"] != "Normal" {
+		t.Errorf("the default must be what gets submitted, got %q", out.FormProperties["priority"])
 	}
 }

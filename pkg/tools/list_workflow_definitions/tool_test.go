@@ -2,6 +2,7 @@ package list_workflow_definitions_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -794,5 +795,71 @@ func TestListWorkflowDefinitions_LimitAboveServerCapIsRejected(t *testing.T) {
 	}
 	if q != nil {
 		t.Errorf("rejected input must not reach the server, but it did: %v", q)
+	}
+}
+
+// TestInvariant_MessageNeverContradictsTheResults sweeps the paging space and asserts the prose
+// agrees with the structured fields. The count in the message must be the count attached, and the
+// message must not promise more pages when hasMore is false. Both halves regressed once already:
+// "page on with offset" appeared on the last page, and "Found 10" was printed alongside 2 results.
+func TestInvariant_MessageNeverContradictsTheResults(t *testing.T) {
+	all := []globalWorkflow{{ID: "a", Name: "A"}, {ID: "b", Name: "B"}, {ID: "c", Name: "C"}}
+
+	for _, offset := range []int{0, 1, 2, 3, 7} {
+		for _, limit := range []int{1, 2, 50} {
+			t.Run(fmt.Sprintf("offset=%d/limit=%d", offset, limit), func(t *testing.T) {
+				c := graphqlServer(t, all)
+				out, err := list_workflow_definitions.NewTool(c).Handler(t.Context(),
+					list_workflow_definitions.Input{Global: chip.Ptr(true), Offset: offset, Limit: limit})
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				promisesMore := strings.Contains(out.Message, "page on with offset")
+				if promisesMore != out.HasMore {
+					t.Errorf("hasMore=%v but message %q", out.HasMore, out.Message)
+				}
+				// The only number that may appear as a count of what is attached is len(Results).
+				if n := len(out.Results); n > 0 && !strings.Contains(out.Message, fmt.Sprintf("%d", n)) {
+					t.Errorf("%d results attached but the message names none of them: %q", n, out.Message)
+				}
+				if len(out.Results) == 0 && strings.HasPrefix(out.Message, "Found") {
+					t.Errorf("no results attached, but the message announces a find: %q", out.Message)
+				}
+			})
+		}
+	}
+}
+
+// TestGlobalLaneErrorsDoNotBlameAResourceThatWasNeverSupplied: the global lane has no resource, so
+// messages minted for the scoped lane are nonsense there — an empty id in "no resource found with
+// id .", or advice to "try global=true" given to a caller who passed exactly that. It also must
+// not be classed as a validation_error: nothing about the input is wrong.
+func TestGlobalLaneErrorsDoNotBlameAResourceThatWasNeverSupplied(t *testing.T) {
+	for _, code := range []int{http.StatusForbidden, http.StatusNotFound, http.StatusInternalServerError} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("POST /graphql", func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(code)
+				_, _ = w.Write([]byte(`{"errorCode":"X"}`))
+			})
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			out, err := list_workflow_definitions.NewTool(testutil.NewClient(srv)).Handler(
+				t.Context(), list_workflow_definitions.Input{Global: chip.Ptr(true)})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status != list_workflow_definitions.StatusError {
+				t.Errorf("status = %q, want error — a server failure is not the caller's input being invalid", out.Status)
+			}
+			if strings.Contains(out.Message, "with id .") || strings.Contains(out.Message, "that resource") {
+				t.Errorf("message blames a resource that was never supplied: %q", out.Message)
+			}
+			if strings.Contains(out.Message, "try global=true") {
+				t.Errorf("message tells a global caller to use global=true: %q", out.Message)
+			}
+		})
 	}
 }

@@ -341,6 +341,13 @@ func validate(input Input) *Output {
 // and a 403 means it does but the caller may not read it (§6.3, §6.6).
 func lookupError(code int, err error, input Input) Output {
 	scope, id := suppliedScope(input)
+	if id == "" {
+		// The global lane supplied no resource, so every message below that names one would be
+		// nonsense — "no resource found with id ." for a missing endpoint, or "try global=true"
+		// to a caller who already did. It also must not be a validation_error: nothing about the
+		// caller's input is wrong.
+		return globalLookupError(code, err)
+	}
 	switch code {
 	case http.StatusNotFound:
 		return Output{
@@ -362,6 +369,26 @@ func lookupError(code int, err error, input Input) Output {
 			Status:  StatusError,
 			Message: fmt.Sprintf("Collibra could not list workflows for that %s (HTTP %d): %v", scope, code, err),
 		}
+	}
+}
+
+// globalLookupError maps a failure of the global lane, which has no resource to blame.
+func globalLookupError(code int, err error) Output {
+	switch code {
+	case http.StatusForbidden:
+		return Output{
+			Status:  StatusError,
+			Message: "You do not have permission to list global workflows (HTTP 403). Do not retry — ask a Collibra administrator for access, or scope the call to an asset, domain or community you can read.",
+		}
+	case 0:
+		return Output{
+			Status:  StatusError,
+			Message: fmt.Sprintf("Could not reach Collibra while listing global workflows: %v. This is a network/transport failure — retrying is reasonable.", err),
+		}
+	}
+	return Output{
+		Status:  StatusError,
+		Message: fmt.Sprintf("Collibra could not return the global workflow list (HTTP %d): %v. This is a server-side problem, not a problem with the request.", code, err),
 	}
 }
 
@@ -410,6 +437,14 @@ func summarize(shown, total, seen int, needle string, truncated bool, input Inpu
 		return fmt.Sprintf("No startable workflow definitions found for %s.%s", where, caveat)
 	case seen < total:
 		return fmt.Sprintf("Showing %d of %d startable workflow definitions%s for %s — page on with offset %d.%s", shown, total, filter, where, seen, caveat)
+	}
+	if shown == 0 {
+		// Everything matched, but this page is past the end of it. Saying "found N" here reads as
+		// "here are N results" when none are attached.
+		return fmt.Sprintf("No results at offset %d: all %d startable workflow definition(s)%s for %s come before it.%s", seen-shown, total, filter, where, caveat)
+	}
+	if shown < total {
+		return fmt.Sprintf("Showing the last %d of %d startable workflow definition(s)%s for %s.%s", shown, total, filter, where, caveat)
 	}
 	return fmt.Sprintf("Found %d startable workflow definition(s)%s for %s.%s", total, filter, where, caveat)
 }
