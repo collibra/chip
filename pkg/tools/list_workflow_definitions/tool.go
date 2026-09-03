@@ -290,7 +290,7 @@ func validate(input Input) *Output {
 		if err := validation.UUIDOptional(f.name, f.value); err != nil {
 			return &Output{
 				Status:  StatusValidationError,
-				Message: err.Error() + " Resolve the resource first with search_asset_keyword or get_asset_details and pass the UUID it returns.",
+				Message: err.Error() + ". Resolve the resource first with search_asset_keyword or get_asset_details and pass the UUID it returns.",
 			}
 		}
 	}

@@ -1719,3 +1719,584 @@ func TestRequiredFieldWithADefaultIsNotReportedMissing(t *testing.T) {
 		t.Errorf("the default must be what gets submitted, got %q", out.FormProperties["priority"])
 	}
 }
+
+// TestStartWorkflow_NoDefaultIsInjectedForAFieldTheFormWillNotAccept. Defaults are injected so the
+// process sees what the product's own UI would have sent. That reasoning stops at fields the form
+// will not accept a value for: a disabled one (the server rejects a submitted value outright), an
+// unsupported one (the caller was just told it cannot be produced from here), and one the form
+// hides unconditionally. Sending their defaults anyway turns a helpful pre-fill into a 400 — or
+// worse, writes a value for a field the user was never shown.
+func TestStartWorkflow_NoDefaultIsInjectedForAFieldTheFormWillNotAccept(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Guarded", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+	handleJSONModelForm(mux, `{"rows":[{"cols":[
+	  {"id":"f1","type":"text","label":"Subject","isRequired":true,"value":"{{subject}}"},
+	  {"id":"f2","type":"text","label":"Disabled","value":"{{locked}}","defaultValue":"lockedDefault","enabled":false},
+	  {"id":"f3","type":"collibra-fileUpload","label":"Attachment","value":"{{upload}}","defaultValue":"uploadDefault","designInfo":{"stencilId":"collibra-fileUpload"}},
+	  {"id":"f4","type":"text","label":"Hidden","value":"{{hidden}}","defaultValue":"hiddenDefault","visible":false},
+	  {"id":"f5","type":"text","label":"Ordinary","value":"{{ordinary}}","defaultValue":"ordinaryDefault"}]}]}`)
+	var body string
+	handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, nil, http.StatusCreated)
+
+	tool := start_workflow.NewTool(c)
+	if _, err := tool.Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"subject": "x"},
+		Confirm:              true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var sent map[string]any
+	if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+		t.Fatalf("unparseable request body %q: %v", body, uerr)
+	}
+	props, _ := sent["formProperties"].(map[string]any)
+	for _, key := range []string{"locked", "upload", "hidden"} {
+		if v, present := props[key]; present && v != nil {
+			t.Errorf("%s = %v, want absent-or-null: the form does not accept a value for this field", key, v)
+		}
+	}
+	if props["ordinary"] != "ordinaryDefault" {
+		t.Errorf("ordinary = %v, want its default — the guard must not suppress a perfectly submittable field", props["ordinary"])
+	}
+}
+
+// ...and the caller may still set an UNSUPPORTED or never-shown field explicitly. The guard
+// governs what chip volunteers on the caller's behalf, not what the caller asked for; suppressing
+// an explicit value would be a silent drop, which is the failure mode this area exists to avoid.
+func TestStartWorkflow_AnExplicitValueForAGuardedFieldIsStillSent(t *testing.T) {
+	for _, tc := range []struct{ name, col string }{
+		{"never visible", `{"id":"f2","type":"text","label":"Hidden","value":"{{guarded}}","defaultValue":"formDefault","visible":false}`},
+		{"unsupported", `{"id":"f2","type":"collibra-fileUpload","label":"File","value":"{{guarded}}","designInfo":{"stencilId":"collibra-fileUpload"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Guarded", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+			handleJSONModelForm(mux, `{"rows":[{"cols":[`+tc.col+`]}]}`)
+			var body string
+			handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, nil, http.StatusCreated)
+
+			if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				FormProperties:       map[string]string{"guarded": "chosenByCaller"},
+				Confirm:              true,
+			}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var sent map[string]any
+			if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+				t.Fatalf("unparseable request body %q: %v", body, uerr)
+			}
+			props, _ := sent["formProperties"].(map[string]any)
+			if props["guarded"] != "chosenByCaller" {
+				t.Errorf("guarded = %v, want the caller's own value", props["guarded"])
+			}
+		})
+	}
+}
+
+// TestStartWorkflow_AValueForAReadOnlyFieldIsRefusedBeforeTheWrite. Read-only is the one case
+// where the caller's own value must NOT be forwarded, and it applies to both form models.
+//
+// The legacy engine answers a value for a non-writable property with a hard failure — "form
+// property '<id>' is not writable" — thrown inside the transactional start, so the whole thing
+// rolls back into an opaque 500 after the user already approved the preview. Catching it here
+// costs one round trip and names the field; letting it through costs a confirmed write that dies.
+//
+// It is easy to trip: formFields shows the form's declared value, and echoing that value back is
+// the obvious thing for a caller to do.
+func TestStartWorkflow_AValueForAReadOnlyFieldIsRefusedBeforeTheWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(*http.ServeMux)
+	}{
+		{"legacy", func(mux *http.ServeMux) {
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "RO", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+			handleLegacyForm(mux, workflowID, `{"formProperties":[{"id":"locked","name":"Locked","type":"string","writable":false,"value":"fromTheForm"}]}`)
+		}},
+		{"json model", func(mux *http.ServeMux) {
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "RO", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+			handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"text","label":"Locked","value":"{{locked}}","defaultValue":"fromTheForm","enabled":false}]}]}`)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := newServer(t)
+			tc.setup(mux)
+			started := false
+			handleStart(mux, nil, &started, http.StatusCreated)
+			handleStartWithForm(mux, nil, &started)
+
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				FormProperties:       map[string]string{"locked": "fromTheForm"},
+				Confirm:              true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status != start_workflow.StatusNeedsInput {
+				t.Fatalf("status = %q, want needs_input: a value for a read-only field must be refused, not written", out.Status)
+			}
+			if started {
+				t.Error("nothing may be started when the payload carries a value the engine will reject")
+			}
+			if !strings.Contains(strings.Join([]string{out.Message, out.Guidance}, " "), "read-only") {
+				t.Errorf("the caller must be told WHY: %q", out.Message)
+			}
+		})
+	}
+}
+
+// TestStartWorkflow_BooleanFieldAcceptsTheWordsAHumanWrites: the value reaching this tool is
+// produced by a language model from a human sentence, so "yes"/"no"/"on"/"off" are at least as
+// likely as "true"/"false". strconv.ParseBool rejects all of them, and the field then went out as
+// the STRING "yes" where the process expects a boolean — a type mismatch nothing downstream
+// reports. Anything genuinely ambiguous must still be refused rather than guessed.
+func TestStartWorkflow_BooleanFieldAcceptsTheWordsAHumanWrites(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want any
+	}{
+		{"true", true}, {"false", false},
+		{"yes", true}, {"no", false},
+		{"Yes", true}, {"NO", false},
+		{"on", true}, {"off", false},
+		{"1", true}, {"0", false},
+		{" true ", true},
+		{"checked", true}, {"unchecked", false},
+		{"maybe", "maybe"}, // not a boolean in any reading — passed through verbatim, not guessed
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Bools", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+			handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"checkbox","label":"Agree","value":"{{agree}}"}]}]}`)
+			var body string
+			handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, nil, http.StatusCreated)
+
+			if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				FormProperties:       map[string]string{"agree": tc.in},
+				Confirm:              true,
+			}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var sent map[string]any
+			if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+				t.Fatalf("unparseable request body %q: %v", body, uerr)
+			}
+			props, _ := sent["formProperties"].(map[string]any)
+			if props["agree"] != tc.want {
+				t.Errorf("agree = %#v (%T), want %#v (%T)", props["agree"], props["agree"], tc.want, tc.want)
+			}
+		})
+	}
+}
+
+// TestStartWorkflow_FormFetchFailuresAreToldApart: reading the start form is a separate step from
+// starting, and its failures have opposite remedies. All three used to collapse into one generic
+// "retry" — which is wrong for a 403 (retrying never helps) and wrong for a 404 (the workflow
+// changed; re-list it). Nothing was started in any of these cases, so none may hint otherwise.
+func TestStartWorkflow_FormFetchFailuresAreToldApart(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		status     int
+		wantInMsg  string
+		wantGuide  string
+		forbidTerm string
+	}{
+		{"forbidden", http.StatusForbidden, "permission", "Do not retry", ""},
+		{"not found", http.StatusNotFound, "could not be found", "list_workflow_definitions", ""},
+		{"server error", http.StatusInternalServerError, "500", "Retry", ""},
+		{"unreachable", 0, "Could not reach Collibra", "retrying is safe", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "FormFails", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+			mux.HandleFunc("GET /rest/2.0/workflowDefinitions/workflowDefinition/"+workflowID+"/startFormData", func(w http.ResponseWriter, r *http.Request) {
+				if tc.status == 0 {
+					// A real transport failure rather than a status: the form endpoint is simply
+					// unreachable. Writing any status here would exercise a different arm and
+					// leave the transport rule unverified.
+					hj, ok := w.(http.Hijacker)
+					if !ok {
+						t.Skip("cannot simulate a dropped connection")
+					}
+					conn, _, _ := hj.Hijack()
+					_ = conn.Close()
+					return
+				}
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(`{"errorCode":"X","userMessage":"nope"}`))
+			})
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status != start_workflow.StatusError {
+				t.Fatalf("status = %q, want error", out.Status)
+			}
+			if !strings.Contains(out.Message, tc.wantInMsg) {
+				t.Errorf("message %q must contain %q", out.Message, tc.wantInMsg)
+			}
+			if !strings.Contains(out.Guidance, tc.wantGuide) {
+				t.Errorf("guidance %q must contain %q", out.Guidance, tc.wantGuide)
+			}
+			if out.WorkflowInstanceID != "" {
+				t.Errorf("nothing was started, so no instance id may be reported: %q", out.WorkflowInstanceID)
+			}
+		})
+	}
+}
+
+// TestStartWorkflow_ARequiredFieldTheCallerCannotWriteIsNeverADeadEnd. A required field the
+// caller has no way to supply must not come back as "missing" — that is a needs_input nobody can
+// satisfy, and the caller loops on it.
+//
+// The two cases resolve differently, and the difference is the engines', not a preference:
+//   - read-only: the value is OMITTED. The legacy engine rejects any value for a non-writable
+//     property and resolves its defaultExpression itself, so omitting is both the only legal move
+//     and the correct one.
+//   - never shown but writable: the form's declared default IS sent, because nothing server-side
+//     will fill it in and the variable would otherwise reach the process unset.
+func TestStartWorkflow_ARequiredFieldTheCallerCannotWriteIsNeverADeadEnd(t *testing.T) {
+	for _, tc := range []struct {
+		name, col string
+		wantSent  any
+	}{
+		{"read-only", `{"id":"f2","type":"text","label":"Locked","isRequired":true,"value":"{{locked}}","defaultValue":"fromTheForm","enabled":false}`, nil},
+		{"never visible", `{"id":"f2","type":"text","label":"Hidden","isRequired":true,"value":"{{locked}}","defaultValue":"fromTheForm","visible":false}`, "fromTheForm"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Locked", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+			handleJSONModelForm(mux, `{"rows":[{"cols":[`+tc.col+`]}]}`)
+			var body string
+			handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, nil, http.StatusCreated)
+
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				Confirm:              true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status == start_workflow.StatusNeedsInput {
+				t.Fatalf("dead end: %q is required but the caller cannot supply it — %v", "locked", out.MissingFields)
+			}
+			var sent map[string]any
+			if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+				t.Fatalf("unparseable request body %q: %v", body, uerr)
+			}
+			props, _ := sent["formProperties"].(map[string]any)
+			if got := props["locked"]; got != tc.wantSent {
+				t.Errorf("locked = %#v, want %#v", got, tc.wantSent)
+			}
+		})
+	}
+}
+
+// TestStartWorkflow_AnAbsentWritableFlagMeansWritable pins the direction of the fail-safe. The
+// server declares `writable` as a primitive boolean and so always sends it — but reading a missing
+// key as false would mark EVERY legacy field read-only, and a read-only field accepts no value.
+// One absent key would turn every legacy form into one that cannot be filled in at all, and the
+// tool would refuse every start it was asked for while looking perfectly healthy.
+func TestStartWorkflow_AnAbsentWritableFlagMeansWritable(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "NoFlag", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+	handleLegacyForm(mux, workflowID, `{"formProperties":[{"id":"subject","name":"Subject","type":"string","required":true}]}`)
+	var captured clients.StartWorkflowInstanceRequest
+	started := false
+	handleStart(mux, &captured, &started, http.StatusCreated)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"subject": "hello"},
+		Confirm:              true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusSuccess {
+		t.Fatalf("status = %q, want success — an absent writable flag must not make the field unfillable: %s", out.Status, out.Message)
+	}
+	if captured.FormProperties["subject"] != "hello" {
+		t.Errorf("subject = %q, want it sent", captured.FormProperties["subject"])
+	}
+}
+
+// TestStartWorkflow_LegacyDefaultsAreLeftToTheEngine pins the one place the two form models are
+// deliberately NOT symmetric.
+//
+// The legacy engine resolves a property's own defaultExpression server-side whenever the key is
+// absent from the submission. Sending the value this client happened to read earlier would at best
+// duplicate that and at worst overwrite a live expression with a stale render. The JSON model has
+// no equivalent step — whatever is omitted there reaches the process unset — which is why defaults
+// ARE filled in on that path, and the sibling test below asserts exactly that.
+//
+// Written because collapsing the two branches into one is an obvious-looking simplification that
+// would silently change what the legacy engine receives.
+func TestStartWorkflow_LegacyDefaultsAreLeftToTheEngine(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "LegacyDefaults", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+	handleLegacyForm(mux, workflowID, `{"formProperties":[
+	  {"id":"subject","name":"Subject","type":"string","required":true,"writable":true},
+	  {"id":"priority","name":"Priority","type":"string","required":false,"writable":true,"value":"Normal"}]}`)
+	var captured clients.StartWorkflowInstanceRequest
+	handleStart(mux, &captured, nil, http.StatusCreated)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"subject": "hello"},
+		Confirm:              true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusSuccess {
+		t.Fatalf("status = %q, want success: %s", out.Status, out.Message)
+	}
+	if _, present := captured.FormProperties["priority"]; present {
+		t.Errorf("priority = %q, want absent — the legacy engine resolves its own default, and sending a stale render overwrites a live expression", captured.FormProperties["priority"])
+	}
+	if captured.FormProperties["subject"] != "hello" {
+		t.Errorf("subject = %q, want the caller's value", captured.FormProperties["subject"])
+	}
+}
+
+// ...and the JSON model does the opposite, for the reason given above. The pair is the contract.
+func TestStartWorkflow_JSONDefaultsAreSentBecauseNothingElseWill(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "JSONDefaults", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+	handleJSONModelForm(mux, `{"rows":[{"cols":[
+	  {"id":"f1","type":"text","label":"Subject","isRequired":true,"value":"{{subject}}"},
+	  {"id":"f2","type":"select","label":"Priority","value":"{{priority}}","defaultValue":"Normal"}]}]}`)
+	var body string
+	handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, nil, http.StatusCreated)
+
+	if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"subject": "hello"},
+		Confirm:              true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var sent map[string]any
+	if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+		t.Fatalf("unparseable request body %q: %v", body, uerr)
+	}
+	props, _ := sent["formProperties"].(map[string]any)
+	if props["priority"] != "Normal" {
+		t.Errorf("priority = %v, want %q — nothing server-side will fill it in on this path", props["priority"], "Normal")
+	}
+}
+
+// TestStartWorkflow_LegacyRequiredFieldWithADeclaredDefaultIsNotDemanded. Found by running the
+// tool against a real instance: a workflow with five required fields that all declare defaults
+// came back asking the caller to supply them, including duration strings in the form's own
+// notation ("B3D", "B5D") and a vote percentage. A model asked for those will guess, and a guess
+// is indistinguishable from an answer.
+//
+// It cannot be demanded, because the engine already has it. On a START form there is no execution
+// to read a variable from, so a rendered value can only have come from the property's
+// defaultExpression — and submitFormProperty resolves that expression whenever the key is absent.
+// So the field is satisfied by omission, which is also why nothing is sent for it.
+func TestStartWorkflow_LegacyRequiredFieldWithADeclaredDefaultIsNotDemanded(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Voting", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+	handleLegacyForm(mux, workflowID, `{"formProperties":[
+	  {"id":"decisionInfo","name":"Decision","type":"string","required":true,"writable":true},
+	  {"id":"voteTimeout","name":"Timeout","type":"string","required":true,"writable":true,"value":"B5D"},
+	  {"id":"votePercentage","name":"Percentage","type":"long","required":true,"writable":true,"value":"50"}]}`)
+	var captured clients.StartWorkflowInstanceRequest
+	handleStart(mux, &captured, nil, http.StatusCreated)
+
+	tool := start_workflow.NewTool(c)
+	out, err := tool.Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.MissingFields, []string{"decisionInfo"}; len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("missingFields = %v, want only %v — the other two declare defaults the engine resolves", got, want)
+	}
+
+	// ...and once the genuinely missing one is supplied, the defaulted fields are still not SENT:
+	// the engine owns them, and echoing a stale render would overwrite a live expression.
+	if _, err := tool.Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"decisionInfo": "ship it"},
+		Confirm:              true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, id := range []string{"voteTimeout", "votePercentage"} {
+		if v, present := captured.FormProperties[id]; present {
+			t.Errorf("%s = %q, want absent", id, v)
+		}
+	}
+}
+
+// TestStartWorkflow_ExplicitlyClearingAFieldWithADefaultIsStillMissing guards the boundary of the
+// rule above. "Supplied nothing" and "supplied an empty string" must not collapse into one case,
+// or a caller deliberately blanking a field silently gets the default back instead.
+func TestStartWorkflow_ExplicitlyClearingAFieldWithADefaultIsStillMissing(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Voting", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+	handleLegacyForm(mux, workflowID, `{"formProperties":[{"id":"voteTimeout","name":"Timeout","type":"string","required":true,"writable":true,"value":"B5D"}]}`)
+	started := false
+	handleStart(mux, nil, &started, http.StatusCreated)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"voteTimeout": ""},
+		Confirm:              true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusNeedsInput {
+		t.Fatalf("status = %q, want needs_input: an explicit clear is a deliberate act, not an omission", out.Status)
+	}
+	if started {
+		t.Error("nothing may be started")
+	}
+}
+
+// TestStartWorkflow_LegacyButtonReportsNoDefaultValue. A button's renderer answers "false" for
+// every model value it is handed, null included, so the value it reports is an artifact of the
+// renderer and not a declared default. Surfacing it invited the caller to submit a "default" the
+// form never declared — and since the engine treats a button as an ordinary boolean the process
+// may branch on, submitting false is not harmless. The field itself stays visible for that same
+// reason: it is real input, just input with no known default.
+//
+// Six of the nine start forms on the instance this was found on carry such a button.
+func TestStartWorkflow_LegacyButtonReportsNoDefaultValue(t *testing.T) {
+	for _, buttonType := range []string{"button", "activityButton", "taskButton"} {
+		t.Run(buttonType, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Buttons", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+			handleLegacyForm(mux, workflowID, `{"formProperties":[
+			  {"id":"submit","name":"Propose","type":"`+buttonType+`","required":false,"writable":true,"value":"false"},
+			  {"id":"agree","name":"Agree","type":"boolean","required":false,"writable":true,"value":"false"}]}`)
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var button, boolean *start_workflow.FormField
+			for i := range out.FormFields {
+				switch out.FormFields[i].ID {
+				case "submit":
+					button = &out.FormFields[i]
+				case "agree":
+					boolean = &out.FormFields[i]
+				}
+			}
+			if button == nil {
+				t.Fatal("the button must still be offered — the process may branch on it")
+			}
+			if button.DefaultValue != "" {
+				t.Errorf("button defaultValue = %q, want empty: the renderer reports \"false\" regardless of state", button.DefaultValue)
+			}
+			// A real boolean field is NOT a button: its renderer returns null for null, so a
+			// reported "false" is a genuine declared default and must survive.
+			if boolean == nil || boolean.DefaultValue != "false" {
+				t.Errorf("boolean defaultValue = %+v, want \"false\" kept", boolean)
+			}
+		})
+	}
+}
+
+// TestStartWorkflow_LegacyFieldWithNoLabelFallsBackToItsID: a form property may carry no label at
+// all (seen live). Handing the caller a nameless field is worse than handing it the id, and the
+// JSON path already falls back this way — the two must not disagree.
+func TestStartWorkflow_LegacyFieldWithNoLabelFallsBackToItsID(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "NoLabel", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+	handleLegacyForm(mux, workflowID, `{"formProperties":[{"id":"myField","name":"","type":"string","required":true,"writable":true}]}`)
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.FormFields) != 1 || out.FormFields[0].Name != "myField" {
+		t.Errorf("name = %+v, want the id as a fallback", out.FormFields)
+	}
+}
+
+// TestStartWorkflow_JSONMultiValueGoesOutAsAnArray. The two form models encode a list differently
+// and chip must too — this is the sharpest of the deliberate asymmetries between them.
+//
+// The legacy endpoint takes map[string]string and the server splits the commas itself, so the
+// comma-joined string the caller writes is exactly right there. The JSON endpoint takes
+// map[string]any and nothing splits anything: the string arrives at the process as a string, and
+// a Groovy String iterates per CHARACTER. Measured live on the OOTB "Issue Creation" workflow,
+// whose start script does `relatedAssets.each { string2Uuid(it) }` — one asset id was handed to it
+// 36 times, one character at a time, and the start died with an opaque HTTP 500 AFTER the user had
+// confirmed. Sending ["<id>"] instead, the identical call returns 201.
+//
+// A single value is wrapped too, not passed bare: a one-element list is what the field means.
+func TestStartWorkflow_JSONMultiValueGoesOutAsAnArray(t *testing.T) {
+	for _, tc := range []struct {
+		name, supplied string
+		want           []any
+	}{
+		{"two values", "id-a,id-b", []any{"id-a", "id-b"}},
+		{"one value", "id-a", []any{"id-a"}},
+		{"padded", " id-a , id-b ", []any{"id-a", "id-b"}},
+		{"explicit clear", "", []any{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Multi", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+			handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"asset","label":"Related","value":"{{relatedAssets}}","extraSettings":{"storage":"Id","multiValue":true}}]}]}`)
+			var body string
+			handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, nil, http.StatusCreated)
+
+			if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				FormProperties:       map[string]string{"relatedAssets": tc.supplied},
+				Confirm:              true,
+			}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var sent map[string]any
+			if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+				t.Fatalf("unparseable request body %q: %v", body, uerr)
+			}
+			props, _ := sent["formProperties"].(map[string]any)
+			got, isList := props["relatedAssets"].([]any)
+			if !isList {
+				t.Fatalf("relatedAssets = %#v (%T), want a JSON array — a string is iterated per character by the process", props["relatedAssets"], props["relatedAssets"])
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("relatedAssets = %#v, want %#v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("relatedAssets[%d] = %v, want %v", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+// ...and the legacy path must NOT be "fixed" the same way: the server splits the commas itself, so
+// the string is already correct there. Its request type is map[string]string, so an array cannot
+// physically leak onto that wire — this test pins the VALUE (trimmed, comma-joined), and the type
+// pins the shape.
+func TestStartWorkflow_LegacyMultiValueStaysACommaSeparatedString(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Multi", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+	handleLegacyForm(mux, workflowID, `{"formProperties":[{"id":"tags","name":"Tags","type":"term","required":false,"writable":true,"multiValue":true}]}`)
+	var captured clients.StartWorkflowInstanceRequest
+	handleStart(mux, &captured, nil, http.StatusCreated)
+
+	if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"tags": "id-a, id-b"},
+		Confirm:              true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if captured.FormProperties["tags"] != "id-a,id-b" {
+		t.Errorf("tags = %q, want the trimmed comma-separated string the legacy engine splits itself", captured.FormProperties["tags"])
+	}
+}

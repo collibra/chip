@@ -367,12 +367,22 @@ type legacyFormFieldCheckOptionWire struct {
 }
 
 type legacyFormPropertyWire struct {
-	ID                     string                           `json:"id"`
-	Name                   string                           `json:"name"`
-	Type                   string                           `json:"type"`
-	Required               bool                             `json:"required"`
-	HelpText               string                           `json:"helpText,omitempty"`
-	MultiValue             bool                             `json:"multiValue"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	Required   bool   `json:"required"`
+	HelpText   string `json:"helpText,omitempty"`
+	MultiValue bool   `json:"multiValue"`
+	// Writable is TRUE for an ordinary field; the server rejects a submitted value for one that is
+	// not. Note the inverted sense against WorkflowFormField.ReadOnly.
+	//
+	// A POINTER because absent must not mean read-only. The server declares this as a primitive
+	// boolean and so always sends it, but the two failure directions are not symmetric: reading a
+	// missing key as false marks EVERY field read-only, and a read-only field accepts no value —
+	// which silently turns any form into one that cannot be filled in at all. Absent therefore
+	// means writable, the behaviour from before this flag was honoured.
+	Writable               *bool                            `json:"writable"`
+	Value                  string                           `json:"value,omitempty"`
 	EnumValues             []legacyFormFieldOptionWire      `json:"enumValues,omitempty"`
 	CheckButtons           []legacyFormFieldCheckOptionWire `json:"checkButtons,omitempty"`
 	RadioButtons           []legacyFormFieldCheckOptionWire `json:"radioButtons,omitempty"`
@@ -463,6 +473,10 @@ const (
 	jsonFormRoleInCommunityStencil = "collibra-roleInCommunity"
 )
 
+const unsupportedSubform = "This is a sub-form: its fields live in a separate form definition that " +
+	"is not included in this response, so they cannot be listed or filled in from here. Start the " +
+	"workflow from Collibra's UI if any of them are needed."
+
 // legacyRoleInCommunityFormType is deliberately NOT in legacyResourcePickerFormTypes: it is the
 // one legacy multi-dropdown, and its value is not a resource id but a JSON array of
 // [roleId, communityId] PAIRS — anything else is rejected outright. Treating it as an ordinary
@@ -478,40 +492,88 @@ const (
 	unsupportedRoleInCommunity = "This field takes a JSON array of [roleId, communityId] pairs, e.g. " +
 		`[["<role-uuid>","<community-uuid>"]]` + " — not a single id. There is no tool here that resolves role ids, " +
 		"so supply one only if you already know both UUIDs; otherwise start the workflow from Collibra's UI."
+	unsupportedFullStorage = "This form stores the WHOLE picked resource for this field, not its id, so the process " +
+		"reads properties off it. Only an id can be produced here, and an id where an object is expected fails the " +
+		"start outright — so start this workflow from Collibra's UI if this field is needed."
 )
+
+// jsonFormStorageMode reports how a picker's value is stored. "Id" (and an absent setting) means
+// the variable is the plain resource id, which is what this client can supply. "Full" means the
+// variable is the whole picked resource and the process reads properties off it — seen in the OOTB
+// corpus, where a start script does UUID.fromString("${responsibleCommunity.value}"). Handing that
+// a bare id string resolves .value to nothing and the start dies inside its transaction, so such a
+// field is declared unsupported rather than filled in with a guess at the object's shape.
+func jsonFormStorageMode(col map[string]any) string {
+	extraSettings, ok := col["extraSettings"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return stringFromMap(extraSettings, "storage")
+}
 
 // GetWorkflowStartFormData fetches the LEGACY (BPMN <formProperty>) start-form schema for a
 // workflow definition. Call only when StartFormJSONModelAvailable is false — see the package
 // comment; the endpoint returns an empty field list (not an error) for a JSON-model workflow.
-func GetWorkflowStartFormData(ctx context.Context, client *http.Client, workflowDefinitionID string) ([]WorkflowFormField, error) {
+// Returns the HTTP status alongside the error, like the rest of this client, so the caller can
+// tell a permission failure from a transport one instead of emitting one message for both.
+func GetWorkflowStartFormData(ctx context.Context, client *http.Client, workflowDefinitionID string) ([]WorkflowFormField, int, error) {
 	endpoint := "/rest/2.0/workflowDefinitions/workflowDefinition/" + url.PathEscape(workflowDefinitionID) + "/startFormData"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
-	body, err := executeCollibraRequest(client, req)
+	body, code, err := executeCollibraRequestWithStatus(client, req)
 	if err != nil {
-		return nil, err
+		return nil, code, err
 	}
 	var wire legacyStartFormDataWire
 	if jsonErr := json.Unmarshal(body, &wire); jsonErr != nil {
-		return nil, fmt.Errorf("failed to parse start form data: %w", jsonErr)
+		return nil, code, fmt.Errorf("failed to parse start form data: %w", jsonErr)
 	}
 	fields := make([]WorkflowFormField, 0, len(wire.FormProperties))
 	for _, p := range wire.FormProperties {
 		fields = append(fields, toLegacyFormField(p))
 	}
-	return fields, nil
+	return fields, code, nil
 }
 
+// legacyButtonFormTypes render as an action button. They are ordinary submitted booleans as far as
+// the engine is concerned — the process may well branch on one — so they are NOT hidden. What is
+// dropped is their reported value: the button renderer answers "false" for every model value it is
+// given, null included, so the value says nothing about the field and only invites the caller to
+// submit a "default" that was never declared. Measured over 225 BPMN files (75 button
+// declarations): the declared default is "false" 52 times and absent 23 times, and never anything
+// else — so dropping it discards no information in any observed case.
+//
+// KNOWN LIMITATION, accepted deliberately. Dropping the value also drops the signal
+// validateFormProperties uses to tell "the engine has a default for this" from "nobody has one",
+// so a REQUIRED button with a declared default would be demanded from the caller although the
+// engine would have resolved it. That costs one extra question whose answer is legal either way —
+// a safe failure. Restoring the signal would mean carrying a second default-ish field through the
+// public shape for a case that does not occur: in the same 225 files every required button is an
+// approve/reject on a USER TASK, and this tool only ever reads START forms.
+var legacyButtonFormTypes = map[string]bool{"button": true, "activityButton": true, "taskButton": true}
+
 func toLegacyFormField(p legacyFormPropertyWire) WorkflowFormField {
+	defaultValue := p.Value
+	if legacyButtonFormTypes[p.Type] {
+		defaultValue = ""
+	}
+	// A form property may carry no label at all; falling back to the id keeps the caller from
+	// being shown a nameless field, which is what the JSON path already does.
+	name := p.Name
+	if name == "" {
+		name = p.ID
+	}
 	field := WorkflowFormField{
 		ID:             p.ID,
-		Name:           p.Name,
+		Name:           name,
 		Type:           p.Type,
 		Required:       p.Required,
 		HelpText:       p.HelpText,
 		MultiValue:     p.MultiValue,
+		DefaultValue:   defaultValue,
+		ReadOnly:       p.Writable != nil && !*p.Writable,
 		ResourcePicker: legacyResourcePickerFormTypes[p.Type],
 	}
 	switch p.Type {
@@ -629,30 +691,33 @@ type workflowStartFormJSONModelResponse struct {
 // The response's workflowStartFormJsonModel is itself a JSON-encoded STRING (a serialized
 // FlowableFormModel — see flowableFormModelWire) — Collibra's GraphQL field returns the form
 // model as a string, not a native GraphQL object, so this function unmarshals twice.
-func GetWorkflowStartFormJSONModel(ctx context.Context, client *http.Client, workflowDefinitionID string) ([]WorkflowFormField, error) {
+// Returns the HTTP status alongside the error — see GetWorkflowStartFormData. It also goes through
+// the envelope-aware helper, so a Collibra errorCode/userMessage reaches the caller rather than
+// being flattened into a bare transport error.
+func GetWorkflowStartFormJSONModel(ctx context.Context, client *http.Client, workflowDefinitionID string) ([]WorkflowFormField, int, error) {
 	reqBody := Request{
 		Query:     workflowStartFormJSONModelQuery,
 		Variables: map[string]interface{}{"workflowDefinitionId": workflowDefinitionID},
 	}
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal start form json model query: %w", err)
+		return nil, 0, fmt.Errorf("failed to marshal start form json model query: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "/graphql", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	body, err := executeRequest(client, req)
+	body, code, err := executeCollibraRequestWithStatus(client, req)
 	if err != nil {
-		return nil, err
+		return nil, code, err
 	}
 	var resp workflowStartFormJSONModelResponse
 	if jsonErr := json.Unmarshal(body, &resp); jsonErr != nil {
-		return nil, fmt.Errorf("failed to parse start form json model response: %w", jsonErr)
+		return nil, code, fmt.Errorf("failed to parse start form json model response: %w", jsonErr)
 	}
 	if len(resp.Errors) > 0 {
-		return nil, fmt.Errorf("start form json model query errors: %v", resp.Errors)
+		return nil, code, fmt.Errorf("start form json model query errors: %v", resp.Errors)
 	}
 	if resp.Data == nil || resp.Data.API == nil || resp.Data.API.WorkflowStartFormJSONModel == nil {
 		// This is only ever called for a definition whose startFormJsonModelAvailable flag is set,
@@ -660,15 +725,15 @@ func GetWorkflowStartFormJSONModel(ctx context.Context, client *http.Client, wor
 		// workflow that happens to have no fields. Returning no fields here would let the caller
 		// submit an empty form and report success. An EMPTY rows array is a different thing and
 		// remains legitimate: it parses below and yields zero fields.
-		return nil, fmt.Errorf("workflow %s is flagged as having a JSON start form, but the server returned no form model for it", workflowDefinitionID)
+		return nil, code, fmt.Errorf("workflow %s is flagged as having a JSON start form, but the server returned no form model for it", workflowDefinitionID)
 	}
 	var model flowableFormModelWire
 	if jsonErr := json.Unmarshal([]byte(*resp.Data.API.WorkflowStartFormJSONModel), &model); jsonErr != nil {
-		return nil, fmt.Errorf("failed to parse embedded form model: %w", jsonErr)
+		return nil, code, fmt.Errorf("failed to parse embedded form model: %w", jsonErr)
 	}
 	var fields []WorkflowFormField
 	collectJSONFormFields(model.Rows, &fields)
-	return fields, nil
+	return fields, code, nil
 }
 
 // jsonFormBindingBraces finds a {{...}} binding anywhere in a col's `value`. The engine's own rule
@@ -718,7 +783,11 @@ func collectJSONFormCols(cols []map[string]any, out *[]WorkflowFormField) {
 			continue
 		}
 		fieldType := stringFromMap(col, "type")
-		if jsonFormContainerTypes[fieldType] {
+		// By declared type OR by shape. Matching on the type name alone fails open: a container
+		// this client has not heard of is treated as a plain field, and its entire subtree is
+		// dropped without a word. Anything carrying container-shaped extraSettings is therefore
+		// walked as a container regardless of what it calls itself.
+		if jsonFormContainerTypes[fieldType] || hasNestedFormContent(col) {
 			collectNestedJSONFormRows(col, out)
 			continue
 		}
@@ -737,6 +806,7 @@ func collectNestedJSONFormRows(col map[string]any, out *[]WorkflowFormField) {
 	if !ok {
 		return
 	}
+	before := len(*out)
 	if layout, ok := extraSettings["layoutDefinition"].(map[string]any); ok {
 		collectJSONFormFields(asRowDefinitions(layout["rows"]), out)
 	}
@@ -744,8 +814,41 @@ func collectNestedJSONFormRows(col map[string]any, out *[]WorkflowFormField) {
 		collectJSONFormCols(asCols(sections), out)
 	}
 	if panel, ok := extraSettings["expandablePanel"].(map[string]any); ok {
-		collectNestedJSONFormRows(panel, out)
+		// Through collectJSONFormCols, not straight into the recursion: the panel is itself a col
+		// and may be marked ignore, and skipping that check here made the two routes to the same
+		// panel disagree — one honoured ignore, the other harvested its fields anyway.
+		collectJSONFormCols([]map[string]any{panel}, out)
 	}
+
+	// A sub-form keeps its fields in a SEPARATE form, referenced by extraSettings.formRef; the
+	// designer palette stores no layout for it. Depending on the deployment the referenced layout
+	// may or may not be inlined by the time this client sees it — when it is not, staying silent
+	// would present a partial form as a complete one and start the workflow with the sub-form's
+	// variables unset. Say so instead.
+	if len(*out) == before {
+		if ref := firstStringFromMap(extraSettings, "formRef", "formKey"); ref != "" {
+			*out = append(*out, WorkflowFormField{
+				ID:          stringFromMap(col, "id"),
+				Name:        jsonFormFieldLabel(col, stringFromMap(col, "id")),
+				Type:        stringFromMap(col, "type"),
+				Unsupported: unsupportedSubform,
+			})
+		}
+	}
+}
+
+// hasNestedFormContent reports a col that carries children, whatever its type claims to be.
+func hasNestedFormContent(col map[string]any) bool {
+	extraSettings, ok := col["extraSettings"].(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, key := range []string{"layoutDefinition", "sections", "expandablePanel"} {
+		if _, present := extraSettings[key]; present {
+			return true
+		}
+	}
+	return false
 }
 
 // asRowDefinitions converts a rows list, SKIPPING any entry that does not conform rather than
@@ -799,10 +902,21 @@ func toJSONFormField(col map[string]any, key, fieldType string) WorkflowFormFiel
 		ResourcePicker: strings.HasPrefix(stencil, jsonFormCollibraStencilPrefix),
 		Unsupported:    jsonFormUnsupported(stencil),
 	}
+	if field.Unsupported == "" {
+		if mode := jsonFormStorageMode(col); mode != "" && !strings.EqualFold(mode, "Id") {
+			field.Unsupported = unsupportedFullStorage
+		}
+	}
 	field.Options = jsonFormFieldOptions(col)
 	field.OptionsExhaustive = len(field.Options) > 0
 	return field
 }
+
+// VisibleWhenNever is the VisibleWhen value for a field the form hides unconditionally. It is a
+// constant rather than a literal because callers BRANCH on it — a field that is never shown must
+// not have its default submitted — and an edit to the wording alone would silently turn that
+// branch off, with every test still green.
+const VisibleWhenNever = "never (the form hides this field)"
 
 // jsonFormVisibilityCondition returns the raw condition when `visible` is anything other than a
 // plain boolean true — see WorkflowFormField.VisibleWhen for why the field stays required.
@@ -815,7 +929,7 @@ func jsonFormVisibilityCondition(col map[string]any) string {
 		if b {
 			return ""
 		}
-		return "never (the form hides this field)"
+		return VisibleWhenNever
 	}
 	if s, ok := v.(string); ok {
 		return s
@@ -835,11 +949,24 @@ func jsonFormIsReadOnly(col map[string]any) bool {
 // jsonFormIsMultiValue reports a field that accepts several values at once — a multi-select or a
 // checkbox group. The flag lives in extraSettings, not on the col.
 func jsonFormIsMultiValue(col map[string]any) bool {
+	// Two sources, because the designer only writes the `multi` flag for the select components.
+	// A checkbox group or a tags input takes several values with no flag at all, and treating one
+	// as single-valued rejects every list the caller could offer, with nothing in the response
+	// hinting a list is even legal.
+	switch strings.ToLower(stringFromMap(col, "type")) {
+	case "checkboxgroup", "tags", "multiselect":
+		return true
+	}
 	extraSettings, ok := col["extraSettings"].(map[string]any)
 	if !ok {
 		return false
 	}
-	return boolFromMap(extraSettings, "multi")
+	// TWO spellings, because the palette is two palettes. The generic cloud components write
+	// "multi"; the collibra-* resource pickers write "multiValue". Reading only the first reported
+	// every asset/user/group picker as single-valued — measured on an OOTB form whose two pickers
+	// both declare multiValue:true — and a field reported single-valued is submitted as a bare
+	// string, which the process then iterates one CHARACTER at a time.
+	return boolFromMap(extraSettings, "multi") || boolFromMap(extraSettings, "multiValue")
 }
 
 // jsonFormDefaultValue renders the form's pre-filled value. It is NOT always a string — the
@@ -854,6 +981,16 @@ func jsonFormDefaultValue(col map[string]any) string {
 		return strconv.FormatBool(v)
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64)
+	case []any:
+		// A picker or multi-select defaults to a list. An empty one carries no value to submit;
+		// a populated one is rendered as the comma-separated form a multi-value field expects.
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, ",")
 	}
 	return ""
 }

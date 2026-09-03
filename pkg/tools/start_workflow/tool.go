@@ -180,9 +180,12 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}, nil
 		}
 
-		formFields, formErr := fetchFormFields(ctx, collibraClient, def)
+		formFields, formCode, formErr := fetchFormFields(ctx, collibraClient, def)
 		if formErr != nil {
-			return Output{Status: StatusError, WorkflowDefinitionID: def.ID, Name: def.Name, Message: fmt.Sprintf("Failed to fetch the start form for %q: %v", def.Name, formErr), Guidance: "Retry; if it persists, contact your Collibra administrator."}, nil
+			out := formFetchError(formCode, formErr, def.Name)
+			out.WorkflowDefinitionID = def.ID
+			out.Name = def.Name
+			return out, nil
 		}
 
 		// One map, computed once, and from here on the ONLY one: it is validated, previewed and
@@ -191,9 +194,13 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		// required field reported missing although the form's own default would have filled it.
 		// Anything that changes what gets sent must change it here, above the validation, or the
 		// invariant test that pins validated == previewed == sent will fail.
-		effective := effectiveFormProperties(def, formFields, normalizeFormProperties(input.FormProperties))
+		supplied := normalizeFormProperties(input.FormProperties)
+		effective := effectiveFormProperties(def, formFields, supplied)
 
 		missing, problems := validateFormProperties(formFields, effective)
+		// Checked against what the CALLER passed, not against `effective`: this is a rule about
+		// caller input, and `effective` also carries values this tool volunteered.
+		problems = append(problems, checkNoValueForReadOnlyFields(formFields, supplied)...)
 		if len(problems) > 0 {
 			return Output{
 				Status:               StatusNeedsInput,
@@ -305,14 +312,59 @@ func lookupError(code int, err error, workflowID string) Output {
 
 // fetchFormFields returns nil (no error) for a workflow with no start form, and otherwise
 // dispatches to whichever form model this definition actually uses — see the package comment.
-func fetchFormFields(ctx context.Context, collibraClient *http.Client, def *clients.WorkflowDefinition) ([]clients.WorkflowFormField, error) {
+func fetchFormFields(ctx context.Context, collibraClient *http.Client, def *clients.WorkflowDefinition) ([]clients.WorkflowFormField, int, error) {
 	if !def.FormRequired {
-		return nil, nil
+		return nil, 0, nil
 	}
 	if def.StartFormJSONModelAvailable {
 		return clients.GetWorkflowStartFormJSONModel(ctx, collibraClient, def.ID)
 	}
 	return clients.GetWorkflowStartFormData(ctx, collibraClient, def.ID)
+}
+
+// formFetchError maps a failure to READ the start form. It is a distinct step from starting, and
+// its failures have distinct remedies — a 403 on the form is not something to retry, and a form
+// that cannot be read must never be treated as a form with no fields.
+func formFetchError(code int, err error, workflowName string) Output {
+	switch code {
+	case http.StatusForbidden:
+		return Output{Status: StatusError, Message: fmt.Sprintf("You do not have permission to read the start form for %q (HTTP 403).", workflowName),
+			Guidance: "Do not retry — ask a Collibra administrator for access to this workflow."}
+	case http.StatusNotFound:
+		return Output{Status: StatusError, Message: fmt.Sprintf("The start form for %q could not be found (HTTP 404).", workflowName),
+			Guidance: "The workflow may have been changed or removed — call list_workflow_definitions to see current options."}
+	case 0:
+		return Output{Status: StatusError, Message: fmt.Sprintf("Could not reach Collibra to read the start form for %q: %v", workflowName, err),
+			Guidance: "A network/transport error occurred. Nothing was started, so retrying is safe."}
+	}
+	return Output{Status: StatusError, Message: fmt.Sprintf("Failed to read the start form for %q (HTTP %d): %v", workflowName, code, err),
+		Guidance: "Nothing was started. Retry; if it persists, contact your Collibra administrator."}
+}
+
+// checkNoValueForReadOnlyFields refuses a caller-supplied value for a field the form declares
+// read-only. This is pre-flight on purpose (TOOL_CONTRIBUTION_STANDARDS.md §6.1): on the LEGACY
+// model the engine answers a value for a non-writable property with a hard failure —
+//
+//	if (!isWritable && properties.containsKey(id)) throw ... "form property '<id>' is not writable"
+//
+// — and it throws even when the value is the field's own declared one. The start is transactional,
+// so the whole thing rolls back into an opaque 500 AFTER the user approved the preview. The same
+// rule is applied to the JSON model: a field the form does not collect input for is not one this
+// tool should be writing either, and bouncing it here is recoverable where a 500 is not.
+//
+// This matters more since the form's declared value became visible in formFields: echoing that
+// value back is the obvious thing for a caller to do, and it is exactly what fails.
+func checkNoValueForReadOnlyFields(fields []clients.WorkflowFormField, supplied map[string]string) []string {
+	var problems []string
+	for _, f := range fields {
+		if !f.ReadOnly {
+			continue
+		}
+		if v, ok := supplied[f.ID]; ok && v != "" {
+			problems = append(problems, fmt.Sprintf("%q is read-only on this form and does not accept a submitted value — remove it from formProperties (the workflow supplies it itself)", f.ID))
+		}
+	}
+	return problems
 }
 
 // validateFormProperties checks supplied form values against fields' requiredness and (for
@@ -328,7 +380,30 @@ func fetchFormFields(ctx context.Context, collibraClient *http.Client, def *clie
 func validateFormProperties(fields []clients.WorkflowFormField, supplied map[string]string) (missing []string, problems []string) {
 	for _, f := range fields {
 		value, ok := supplied[f.ID]
+		// A read-only field is never "missing from the caller" — the caller may not write it, in
+		// either form model, so reporting it would hand back a needs_input nobody can satisfy.
+		// The value comes from the form (JSON) or from the engine's own default expression
+		// (legacy); see checkNoValueForReadOnlyFields.
+		if f.ReadOnly {
+			continue
+		}
 		if f.Required && (!ok || value == "") {
+			// A declared default means the value is already accounted for, on both models — so
+			// demanding it would make the caller invent one that is at best redundant and at
+			// worst wrong. Live example: a workflow whose required duration fields declare "B3D"
+			// and "B5D"; asked to supply them, a model guesses, and nothing says it guessed.
+			//
+			// On the JSON model the default was injected above, so this rarely fires. On the
+			// LEGACY model nothing is injected, because the engine resolves the property's own
+			// defaultExpression when the key is absent — and on a START form that expression is
+			// the ONLY thing a rendered value can have come from (there is no execution to read a
+			// variable from), so a non-empty value here is proof the engine has one.
+			// !ok, not value == "": supplying an EXPLICIT empty string is a deliberate clear and
+			// must still be reported, or a caller that meant to blank a field would silently get
+			// the default back instead.
+			if !ok && f.DefaultValue != "" {
+				continue
+			}
 			missing = append(missing, f.ID)
 			problems = append(problems, describeMissingField(f))
 			continue
@@ -486,6 +561,17 @@ func effectiveFormProperties(def *clients.WorkflowDefinition, fields []clients.W
 		return strings.Join(parts, ",")
 	}
 
+	// LEGACY (BPMN <formProperty>): the caller's values and nothing else. The two models diverge
+	// here deliberately, not by omission. The legacy engine resolves a property's own
+	// defaultExpression server-side when the key is absent —
+	//
+	//	if (isRequired && !properties.containsKey(id) && defaultExpression == null) throw ...
+	//	else if (defaultExpression != null) { modelValue = defaultExpression.getValue(execution) }
+	//
+	// — so volunteering a default here would at best duplicate the engine and at worst overwrite a
+	// live expression with the stale value that was rendered when the form was fetched. The JSON
+	// model has no such server-side step: whatever this tool omits simply reaches the process
+	// unset, which is why defaults ARE filled in below.
 	if !def.StartFormJSONModelAvailable {
 		out := make(map[string]string, len(supplied))
 		for k, v := range supplied {
@@ -496,11 +582,13 @@ func effectiveFormProperties(def *clients.WorkflowDefinition, fields []clients.W
 		}
 		return out
 	}
+	// JSON (Workflow Designer): the form's declared defaults, then the caller's values on top.
 	out := make(map[string]string, len(fields)+len(supplied))
 	for _, f := range fields {
-		if f.DefaultValue != "" {
-			out[f.ID] = canonical(f.ID, f.DefaultValue)
+		if f.DefaultValue == "" || !volunteerDefault(f) {
+			continue
 		}
+		out[f.ID] = canonical(f.ID, f.DefaultValue)
 	}
 	for k, v := range supplied {
 		out[k] = canonical(k, v)
@@ -509,6 +597,17 @@ func effectiveFormProperties(def *clients.WorkflowDefinition, fields []clients.W
 		return nil
 	}
 	return out
+}
+
+// parseLooseBool accepts the spellings a person or a model actually writes, not just Go's.
+func parseLooseBool(v string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "true", "t", "1", "yes", "y", "on", "enabled", "checked":
+		return true, true
+	case "false", "f", "0", "no", "n", "off", "disabled", "unchecked":
+		return false, true
+	}
+	return false, false
 }
 
 // toTypedMap widens the string-keyed form values into the object map the form engine expects,
@@ -521,19 +620,87 @@ func effectiveFormProperties(def *clients.WorkflowDefinition, fields []clients.W
 // many textual types and guessing beyond the two unambiguous cases would be worse than not trying.
 // A value that does not parse is passed through untouched so the server can reject it plainly
 // rather than this client silently substituting something.
+// volunteerDefault reports whether this tool should put a field's declared default on the wire
+// when the caller supplied nothing. It governs only what chip volunteers — an explicit value from
+// the caller is always sent.
+//
+// Optional fields the form will not take a value for are left alone: nothing is lost by staying
+// quiet, and a rejection would arrive AFTER the user approved the preview, naming a field the
+// caller never supplied and cannot correct.
+//
+// Required ones are the opposite, and the distinction is not a nicety. Suppressing the default of
+// a required field turns a start that would have worked into one that can NEVER work: the value
+// cannot come from the caller either (that is what read-only means), so validation reports it
+// missing and the caller has no move left. The default is also not something this tool invented —
+// it is the form's own declared value, so sending it back is the most faithful option available.
+func volunteerDefault(f clients.WorkflowFormField) bool {
+	// Read-only is absolute, and it is the one case with hard evidence: the legacy engine rejects
+	// ANY value for a non-writable property, its own default included. There is no dead end to
+	// avoid here either, because validateFormProperties no longer demands such a field.
+	if f.ReadOnly {
+		return false
+	}
+	if f.Required {
+		return true
+	}
+	switch {
+	case f.Unsupported != "":
+		return false // we already told the caller this cannot be produced from here
+	case f.VisibleWhen == clients.VisibleWhenNever:
+		return false // the form itself never shows it
+	}
+	return true
+}
+
+// splitMultiValue turns the caller-facing comma-separated form into the list the engine expects.
+// An explicit empty string yields an empty list, which is how a multi-value field is cleared.
+//
+// The per-part trim is defensive rather than load-bearing: effectiveFormProperties already
+// canonicalises a multi-value string under the same condition. It stays because this function
+// should not silently depend on having been handed pre-trimmed input.
+func splitMultiValue(v string) []string {
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func toTypedMap(fields []clients.WorkflowFormField, m map[string]string) map[string]interface{} {
 	if len(m) == 0 {
 		return nil
 	}
 	kind := make(map[string]string, len(fields))
+	multi := make(map[string]bool, len(fields))
 	for _, f := range fields {
 		kind[f.ID] = strings.ToLower(f.Type)
+		multi[f.ID] = f.MultiValue
 	}
 	out := make(map[string]interface{}, len(m))
 	for k, v := range m {
+		// A field that takes several values must go out as a JSON ARRAY, not as the comma-joined
+		// string the caller writes it in. This is the JSON model only: the legacy endpoint takes
+		// map[string]string and the server splits the commas itself, so the same string is right
+		// there and wrong here.
+		//
+		// Proven against a live instance: the OOTB "Issue Creation" form has two multi-value asset
+		// pickers, its start script does `relatedAssets.each { ... }`, and a Groovy String iterates
+		// per CHARACTER — so one asset id was fed to the process 36 times, one character at a
+		// time, and the start died with an opaque HTTP 500 after the user had confirmed it. A
+		// single value is therefore still wrapped: [id], never id.
+		if multi[k] {
+			out[k] = splitMultiValue(v)
+			continue
+		}
 		switch kind[k] {
 		case "boolean", "checkbox":
-			if b, err := strconv.ParseBool(v); err == nil {
+			// Not ParseBool alone: it rejects yes/no/on/off, which then travel as non-empty
+			// strings — and every non-empty string is truthy in Groovy, so "no" would switch the
+			// workflow ON while the user is told it was set to no.
+			if b, ok := parseLooseBool(v); ok {
 				out[k] = b
 				continue
 			}
