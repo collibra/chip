@@ -144,6 +144,12 @@ Message: "columnName is required for a SIMPLE_SQL rule (the single column the ch
 
 An unfiltered call must be a `validation_error`, not a full-instance scan.
 
+**Exception:** a read-only enumeration of a type or vocabulary catalog — one that is bounded and
+small (e.g. asset types on an instance) — may accept an unfiltered call, provided it also offers
+filters and reports whether a filtered result is truncated. `list_asset_types` is the instance:
+unfiltered listing stays legal, `name`/`publicId`/`product` narrow it, and `resultsTruncated`
+tells the caller when a `publicId`/`product` scan stopped short of the whole catalog.
+
 ### 6.5 Be consistent with sibling tools
 
 Two tools solving the same problem two different ways is a finding. Before inventing a pattern,
