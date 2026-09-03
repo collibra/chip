@@ -96,9 +96,6 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
-	//toolRegister(server, toolConfig, get_assessment.NewTool(client))
-	//toolRegister(server, toolConfig, create_assessment.NewTool(client))
-	//toolRegister(server, toolConfig, edit_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
@@ -123,6 +120,9 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 
 	if toolConfig.EnableDebugTools {
 		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))
+		toolRegister(server, toolConfig, get_assessment.NewTool(client))
+		toolRegister(server, toolConfig, create_assessment.NewTool(client))
+		toolRegister(server, toolConfig, edit_assessment.NewTool(client))
 	}
 
 	if skills.Enabled(toolConfig) {
