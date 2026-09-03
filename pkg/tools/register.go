@@ -29,6 +29,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_dq_job"
 	"github.com/collibra/chip/pkg/tools/get_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/get_dq_job_run_monitors"
+	"github.com/collibra/chip/pkg/tools/get_dq_job_run_profile"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_results"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_template"
@@ -116,6 +118,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, update_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
+	toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
+	toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
