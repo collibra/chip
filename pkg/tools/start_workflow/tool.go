@@ -47,7 +47,12 @@ type Input struct {
 	WorkflowDefinitionID string `json:"workflowDefinitionId" jsonschema:"Required. UUID of the workflow to start — from a prior list_workflow_definitions call, or already known."`
 	BusinessItemID       string `json:"businessItemId,omitempty" jsonschema:"UUID of the asset (or, for a domain-/community-scoped workflow, the domain/community) this workflow concerns — resolve it first via search_asset_keyword / get_asset_details. Required when the resolved workflow's scope is not GLOBAL (a needs_input response says so); omit for GLOBAL workflows."`
 
-	FormProperties map[string]string `json:"formProperties,omitempty" jsonschema:"Values for the workflow's start-form fields, keyed by field id (see a prior needs_input response's formFields[].id) — e.g. {\"reason\": \"Need it for Q3 reporting\"}. Omit or partially supply to have the tool report which required fields are still missing or invalid. Not needed for workflows with no start form."`
+	// The comma convention is stated HERE and not only on FormField.MultiValue: a caller reads this
+	// field's description when composing the call and the other one only when reading a response,
+	// so the rule was invisible at the moment it was needed. Observed live — a caller reached for
+	// a JSON array and the request was rejected by schema validation before this tool ever saw it,
+	// with an SDK-level message that names neither the field nor the convention.
+	FormProperties map[string]string `json:"formProperties,omitempty" jsonschema:"Values for the workflow's start-form fields, keyed by field id (see a prior needs_input response's formFields[].id) — e.g. {\"reason\": \"Need it for Q3 reporting\"}. Every value is a STRING, never an array or a number. A field marked multiValue in formFields takes several values as ONE comma-separated string, and that includes the single-value case — e.g. {\"relatedAssets\": \"uuid-a,uuid-b\"} or {\"relatedAssets\": \"uuid-a\"}. Omit or partially supply to have the tool report which required fields are still missing or invalid. Not needed for workflows with no start form."`
 
 	Confirm bool `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of exactly what will be started WITHOUT starting anything — review it with the user. true starts the workflow."`
 }

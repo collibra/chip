@@ -14,6 +14,7 @@ import (
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/tools/start_workflow"
 	"github.com/collibra/chip/pkg/tools/testutil"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 const (
@@ -2396,5 +2397,35 @@ func TestStartWorkflow_NeedsInputAlsoNamesAnUnmatchedKey(t *testing.T) {
 	}
 	if !strings.Contains(out.Message, `"descripton"`) {
 		t.Errorf("the message must name the unmatched key next to the missing field, got: %s", out.Message)
+	}
+}
+
+// TestStartWorkflow_InputSchemaStatesTheMultiValueConvention. formProperties is map[string]string,
+// so an array is rejected by schema validation BEFORE this tool runs — the caller gets an SDK-level
+// message that names neither the field nor the convention, and chip cannot improve it. The only
+// lever is the description, so the convention has to be stated on the field the caller reads while
+// composing the call, not only on FormField.MultiValue, which is read while reading a response.
+//
+// Written after a real caller reached for {"relatedAssets": ["uuid-a","uuid-b"]} and was bounced.
+func TestStartWorkflow_InputSchemaStatesTheMultiValueConvention(t *testing.T) {
+	// Same generator the server uses to publish the tool (see chip.buildSchema), applied to the
+	// same exported type — so this asserts what the caller actually receives.
+	schema, err := jsonschema.For[start_workflow.Input](nil)
+	if err != nil {
+		t.Fatalf("could not build the input schema: %v", err)
+	}
+	props, ok := schema.Properties["formProperties"]
+	if !ok {
+		t.Fatal("formProperties must be in the input schema")
+	}
+	for _, want := range []string{"STRING", "comma-separated", "multiValue"} {
+		if !strings.Contains(props.Description, want) {
+			t.Errorf("the formProperties description must mention %q so the caller sees the convention where it is needed: %s", want, props.Description)
+		}
+	}
+	// The type itself is the other half of the contract: widening it would move the rejection from
+	// the schema into this tool, which is a deliberate decision and not something to drift into.
+	if props.AdditionalProperties == nil || props.AdditionalProperties.Type != "string" {
+		t.Errorf("formProperties values must stay string-typed in the schema, got %+v", props.AdditionalProperties)
 	}
 }
