@@ -14,7 +14,7 @@ Reach for these tools when the user asks about **discovering, understanding, or 
 
 ## Tool categories
 
-- **Discovery**: `discover_data_assets`, `discover_business_glossary` (natural-language semantic search; require `dgc.ai-copilot`), `search_asset_keyword` (wildcard + filters), `list_asset_types`.
+- **Discovery**: `discover_data_assets`, `discover_business_glossary` (natural-language semantic search; require `dgc.ai-copilot`), `search_asset_keyword` (wildcard + filters), `list_asset_types` (name/publicId/product filters).
 - **Asset details**: `get_asset_details` (by UUID; relations paginated by cursor).
 - **Semantic graph**: `get_column_semantics`, `get_table_semantics`, `get_measure_data`, `get_business_term_data` — walk the catalog graph between columns, data attributes, measures, and business terms. All take asset UUIDs.
 - **Technical lineage**: `search_lineage_entities` (entry point), `get_lineage_upstream` / `get_lineage_downstream` (impact analysis), `get_lineage_entity` (resolve IDs), `get_lineage_transformation` (SQL/logic), `search_lineage_transformations`. Lineage uses its own entity IDs — not DGC asset UUIDs — so always start with `search_lineage_entities` to bridge.
