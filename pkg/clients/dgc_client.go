@@ -87,13 +87,18 @@ func GetAssetWithRelations(ctx context.Context, collibraHttpClient *http.Client,
 	return &assets[0], nil
 }
 
-func ListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, limit int, offset int) (*AssetTypePagedResponse, error) {
-	slog.InfoContext(ctx, fmt.Sprintf("Listing asset types with limit: %d, offset: %d", limit, offset))
+// ListAssetTypes lists asset types with limit/offset pagination. If name is
+// non-empty, it is forwarded server-side as the API's own `name` query param,
+// which Collibra matches case-insensitively as a substring against the asset
+// type name.
+func ListAssetTypes(ctx context.Context, collibraHttpClient *http.Client, limit int, offset int, name string) (*AssetTypePagedResponse, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Listing asset types with limit: %d, offset: %d, name: %q", limit, offset, name))
 
 	params := AssetTypesQueryParams{
 		ExcludeMeta: true,
 		Limit:       limit,
 		Offset:      offset,
+		Name:        name,
 	}
 
 	endpoint, err := buildUrl("/rest/2.0/assetTypes", params)

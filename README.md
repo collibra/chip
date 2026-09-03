@@ -29,7 +29,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`get_lineage_upstream`](pkg/tools/get_lineage_upstream/) - Get upstream technical lineage (sources) for a data entity
 - [`get_measure_data`](pkg/tools/get_measure_data/) - Trace a measure back to its underlying physical columns and tables
 - [`get_table_semantics`](pkg/tools/get_table_semantics/) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
-- [`list_asset_types`](pkg/tools/list_asset_types/) - List available asset types
+- [`list_asset_types`](pkg/tools/list_asset_types/) - List available asset types, optionally filtered by name, publicId, or product
 - [`list_data_contract`](pkg/tools/list_data_contracts/) - List data contracts with pagination
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
