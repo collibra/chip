@@ -32,6 +32,11 @@ func executeCollibraRequest(client *http.Client, req *http.Request) ([]byte, err
 // code, for callers that need to branch on it (e.g. 403 vs. 404 vs. everything else) rather than
 // just surfacing the error message. See executeRequestWithStatus for the non-envelope-aware
 // equivalent used by callers that don't go through the Collibra standard error envelope.
+//
+// The body is nil whenever the error is non-nil, exactly as executeCollibraRequest has always
+// behaved — this function is what that one now delegates to, and every existing caller in the repo
+// inherits its contract. Returning the body alongside the error would widen that contract for all
+// of them to buy nothing: the envelope's errorCode and userMessage are already in the error.
 func executeCollibraRequestWithStatus(client *http.Client, req *http.Request) ([]byte, int, error) {
 	response, err := client.Do(req)
 	if err != nil {
@@ -56,9 +61,9 @@ func executeCollibraRequestWithStatus(client *http.Client, req *http.Request) ([
 			if errResp.HelpMessage != "" {
 				msg += ". Hint: " + errResp.HelpMessage
 			}
-			return responseBody, response.StatusCode, errors.New(msg)
+			return nil, response.StatusCode, errors.New(msg)
 		}
-		return responseBody, response.StatusCode, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
+		return nil, response.StatusCode, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
 	}
 
 	return responseBody, response.StatusCode, nil
