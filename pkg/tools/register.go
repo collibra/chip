@@ -117,11 +117,10 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
 	}
-
+	toolRegister(server, toolConfig, get_assessment.NewTool(client))
+	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	if toolConfig.EnableDebugTools {
 		toolRegister(server, toolConfig, get_debug_mcp_init_request.NewTool(client))
-		toolRegister(server, toolConfig, get_assessment.NewTool(client))
-		toolRegister(server, toolConfig, create_assessment.NewTool(client))
 		toolRegister(server, toolConfig, edit_assessment.NewTool(client))
 	}
 
