@@ -110,11 +110,6 @@ Applies to any tool that writes to Collibra or a downstream system.
 Otherwise the user approves something other than what gets saved. If a field is sent on write, it
 appears in the preview.
 
-### 5.3 Set MCP annotations explicitly
-
-Set `DestructiveHint` and `OpenWorldHint` on every tool; read-only tools also set `ReadOnlyHint`
-and `IdempotentHint`. `TestRegisterAll_AllToolsHaveProperAnnotations` enforces this.
-
 ---
 
 ## 6. Input validation and error handling

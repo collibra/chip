@@ -10,7 +10,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // OutputStatus is the overall outcome of a get_dq_rule call.
@@ -63,7 +62,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Returns the rule's type, SQL, filter, tolerance (count of failing records allowed before it fails) and active/suppressed (kept but not scored) state.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

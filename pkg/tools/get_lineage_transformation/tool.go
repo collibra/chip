@@ -6,7 +6,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -23,7 +22,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageTr
 					  Do NOT call search_lineage_transformations to find a transformation ID if you already have it from upstream/downstream results.`,
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

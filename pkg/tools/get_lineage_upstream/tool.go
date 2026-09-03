@@ -6,7 +6,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -27,7 +26,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.GetLineageDi
 					  Do not call get_lineage_transformation unless the user explicitly asks about the SQL or transformation logic. The upstream graph already shows which transformations connect entities.`,
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

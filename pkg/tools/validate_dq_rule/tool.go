@@ -11,7 +11,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // OutputStatus is the overall outcome of a validate_dq_rule call.
@@ -55,7 +54,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Requires edgeSiteId, connectionId and schemaName — the connection to the source database (edgeSiteId = the Collibra Edge runtime/site that reaches the source, connectionId = the specific database connection), all from prepare_create_data_quality_job.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

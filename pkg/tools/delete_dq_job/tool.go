@@ -20,7 +20,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Status string
@@ -80,12 +79,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"customers table\"; \"Tear down the quality check we set up on public.transactions.\"",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{
-			ReadOnlyHint:    false,
-			DestructiveHint: chip.Ptr(true),
-			IdempotentHint:  true,
-			OpenWorldHint:   chip.Ptr(false),
-		},
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // monitorNameRe is the server's rule-name constraint: letters, digits, '-' and
@@ -105,7 +104,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Note: requires permission to create rules on the target job.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

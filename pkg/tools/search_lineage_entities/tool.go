@@ -7,7 +7,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/tools/validation"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -29,7 +28,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, clients.SearchLineag
 					  NEXT STEPS: Use the returned entity ID with get_lineage_upstream (to trace sources) or get_lineage_downstream (to trace consumers). Do not call get_lineage_entity unless you need metadata not already in the search results.`,
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

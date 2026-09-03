@@ -11,7 +11,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // OutputStatus is the overall outcome of a find_dq_rules call.
@@ -78,7 +77,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"a rule-name substring. Returns each rule's job, column, type, status and SQL. Paginated (offset/limit).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

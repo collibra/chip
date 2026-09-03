@@ -33,7 +33,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Status string
@@ -230,12 +229,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		// job is additive, not destructive. Not idempotent: repeated calls auto-resolve to distinct
 		// "<schema>.<table>_N" jobs and queue new runs. Talks to a bounded Collibra instance, not an
 		// open world. Matches the create_asset / create_assessment convention.
-		Annotations: &mcp.ToolAnnotations{
-			ReadOnlyHint:    false,
-			DestructiveHint: chip.Ptr(false),
-			IdempotentHint:  false,
-			OpenWorldHint:   chip.Ptr(false),
-		},
 	}
 }
 

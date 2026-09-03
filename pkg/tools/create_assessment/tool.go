@@ -15,7 +15,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/tools/validation"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Input is the tool's typed input.
@@ -74,7 +73,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Use the returned question ids with edit_assessment to fill in the answers afterwards.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

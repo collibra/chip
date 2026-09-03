@@ -23,7 +23,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/markdown"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // maxOptionsInError caps the count of option names appended to a
@@ -120,7 +119,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Calling prepare_create_asset first is optional — only needed when the agent wants to enumerate options or inspect a type's full attribute schema.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

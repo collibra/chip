@@ -6,7 +6,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -24,7 +23,6 @@ func NewTool(collibraHttpClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Perform a semantic search across business glossary content in Collibra. Ask natural language questions to discover business terms, acronyms, KPIs, and other business glossary content.",
 		Handler:     handler(collibraHttpClient),
 		Permissions: []string{"dgc.ai-copilot"},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // OutputStatus is the overall outcome of a deploy_dq_rule_template call.
@@ -85,7 +84,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"The deploy is partial-success: each target is deployed or skipped independently, and the per-target outcomes (with skip reasons) are returned.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

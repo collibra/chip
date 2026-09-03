@@ -8,7 +8,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/tools/validation"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -29,7 +28,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Associate a data classification (data class) with a specific data asset in Collibra. Requires both the asset UUID and the classification UUID.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.classify", "dgc.catalog"},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

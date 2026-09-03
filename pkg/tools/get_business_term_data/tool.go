@@ -7,7 +7,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/tools/validation"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type ColumnWithTable struct {
@@ -50,7 +49,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Retrieve the physical data assets (Columns and Tables) associated with a Business Term via the path Business Term → Data Attribute → Column → Table.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

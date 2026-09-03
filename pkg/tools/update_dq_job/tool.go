@@ -41,7 +41,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Status string
@@ -187,12 +186,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Permissions: []string{},
 		// Writes only on confirm=true. Changing configuration is not destructive (no data or history is
 		// removed — that is dq_delete_job). Idempotent: reapplying the same patch yields the same state.
-		Annotations: &mcp.ToolAnnotations{
-			ReadOnlyHint:    false,
-			DestructiveHint: chip.Ptr(false),
-			IdempotentHint:  true,
-			OpenWorldHint:   chip.Ptr(false),
-		},
 	}
 }
 

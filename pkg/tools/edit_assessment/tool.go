@@ -20,7 +20,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/tools/validation"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // OperationType enumerates the edits edit_assessment can perform.
@@ -133,7 +132,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"The whole request is applied as a single atomic PATCH: every operation is validated first and if any fails, none are applied.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(true), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

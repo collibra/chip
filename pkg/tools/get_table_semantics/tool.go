@@ -7,7 +7,6 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/tools/validation"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type AssetWithDescription struct {
@@ -50,7 +49,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Retrieve the semantic layer for a Table asset: Columns, their Data Attributes, and connected Measures. Answers 'What is the semantic context of this table?' or 'Which metrics use data from this table?'.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

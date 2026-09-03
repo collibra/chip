@@ -11,7 +11,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // OutputStatus is the overall outcome of a get_dq_rule_results call.
@@ -74,7 +73,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"pass/fail status and any exception for each run. Paginated (offset/limit), newest first by default.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // OutputStatus is the overall outcome of a list_dq_rule_templates call.
@@ -66,7 +65,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"dimension (a data-quality category such as Accuracy or Completeness), and isSystem (built-in vs custom). Paginated (offset/limit).",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

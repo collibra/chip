@@ -7,7 +7,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Input struct {
@@ -33,7 +32,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Upload a new version of a data contract manifest to Collibra. The manifestID and version are automatically parsed from the manifest content if it adheres to the Open Data Contract Standard.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{"dgc.data-contract"},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(true), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

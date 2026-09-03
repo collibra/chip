@@ -12,7 +12,6 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // OutputStatus is the overall outcome of a search_catalog_columns call.
@@ -74,7 +73,6 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"A broad lone substring filter (e.g. description alone) can exceed the Knowledge Graph query timeout — combine with a domain or another selective filter.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

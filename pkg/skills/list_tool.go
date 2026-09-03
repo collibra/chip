@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/collibra/chip/pkg/chip"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type listInput struct {
@@ -37,7 +36,6 @@ func NewListTool(catalog *Catalog) *chip.Tool[listInput, listOutput] {
 			"Collibra domain, not after errors. Start with `collibra/index` if unsure.",
 		Handler:     listHandler(catalog),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 

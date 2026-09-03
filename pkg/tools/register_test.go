@@ -29,8 +29,8 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
-	// Every gate on, so a feature-flagged tool can't skip the annotation check.
+func TestRegisterAll_AllToolsHaveTitles(t *testing.T) {
+	// Every gate on, so a feature-flagged tool can't skip the title check.
 	cfg := &chip.ServerToolConfig{
 		EnableDebugTools: true,
 		Experimental:     []string{tools.ContextSpecificationsFeature, skills.FeatureName},
@@ -38,22 +38,6 @@ func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
 	for _, tool := range listTools(t, cfg) {
 		if tool.Title == "" {
 			t.Errorf("tool %q has no title", tool.Name)
-		}
-		if tool.Annotations == nil {
-			t.Errorf("tool %q has no annotations", tool.Name)
-			continue
-		}
-		if tool.Annotations.DestructiveHint == nil {
-			t.Errorf("tool %q does not set DestructiveHint explicitly", tool.Name)
-		}
-		if tool.Annotations.OpenWorldHint == nil {
-			t.Errorf("tool %q does not set OpenWorldHint explicitly", tool.Name)
-		}
-		if tool.Annotations.ReadOnlyHint && tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint {
-			t.Errorf("tool %q is read-only but marked destructive", tool.Name)
-		}
-		if tool.Annotations.ReadOnlyHint && !tool.Annotations.IdempotentHint {
-			t.Errorf("tool %q is read-only but not marked idempotent", tool.Name)
 		}
 	}
 }

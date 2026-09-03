@@ -20,7 +20,6 @@ func NewTool(_ *http.Client) *chip.Tool[Input, Output] {
 		Description: "Returns the MCP initialize request the connected client sent during the handshake, including protocolVersion, clientInfo, and declared capabilities (e.g. whether elicitation, sampling, or roots are supported). Useful for debugging MCP client/server compatibility.",
 		Handler:     handler(),
 		Permissions: []string{},
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }
 
