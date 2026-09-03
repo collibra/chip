@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -67,8 +68,8 @@ type FormField struct {
 	Options  []FormFieldOption `json:"options,omitempty" jsonschema:"The values this field accepts. Pass a key, never a label, and never invent one that is not listed. Whether the list is closed depends on optionsExhaustive."`
 	// OptionsExhaustive distinguishes a closed choice list from a server-supplied shortlist.
 	OptionsExhaustive bool   `json:"optionsExhaustive,omitempty" jsonschema:"True when options is the complete set of legal values, so anything else is rejected. False (with options present) means the list is a shortlist Collibra offered and another valid id would also be accepted."`
-	MultiValue        bool   `json:"multiValue,omitempty" jsonschema:"True when this field takes SEVERAL values at once, given as one comma-separated string (e.g. 'a,b'). A field without this flag rejects a comma-separated list."`
-	DefaultValue      string `json:"defaultValue,omitempty" jsonschema:"What the form pre-fills for this field. Leaving the field out of formProperties submits this value, matching what the product does; pass an explicit value only to override it."`
+	MultiValue        bool   `json:"multiValue,omitempty" jsonschema:"True when this field takes SEVERAL values at once. Give them as ONE comma-separated string (e.g. 'a,b') whether you have one value or many — this tool converts that to whatever the workflow expects. A field without this flag rejects a comma-separated list."`
+	DefaultValue      string `json:"defaultValue,omitempty" jsonschema:"What the form pre-fills for this field. Leave it out of formProperties to accept that — the value is applied either way, by this tool or by Collibra itself, matching what the product does. Pass a value only to OVERRIDE it, and never for a readOnly field: that is refused before anything is started."`
 	HelpText          string `json:"helpText,omitempty" jsonschema:"The hint Collibra's own UI shows beside this field — worth relaying to the user when asking them for a value."`
 	VisibleWhen       string `json:"visibleWhen,omitempty" jsonschema:"Present when the form only shows this field under a condition, quoted verbatim. The condition cannot be evaluated here, so the field is still reported with its declared required flag: supply a value if the condition plausibly holds, and say so to the user rather than assuming the field does not apply."`
 	ReadOnly          bool   `json:"readOnly,omitempty" jsonschema:"True when the form disables this field. Do not supply a value — the server rejects a change to one."`
@@ -167,6 +168,11 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}, nil
 		}
 
+		// An ABSENT scope is read as GLOBAL. That is a guess, and it is the deprecated field
+		// (see clients.WorkflowDefinition.BusinessItemResourceType) — but guessing the other way
+		// would refuse every workflow the day the field is dropped, and guessing this way fails
+		// loudly instead: a resource-scoped workflow started with no resource is rejected by the
+		// server's own start constraints, not started against the wrong thing.
 		needsBusinessItem := def.BusinessItemResourceType != "" && def.BusinessItemResourceType != "GLOBAL"
 		if needsBusinessItem && businessItemID == "" {
 			return Output{
@@ -201,6 +207,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		// Checked against what the CALLER passed, not against `effective`: this is a rule about
 		// caller input, and `effective` also carries values this tool volunteered.
 		problems = append(problems, checkNoValueForReadOnlyFields(formFields, supplied)...)
+		unknownKeys := keysMatchingNoField(formFields, supplied)
 		if len(problems) > 0 {
 			return Output{
 				Status:               StatusNeedsInput,
@@ -210,8 +217,11 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				Scope:                def.BusinessItemResourceType,
 				FormFields:           toFormFields(formFields),
 				MissingFields:        missing,
-				Message:              fmt.Sprintf("Workflow %q needs %d form field issue(s) resolved: %s", def.Name, len(problems), strings.Join(problems, "; ")),
-				Guidance:             "Ask the user for the fields listed in missingFields (see formFields for their labels, types and allowed options), fix any invalid values, then re-call with formProperties populated.",
+				// The unmatched-key note belongs here even more than on the preview: a required
+				// field reported missing while a near-identical key sits in formProperties is
+				// almost always one typo, and saying so turns a guessing round into a fix.
+				Message:  fmt.Sprintf("Workflow %q needs %d form field issue(s) resolved: %s.%s", def.Name, len(problems), strings.Join(problems, "; "), unknownKeyClause(unknownKeys)),
+				Guidance: "Ask the user for the fields listed in missingFields (see formFields for their labels, types and allowed options), fix any invalid values, then re-call with formProperties populated.",
 			}, nil
 		}
 
@@ -235,7 +245,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				// the form exists — then confirms and starts a process with every value unset.
 				FormFields:     toFormFields(formFields),
 				FormProperties: effective,
-				Message:        fmt.Sprintf("Preview only — nothing started. Will start workflow %q%s. Review with the user, then call again with confirm=true.", def.Name, previewBusinessItemClause(needsBusinessItem, businessItemID)),
+				Message:        fmt.Sprintf("Preview only — nothing started. Will start workflow %q%s.%s Review with the user, then call again with confirm=true.", def.Name, previewBusinessItemClause(needsBusinessItem, businessItemID), unknownKeyClause(unknownKeys)),
 			}, nil
 		}
 
@@ -339,6 +349,52 @@ func formFetchError(code int, err error, workflowName string) Output {
 	}
 	return Output{Status: StatusError, Message: fmt.Sprintf("Failed to read the start form for %q (HTTP %d): %v", workflowName, code, err),
 		Guidance: "Nothing was started. Retry; if it persists, contact your Collibra administrator."}
+}
+
+// keysMatchingNoField reports supplied keys that no form field declares. They are still SENT —
+// a caller may legitimately know a process variable the form does not show, and filtering them
+// would silently drop it — but they are called out, because the far likelier cause is a mistyped
+// id or a label used in place of one.
+//
+// This matters more than it looks. A mistyped key is accepted by the engine as a brand-new process
+// variable, so nothing downstream complains; meanwhile the field the caller MEANT quietly takes
+// its default and the start reports success. Naming the key in the preview is what gives the human
+// at the confirm checkpoint a chance to see it.
+func keysMatchingNoField(fields []clients.WorkflowFormField, supplied map[string]string) []string {
+	if len(supplied) == 0 || len(fields) == 0 {
+		return nil
+	}
+	known := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		known[f.ID] = true
+	}
+	var unknown []string
+	for k := range supplied {
+		if !known[k] {
+			unknown = append(unknown, k)
+		}
+	}
+	sort.Strings(unknown) // map iteration order would otherwise make the message unstable
+	return unknown
+}
+
+func unknownKeyClause(keys []string) string {
+	if len(keys) == 0 {
+		return ""
+	}
+	verb := "matches"
+	if len(keys) > 1 {
+		verb = "match"
+	}
+	return fmt.Sprintf(" NOTE: %s %s no field on this form and will be sent as raw process variables — check for a typo, because a mistyped id is accepted silently while the field you meant keeps its default.", strings.Join(quoteAll(keys), ", "), verb)
+}
+
+func quoteAll(values []string) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		out[i] = fmt.Sprintf("%q", v)
+	}
+	return out
 }
 
 // checkNoValueForReadOnlyFields refuses a caller-supplied value for a field the form declares

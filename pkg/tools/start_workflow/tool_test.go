@@ -2300,3 +2300,79 @@ func TestStartWorkflow_LegacyMultiValueStaysACommaSeparatedString(t *testing.T) 
 		t.Errorf("tags = %q, want the trimmed comma-separated string the legacy engine splits itself", captured.FormProperties["tags"])
 	}
 }
+
+// TestStartWorkflow_PreviewNamesKeysThatMatchNoField. A mistyped field id is the one caller error
+// nothing else catches: the engine accepts an unrecognised key as a brand-new process variable, so
+// no error is raised anywhere, while the field that was MEANT quietly takes its default and the
+// start reports success. The preview is the only place a human can still notice, so it says so.
+//
+// The key is still sent — a caller may know a process variable the form does not declare, and
+// silently dropping it would be the very failure this tool exists to prevent.
+func TestStartWorkflow_PreviewNamesKeysThatMatchNoField(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Typo", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+	handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"text","label":"Timeout","value":"{{voteTimeout}}","defaultValue":"B5D"}]}]}`)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"voteTimeOut": "B10D"}, // capital O — matches nothing
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusPreview {
+		t.Fatalf("status = %q, want preview: an unknown key is a warning, not a refusal", out.Status)
+	}
+	if !strings.Contains(out.Message, `"voteTimeOut"`) {
+		t.Errorf("the preview must name the unmatched key, got: %s", out.Message)
+	}
+	if out.FormProperties["voteTimeOut"] != "B10D" {
+		t.Errorf("the key must still be sent, got %v", out.FormProperties)
+	}
+	if out.FormProperties["voteTimeout"] != "B5D" {
+		t.Errorf("the real field must still carry its default, got %v", out.FormProperties)
+	}
+}
+
+// ...and a form the caller matched exactly must not carry the note, or it becomes noise nobody
+// reads.
+func TestStartWorkflow_PreviewIsQuietWhenEveryKeyMatches(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Clean", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+	handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"text","label":"Subject","value":"{{subject}}"}]}]}`)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"subject": "x"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out.Message, "NOTE:") {
+		t.Errorf("no unmatched keys, so no note: %s", out.Message)
+	}
+}
+
+// TestStartWorkflow_NeedsInputAlsoNamesAnUnmatchedKey. The typo case that matters most: a required
+// field comes back missing while a near-identical key sits unused in formProperties. Without the
+// note the caller is told only that "description" is required — which it will try to satisfy by
+// re-sending the same misspelled key, round after round.
+func TestStartWorkflow_NeedsInputAlsoNamesAnUnmatchedKey(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Typo", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+	handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"text","label":"Description","isRequired":true,"value":"{{description}}"}]}]}`)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"descripton": "typo here"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusNeedsInput {
+		t.Fatalf("status = %q, want needs_input", out.Status)
+	}
+	if !strings.Contains(out.Message, `"descripton"`) {
+		t.Errorf("the message must name the unmatched key next to the missing field, got: %s", out.Message)
+	}
+}
