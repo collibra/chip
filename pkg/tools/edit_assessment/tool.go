@@ -19,6 +19,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/assessmentview"
 	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -99,10 +100,10 @@ const (
 // per-operation results, the updated assessment on success, and an Error string
 // for a whole-request failure.
 type Output struct {
-	Status     OutputStatus        `json:"status" jsonschema:"Overall status: success if the PATCH applied, error if any operation failed validation or the API call failed. The PATCH is atomic — there is no partial success."`
-	Results    []OperationResult   `json:"results" jsonschema:"Per-operation outcomes, in the same order as the input operations. On validation failure the failing operations carry an error message; on API failure every operation is marked error."`
-	Assessment *clients.Assessment `json:"assessment,omitempty" jsonschema:"The assessment's state after the update. Present only on success."`
-	Error      string              `json:"error,omitempty" jsonschema:"Populated when the overall request could not be completed (assessment not found, validation failure, or API/permission error). Per-operation detail lives in Results."`
+	Status     OutputStatus               `json:"status" jsonschema:"Overall status: success if the PATCH applied, error if any operation failed validation or the API call failed. The PATCH is atomic — there is no partial success."`
+	Results    []OperationResult          `json:"results" jsonschema:"Per-operation outcomes, in the same order as the input operations. On validation failure the failing operations carry an error message; on API failure every operation is marked error."`
+	Assessment *assessmentview.Assessment `json:"assessment,omitempty" jsonschema:"The assessment's state after the update. Present only on success."`
+	Error      string                     `json:"error,omitempty" jsonschema:"Populated when the overall request could not be completed (assessment not found, validation failure, or API/permission error). Per-operation detail lives in Results."`
 }
 
 // OperationResult is the outcome of a single operation.
@@ -299,7 +300,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		return Output{
 			Status:     StatusSuccess,
 			Results:    results,
-			Assessment: updated,
+			Assessment: assessmentview.NewPtr(updated),
 		}, nil
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/assessmentview"
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -27,7 +28,7 @@ func TestOutputWithTemplateVersionValidates(t *testing.T) {
 
 	out := Output{
 		Found: true,
-		Assessment: &clients.Assessment{
+		Assessment: assessmentview.NewPtr(&clients.Assessment{
 			ID:     "07ed39f5-be3b-4406-a09e-3c78a8734261",
 			Name:   "Business Context for Churn Prediction Model",
 			Status: "DRAFT",
@@ -40,7 +41,7 @@ func TestOutputWithTemplateVersionValidates(t *testing.T) {
 			Content: []clients.QuestionAndAnswer{
 				{ID: "business_case", Name: "Business problem", Answer: &clients.Answer{Type: "HTML", Value: "reduce churn"}},
 			},
-		},
+		}),
 	}
 
 	raw, err := json.Marshal(out)

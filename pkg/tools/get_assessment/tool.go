@@ -8,6 +8,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/assessmentview"
 	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -35,12 +36,12 @@ type Input struct {
 
 type Output struct {
 	// Assessment is set for a direct lookup, or a filtered lookup with exactly one match.
-	Assessment *clients.Assessment `json:"assessment,omitempty" jsonschema:"the resolved assessment when a direct lookup is used or a filtered lookup matches exactly one. Includes id, name, status, template, content (each question's id, name, description, current answer {type,value} and comments), asset, assessmentReview, assignees, owner, isVisibleToEveryone and timestamps."`
+	Assessment *assessmentview.Assessment `json:"assessment,omitempty" jsonschema:"the resolved assessment when a direct lookup is used or a filtered lookup matches exactly one. Includes id, name, status, template, content (each question's id, name, description, current answer (type, and value or items) and comments), asset, assessmentReview, assignees, owner, isVisibleToEveryone and timestamps."`
 	// Assessments is set for a filtered lookup that matches more than one.
-	Assessments []clients.Assessment `json:"assessments,omitempty" jsonschema:"the matching assessments when a filtered lookup returns more than one. Each has the same shape as the assessment field."`
-	NextCursor  string               `json:"nextCursor,omitempty" jsonschema:"cursor for the next page of a filtered lookup, if more results exist; pass it back as 'cursor'."`
-	Error       string               `json:"error,omitempty" jsonschema:"error message if no assessment was found or an API error occurred"`
-	Found       bool                 `json:"found" jsonschema:"whether at least one assessment was found"`
+	Assessments []assessmentview.Assessment `json:"assessments,omitempty" jsonschema:"the matching assessments when a filtered lookup returns more than one. Each has the same shape as the assessment field."`
+	NextCursor  string                      `json:"nextCursor,omitempty" jsonschema:"cursor for the next page of a filtered lookup, if more results exist; pass it back as 'cursor'."`
+	Error       string                      `json:"error,omitempty" jsonschema:"error message if no assessment was found or an API error occurred"`
+	Found       bool                        `json:"found" jsonschema:"whether at least one assessment was found"`
 }
 
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
@@ -91,14 +92,14 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			if err != nil {
 				return notFound(err), nil
 			}
-			return Output{Assessment: assessment, Found: true}, nil
+			return Output{Assessment: assessmentview.NewPtr(assessment), Found: true}, nil
 		}
 		if input.AssessmentReviewID != "" {
 			assessment, err := clients.GetAssessmentByReview(ctx, collibraClient, input.AssessmentReviewID)
 			if err != nil {
 				return notFound(err), nil
 			}
-			return Output{Assessment: assessment, Found: true}, nil
+			return Output{Assessment: assessmentview.NewPtr(assessment), Found: true}, nil
 		}
 
 		// Filtered lookup.
@@ -146,9 +147,9 @@ func fromList(results []clients.Assessment, emptyMsg string) Output {
 	case 0:
 		return Output{Error: emptyMsg, Found: false}
 	case 1:
-		return Output{Assessment: &results[0], Found: true}
+		return Output{Assessment: assessmentview.NewPtr(&results[0]), Found: true}
 	default:
-		return Output{Assessments: results, Found: true}
+		return Output{Assessments: assessmentview.NewList(results), Found: true}
 	}
 }
 
