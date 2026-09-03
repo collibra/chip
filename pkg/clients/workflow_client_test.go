@@ -172,12 +172,21 @@ func TestGraphQLQueriesCarryTheirArguments(t *testing.T) {
 		var req map[string]any
 		mux := http.NewServeMux()
 		mux.HandleFunc("POST /graphql", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewDecoder(r.Body).Decode(&req)
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("request body was unparseable: %v", err)
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"api": map[string]any{"workflowDefinitionsGlobal": []any{}}}})
 		})
 		_, _, _ = ListGlobalWorkflowDefinitions(context.Background(), wfServer(t, mux))
 
 		q, _ := req["query"].(string)
+		// Before anything else, and specifically before the NEGATIVE assertion below: an empty q —
+		// from a failed decode, an absent key, or a handler that never ran — makes "does not
+		// contain globalCreate" true for free. The guard on a deliberate decision would then keep
+		// reporting success while guarding nothing.
+		if q == "" {
+			t.Fatalf("no query was captured, so nothing below is actually being checked: %v", req)
+		}
 		if !strings.Contains(q, "enabled: true") {
 			t.Errorf("query must ask for enabled definitions only: %s", q)
 		}
@@ -195,12 +204,17 @@ func TestGraphQLQueriesCarryTheirArguments(t *testing.T) {
 		var req map[string]any
 		mux := http.NewServeMux()
 		mux.HandleFunc("POST /graphql", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewDecoder(r.Body).Decode(&req)
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("request body was unparseable: %v", err)
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"api": map[string]any{"workflowStartFormJsonModel": `{"rows":[]}`}}})
 		})
 		_, _, _ = GetWorkflowStartFormJSONModel(context.Background(), wfServer(t, mux), wfID)
 
 		vars, _ := req["variables"].(map[string]any)
+		if len(vars) == 0 {
+			t.Fatalf("no variables were captured, so the assertion below checks nothing: %v", req)
+		}
 		if vars["workflowDefinitionId"] != wfID {
 			t.Errorf("the workflow id must travel under the variable name the query declares, got %v", vars)
 		}

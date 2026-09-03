@@ -740,6 +740,15 @@ func GetWorkflowStartFormJSONModel(ctx context.Context, client *http.Client, wor
 // is simply "if value contains {{, the field writes to a variable"; display-only components
 // (a horizontal rule, a link, a read-only output) have no binding, and emitting them as fillable
 // fields invites the caller to overwrite an existing value or to invent junk process variables.
+//
+// It is a FALLBACK that never fires on anything measured: across every .form in the OOTB and
+// customizations corpora, all 37 bindings are exact single expressions and are matched by the
+// strict pattern above. Removing it was considered and rejected — it would make this client
+// stricter than the engine, so a field the engine WOULD bind (a binding written with surrounding
+// text, a shape the designer does not currently emit) would vanish from the form with no error,
+// and the caller would start the workflow with that variable unset. That silent-omission failure
+// is the one this whole area exists to prevent; an extra field the caller can see in the preview
+// is the lesser risk.
 var jsonFormBindingBraces = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
 
 // jsonFormFieldBinding matches a col's `value` when it is a single {{variable}} expression. That

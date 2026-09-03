@@ -80,13 +80,20 @@ func handleJSONModelForm(mux *http.ServeMux, formModelJSON string) {
 	})
 }
 
-func handleStart(mux *http.ServeMux, captured *clients.StartWorkflowInstanceRequest, called *bool, code int) {
+// handleStart captures the legacy start request. The decode error is REPORTED, not swallowed: a
+// silent failure leaves `captured` zero-valued, and a test asserting that some key is ABSENT from
+// the payload then passes for the wrong reason — which is exactly the shape of the assertions that
+// pin what the legacy path must not send. t.Errorf, not Fatalf: this runs on the server goroutine.
+func handleStart(t *testing.T, mux *http.ServeMux, captured *clients.StartWorkflowInstanceRequest, called *bool, code int) {
+	t.Helper()
 	mux.HandleFunc("POST /rest/2.0/workflowInstances", func(w http.ResponseWriter, r *http.Request) {
 		if called != nil {
 			*called = true
 		}
 		if captured != nil {
-			_ = json.NewDecoder(r.Body).Decode(captured)
+			if err := json.NewDecoder(r.Body).Decode(captured); err != nil {
+				t.Errorf("start request body was unparseable: %v", err)
+			}
 		}
 		if code != 0 && code != http.StatusCreated {
 			w.WriteHeader(code)
@@ -99,13 +106,18 @@ func handleStart(mux *http.ServeMux, captured *clients.StartWorkflowInstanceRequ
 	})
 }
 
-func handleStartWithForm(mux *http.ServeMux, captured *clients.StartWorkflowInstanceWithFormRequest, called *bool) {
+// handleStartWithForm is handleStart for the JSON-model endpoint — same reason for reporting the
+// decode error rather than ignoring it.
+func handleStartWithForm(t *testing.T, mux *http.ServeMux, captured *clients.StartWorkflowInstanceWithFormRequest, called *bool) {
+	t.Helper()
 	mux.HandleFunc("POST /rest/2.0/internal/workflow/startWithForm", func(w http.ResponseWriter, r *http.Request) {
 		if called != nil {
 			*called = true
 		}
 		if captured != nil {
-			_ = json.NewDecoder(r.Body).Decode(captured)
+			if err := json.NewDecoder(r.Body).Decode(captured); err != nil {
+				t.Errorf("start request body was unparseable: %v", err)
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -203,7 +215,7 @@ func TestStartWorkflow_GlobalNoFormDefaultsToPreviewAndNeverStarts(t *testing.T)
 	mux, c := newServer(t)
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Propose Term", Enabled: true, BusinessItemResourceType: "GLOBAL"})
 	var started bool
-	handleStart(mux, nil, &started, http.StatusCreated)
+	handleStart(t, mux, nil, &started, http.StatusCreated)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
 	if err != nil {
@@ -246,7 +258,7 @@ func TestStartWorkflow_LegacyEnumField_SubmitsKeyNotLabel(t *testing.T) {
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Log Issue", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
 	handleLegacyForm(mux, workflowID, `{"processId":"p1","formProperties":[{"id":"choice","name":"Choice","type":"enum","required":true,"enumValues":[{"idAsString":"opt1","text":"Option One"},{"idAsString":"opt2","text":"Option Two"}]}]}`)
 	var captured clients.StartWorkflowInstanceRequest
-	handleStart(mux, &captured, nil, http.StatusCreated)
+	handleStart(t, mux, &captured, nil, http.StatusCreated)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -269,7 +281,7 @@ func TestStartWorkflow_LegacyEnumField_InvalidValueReturnsNeedsInput(t *testing.
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Log Issue", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
 	handleLegacyForm(mux, workflowID, `{"processId":"p1","formProperties":[{"id":"choice","name":"Choice","type":"enum","required":true,"enumValues":[{"idAsString":"opt1","text":"Option One"}]}]}`)
 	var started bool
-	handleStart(mux, nil, &started, http.StatusCreated)
+	handleStart(t, mux, nil, &started, http.StatusCreated)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -299,10 +311,10 @@ func TestStartWorkflow_JSONModelForm_UsesGraphQLAndInternalStartEndpoint(t *test
 	handleJSONModelForm(mux, `{"rows":[{"cols":[{"designInfo":{"stencilId":"cloud-text"},"id":"justification","type":"text","label":"Justification","isRequired":true,"value":"{{justification}}"}]}],"metadata":{"key":"f1","modelType":"form"}}`)
 	var capturedLegacy clients.StartWorkflowInstanceRequest
 	var legacyCalled bool
-	handleStart(mux, &capturedLegacy, &legacyCalled, http.StatusCreated)
+	handleStart(t, mux, &capturedLegacy, &legacyCalled, http.StatusCreated)
 	var captured clients.StartWorkflowInstanceWithFormRequest
 	var jsonCalled bool
-	handleStartWithForm(mux, &captured, &jsonCalled)
+	handleStartWithForm(t, mux, &captured, &jsonCalled)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -335,7 +347,7 @@ func TestStartWorkflow_JSONModelForm_RequiredFieldIsActuallyParsed(t *testing.T)
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Designer Flow", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
 	handleJSONModelForm(mux, `{"rows":[{"cols":[{"designInfo":{"stencilId":"cloud-text"},"id":"justification","type":"text","label":"Justification","isRequired":true,"value":"{{justification}}"}]}]}`)
 	var started bool
-	handleStartWithForm(mux, nil, &started)
+	handleStartWithForm(t, mux, nil, &started)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -425,7 +437,7 @@ func TestStartWorkflow_JSONModelForm_StaticSelectOptionsAreOffered(t *testing.T)
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Designer Flow", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
 	handleJSONModelForm(mux, `{"rows":[{"cols":[{"designInfo":{"stencilId":"cloud-single-select"},"id":"severity","type":"select","label":"Severity","isRequired":true,"value":"{{severity}}","extraSettings":{"items":[{"value":"high","label":"High"},{"value":"low","label":"Low"}]}}]}]}`)
 	var started bool
-	handleStartWithForm(mux, nil, &started)
+	handleStartWithForm(t, mux, nil, &started)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -449,7 +461,7 @@ func TestStartWorkflow_JSONModelForm_StaticSelectOptionsAreOffered(t *testing.T)
 func TestStartWorkflow_PermissionDeniedMapsToClearError(t *testing.T) {
 	mux, c := newServer(t)
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Admin Only Flow", Enabled: true, BusinessItemResourceType: "GLOBAL"})
-	handleStart(mux, nil, nil, http.StatusForbidden)
+	handleStart(t, mux, nil, nil, http.StatusForbidden)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID, Confirm: true})
 	if err != nil {
@@ -496,7 +508,7 @@ func TestStartWorkflow_AssetScoped_ThreadsBusinessItemIDIntoStartRequest(t *test
 	mux, c := newServer(t)
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Request Access", Enabled: true, BusinessItemResourceType: "ASSET"})
 	var captured clients.StartWorkflowInstanceRequest
-	handleStart(mux, &captured, nil, http.StatusCreated)
+	handleStart(t, mux, &captured, nil, http.StatusCreated)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -1451,6 +1463,11 @@ func TestStartWorkflow_GlobalStartSendsNoBusinessItem(t *testing.T) {
 	if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
 		t.Fatalf("bad body %q: %v", body, uerr)
 	}
+	// Anchor first: an absence assertion against an empty body is true for free, so prove this IS
+	// the start request before concluding anything from what it lacks.
+	if sent["workflowDefinitionId"] != workflowID {
+		t.Fatalf("this is not the start request — nothing can be concluded from what it omits: %s", body)
+	}
 	if v, present := sent["businessItemIds"]; present {
 		t.Errorf("a GLOBAL workflow must be started against no resource, but the body carried businessItemIds=%v", v)
 	}
@@ -1823,8 +1840,8 @@ func TestStartWorkflow_AValueForAReadOnlyFieldIsRefusedBeforeTheWrite(t *testing
 			mux, c := newServer(t)
 			tc.setup(mux)
 			started := false
-			handleStart(mux, nil, &started, http.StatusCreated)
-			handleStartWithForm(mux, nil, &started)
+			handleStart(t, mux, nil, &started, http.StatusCreated)
+			handleStartWithForm(t, mux, nil, &started)
 
 			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 				WorkflowDefinitionID: workflowID,
@@ -2006,7 +2023,7 @@ func TestStartWorkflow_AnAbsentWritableFlagMeansWritable(t *testing.T) {
 	handleLegacyForm(mux, workflowID, `{"formProperties":[{"id":"subject","name":"Subject","type":"string","required":true}]}`)
 	var captured clients.StartWorkflowInstanceRequest
 	started := false
-	handleStart(mux, &captured, &started, http.StatusCreated)
+	handleStart(t, mux, &captured, &started, http.StatusCreated)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -2042,7 +2059,7 @@ func TestStartWorkflow_LegacyDefaultsAreLeftToTheEngine(t *testing.T) {
 	  {"id":"subject","name":"Subject","type":"string","required":true,"writable":true},
 	  {"id":"priority","name":"Priority","type":"string","required":false,"writable":true,"value":"Normal"}]}`)
 	var captured clients.StartWorkflowInstanceRequest
-	handleStart(mux, &captured, nil, http.StatusCreated)
+	handleStart(t, mux, &captured, nil, http.StatusCreated)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -2108,7 +2125,7 @@ func TestStartWorkflow_LegacyRequiredFieldWithADeclaredDefaultIsNotDemanded(t *t
 	  {"id":"voteTimeout","name":"Timeout","type":"string","required":true,"writable":true,"value":"B5D"},
 	  {"id":"votePercentage","name":"Percentage","type":"long","required":true,"writable":true,"value":"50"}]}`)
 	var captured clients.StartWorkflowInstanceRequest
-	handleStart(mux, &captured, nil, http.StatusCreated)
+	handleStart(t, mux, &captured, nil, http.StatusCreated)
 
 	tool := start_workflow.NewTool(c)
 	out, err := tool.Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
@@ -2128,6 +2145,11 @@ func TestStartWorkflow_LegacyRequiredFieldWithADeclaredDefaultIsNotDemanded(t *t
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// Anchor, for the same reason as above: if nothing were captured at all, "these two keys are
+	// absent" would hold trivially and this test would guard nothing.
+	if captured.FormProperties["decisionInfo"] != "ship it" {
+		t.Fatalf("the supplied value did not reach the request, so its omissions prove nothing: %+v", captured.FormProperties)
+	}
 	for _, id := range []string{"voteTimeout", "votePercentage"} {
 		if v, present := captured.FormProperties[id]; present {
 			t.Errorf("%s = %q, want absent", id, v)
@@ -2143,7 +2165,7 @@ func TestStartWorkflow_ExplicitlyClearingAFieldWithADefaultIsStillMissing(t *tes
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Voting", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
 	handleLegacyForm(mux, workflowID, `{"formProperties":[{"id":"voteTimeout","name":"Timeout","type":"string","required":true,"writable":true,"value":"B5D"}]}`)
 	started := false
-	handleStart(mux, nil, &started, http.StatusCreated)
+	handleStart(t, mux, nil, &started, http.StatusCreated)
 
 	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
@@ -2287,7 +2309,7 @@ func TestStartWorkflow_LegacyMultiValueStaysACommaSeparatedString(t *testing.T) 
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Multi", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
 	handleLegacyForm(mux, workflowID, `{"formProperties":[{"id":"tags","name":"Tags","type":"term","required":false,"writable":true,"multiValue":true}]}`)
 	var captured clients.StartWorkflowInstanceRequest
-	handleStart(mux, &captured, nil, http.StatusCreated)
+	handleStart(t, mux, &captured, nil, http.StatusCreated)
 
 	if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
 		WorkflowDefinitionID: workflowID,
