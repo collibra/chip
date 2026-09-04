@@ -701,6 +701,65 @@ func GetDqJobRunMonitors(ctx context.Context, collibraHttpClient *http.Client, j
 	return &result, code, nil
 }
 
+// DqColumnShape is a single observed value shape for a column (ColumnShape in dq-v1-public-oas-spec.yaml).
+type DqColumnShape struct {
+	Pattern    string  `json:"pattern"`
+	Count      int64   `json:"count"`
+	Percentage float64 `json:"percentage"`
+}
+
+// DqColumnProfile is the profiling statistics for a single column from one job run
+// (ColumnProfile in dq-v1-public-oas-spec.yaml). mean/median/q1/q3 are populated only for numeric columns.
+type DqColumnProfile struct {
+	ColumnName   string          `json:"columnName"`
+	DefinedType  string          `json:"definedType,omitempty"`
+	InferredType string          `json:"inferredType,omitempty"`
+	ValueCount   int64           `json:"valueCount"`
+	NullCount    int64           `json:"nullCount"`
+	EmptyCount   int64           `json:"emptyCount"`
+	UniqueCount  int64           `json:"uniqueCount"`
+	Min          string          `json:"min,omitempty"`
+	Max          string          `json:"max,omitempty"`
+	Mean         string          `json:"mean,omitempty"`
+	Median       string          `json:"median,omitempty"`
+	Q1           string          `json:"q1,omitempty"`
+	Q3           string          `json:"q3,omitempty"`
+	TopShapes    []DqColumnShape `json:"topShapes,omitempty"`
+}
+
+// DqJobRunProfileResults is the paginated per-column profiling results for a job run
+// (JobRunProfileResults in dq-v1-public-oas-spec.yaml, from the PUBLIC
+// GET /jobRuns/{jobRunId}/profile).
+type DqJobRunProfileResults struct {
+	JobRunID string            `json:"jobRunId"`
+	JobName  string            `json:"jobName"`
+	RunDate  *DqPublicRunDate  `json:"runDate,omitempty"`
+	Offset   int64             `json:"offset"`
+	Limit    int64             `json:"limit"`
+	Total    *int64            `json:"total,omitempty"`
+	Results  []DqColumnProfile `json:"results"`
+}
+
+// GetDqJobRunProfile reads the per-column profiling statistics captured by a job run via the PUBLIC
+// GET /jobRuns/{jobRunId}/profile. Fetches a single page (the first 100 columns, with the total column
+// count included) — the same no-pagination-params style as GetDqJobRunMonitors.
+func GetDqJobRunProfile(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (*DqJobRunProfileResults, int, error) {
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID) + "/profile?limit=100&offset=0&includeTotal=true"
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var result DqJobRunProfileResults
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, code, fmt.Errorf("failed to parse job run profile response: %w", err)
+	}
+	return &result, code, nil
+}
+
 func SearchCancellableDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobName string) ([]DqJobRun, int, error) {
 	return searchDqJobRunsByName(ctx, collibraHttpClient, jobName, DqCancellableRunStates)
 }

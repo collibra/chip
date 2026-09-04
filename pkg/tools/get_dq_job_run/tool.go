@@ -1,17 +1,19 @@
 // Package get_dq_job_run implements the dq_get_job_run MCP tool — read the full details of a single
 // Collibra data-quality job run by id.
 //
-// The flow combines two public GETs:
+// The flow combines three public GETs:
 //
 //	Run     : GET /rest/dq/1.0/jobRuns/{jobRunId}       -> lifecycle fields, and (once terminal)
 //	          score/rowCount/executionTimeSeconds/activeMonitors/breakingMonitors.
 //	Monitors: GET /rest/dq/1.0/jobRuns/{jobRunId}/monitors -> the per-monitor (adaptive + custom)
 //	          breakdown behind the run's aggregate score.
+//	Profile : GET /rest/dq/1.0/jobRuns/{jobRunId}/profile -> per-column profiling statistics
+//	          (value/null/empty/unique counts, min/max/mean/median/quartiles, top value shapes).
 //
 // This is a pure read: no confirm checkpoint, no writes. A failure fetching the per-monitor breakdown
-// does not fail the whole call — the run's own details are still returned, with a note in guidance.
-// 400/401/403/404/500 and transport failures are surfaced as messages with actionable guidance rather
-// than Go errors.
+// or the column profile does not fail the whole call — the run's own details are still returned, with
+// a note in guidance for each lookup that failed. 400/401/403/404/500 and transport failures are
+// surfaced as messages with actionable guidance rather than Go errors.
 package get_dq_job_run
 
 import (
@@ -64,6 +66,32 @@ type CustomMonitorResult struct {
 	Dimensions         []string `json:"dimensions,omitempty"`
 }
 
+// ColumnShape is a single observed value shape for a profiled column.
+type ColumnShape struct {
+	Pattern    string  `json:"pattern"`
+	Count      int64   `json:"count"`
+	Percentage float64 `json:"percentage"`
+}
+
+// ColumnProfile is the profiling statistics for a single column from this run. mean/median/q1/q3 are
+// only populated for numeric columns.
+type ColumnProfile struct {
+	ColumnName   string        `json:"columnName"`
+	DefinedType  string        `json:"definedType,omitempty"`
+	InferredType string        `json:"inferredType,omitempty"`
+	ValueCount   int64         `json:"valueCount"`
+	NullCount    int64         `json:"nullCount"`
+	EmptyCount   int64         `json:"emptyCount"`
+	UniqueCount  int64         `json:"uniqueCount"`
+	Min          string        `json:"min,omitempty"`
+	Max          string        `json:"max,omitempty"`
+	Mean         string        `json:"mean,omitempty"`
+	Median       string        `json:"median,omitempty"`
+	Q1           string        `json:"q1,omitempty"`
+	Q3           string        `json:"q3,omitempty"`
+	TopShapes    []ColumnShape `json:"topShapes,omitempty"`
+}
+
 // RunDetail is the full run detail returned on success.
 type RunDetail struct {
 	JobRunID             string                  `json:"jobRunId"`
@@ -83,6 +111,8 @@ type RunDetail struct {
 	ExecutedQuery        string                  `json:"executedQuery,omitempty" jsonschema:"sourceQuery with ${rd}/${rdEnd} substituted for this run."`
 	AdaptiveMonitors     []AdaptiveMonitorResult `json:"adaptiveMonitors,omitempty" jsonschema:"Per-monitor results for the job's built-in adaptive monitors."`
 	CustomMonitors       []CustomMonitorResult   `json:"customMonitors,omitempty" jsonschema:"Per-monitor results for the job's custom DQ rules."`
+	Profile              []ColumnProfile         `json:"profile,omitempty" jsonschema:"Per-column profiling statistics captured during the run (first page, up to 100 columns)."`
+	TotalProfiledColumns *int64                  `json:"totalProfiledColumns,omitempty" jsonschema:"Total number of profiled columns for the run; may exceed len(profile) when there are more than 100."`
 	JobDetailsLink       string                  `json:"jobDetailsLink,omitempty" jsonschema:"Job Details deep-link path (relative to the Collibra instance URL), when jobName is known."`
 }
 
@@ -101,10 +131,12 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title: "Get Data Quality Job Run",
 		Description: "Reads the full details of a single Collibra data-quality job run by its run_id " +
 			"(jobRunId). Returns the run's lifecycle status/activity, timing, and — once the run reaches a " +
-			"terminal state (FINISHED/CANCELLED/FAILED) — its overall score, row count, execution time, and " +
-			"the per-monitor breakdown (adaptive + custom DQ rules) behind that score.\n\n" +
+			"terminal state (FINISHED/CANCELLED/FAILED) — its overall score, row count, execution time, " +
+			"the per-monitor breakdown (adaptive + custom DQ rules) behind that score, and per-column " +
+			"profiling statistics (value/null/empty/unique counts, min/max/mean/median/quartiles, top value " +
+			"shapes) captured during the run.\n\n" +
 			"Fields that are only meaningful once a run has finished (score, rowCount, executionTimeSeconds, " +
-			"per-monitor results) are absent while the run is still in progress.\n\n" +
+			"per-monitor results, profile) are absent while the run is still in progress.\n\n" +
 			"Example user requests: \"Show me the details of DQ run <id>\"; \"What was the score for run <id>?\"; " +
 			"\"Why did job run <id> fail?\"",
 		Handler:     handler(collibraClient),
@@ -131,37 +163,57 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 
 		detail := runDetail(run)
 
+		var notes []string
+
 		monitors, mCode, mErr := clients.GetDqJobRunMonitors(ctx, collibraClient, runID)
 		if mErr != nil {
-			out := Output{
-				Status:  StatusSuccess,
-				Message: fmt.Sprintf("Found run %q, but could not read its per-monitor results.", runID),
-				Run:     &detail,
+			notes = append(notes, monitorsLookupNote(mCode, mErr))
+		} else {
+			for _, m := range monitors.AdaptiveMonitors {
+				detail.AdaptiveMonitors = append(detail.AdaptiveMonitors, AdaptiveMonitorResult{
+					MonitorName: m.MonitorName, MonitorType: m.MonitorType, PrimaryColumn: m.PrimaryColumn,
+					State: m.State, ObservedValue: m.ObservedValue, ExpectedMin: m.ExpectedMin,
+					ExpectedMax: m.ExpectedMax, IsSuppressed: m.IsSuppressed, Dimensions: m.Dimensions,
+				})
 			}
-			out.Guidance = monitorsLookupNote(mCode, mErr)
-			return out, nil
-		}
-		for _, m := range monitors.AdaptiveMonitors {
-			detail.AdaptiveMonitors = append(detail.AdaptiveMonitors, AdaptiveMonitorResult{
-				MonitorName: m.MonitorName, MonitorType: m.MonitorType, PrimaryColumn: m.PrimaryColumn,
-				State: m.State, ObservedValue: m.ObservedValue, ExpectedMin: m.ExpectedMin,
-				ExpectedMax: m.ExpectedMax, IsSuppressed: m.IsSuppressed, Dimensions: m.Dimensions,
-			})
-		}
-		for _, m := range monitors.CustomMonitors {
-			detail.CustomMonitors = append(detail.CustomMonitors, CustomMonitorResult{
-				MonitorName: m.MonitorName, State: m.State, Score: m.Score,
-				BreakingPercentage: m.BreakingPercentage, RowsPassing: m.RowsPassing,
-				RowsBreaking: m.RowsBreaking, RowsTotal: m.RowsTotal, Exception: m.Exception,
-				Dimensions: m.Dimensions,
-			})
+			for _, m := range monitors.CustomMonitors {
+				detail.CustomMonitors = append(detail.CustomMonitors, CustomMonitorResult{
+					MonitorName: m.MonitorName, State: m.State, Score: m.Score,
+					BreakingPercentage: m.BreakingPercentage, RowsPassing: m.RowsPassing,
+					RowsBreaking: m.RowsBreaking, RowsTotal: m.RowsTotal, Exception: m.Exception,
+					Dimensions: m.Dimensions,
+				})
+			}
 		}
 
-		return Output{
+		profile, pCode, pErr := clients.GetDqJobRunProfile(ctx, collibraClient, runID)
+		if pErr != nil {
+			notes = append(notes, profileLookupNote(pCode, pErr))
+		} else {
+			for _, c := range profile.Results {
+				shapes := make([]ColumnShape, 0, len(c.TopShapes))
+				for _, s := range c.TopShapes {
+					shapes = append(shapes, ColumnShape{Pattern: s.Pattern, Count: s.Count, Percentage: s.Percentage})
+				}
+				detail.Profile = append(detail.Profile, ColumnProfile{
+					ColumnName: c.ColumnName, DefinedType: c.DefinedType, InferredType: c.InferredType,
+					ValueCount: c.ValueCount, NullCount: c.NullCount, EmptyCount: c.EmptyCount,
+					UniqueCount: c.UniqueCount, Min: c.Min, Max: c.Max, Mean: c.Mean, Median: c.Median,
+					Q1: c.Q1, Q3: c.Q3, TopShapes: shapes,
+				})
+			}
+			detail.TotalProfiledColumns = profile.Total
+		}
+
+		out := Output{
 			Status:  StatusSuccess,
 			Message: fmt.Sprintf("Found run %q (status %s).", runID, run.Status),
 			Run:     &detail,
-		}, nil
+		}
+		if len(notes) > 0 {
+			out.Guidance = strings.Join(notes, "\n")
+		}
+		return out, nil
 	}
 }
 
@@ -191,6 +243,10 @@ func runDetail(run *clients.DqJobRun) RunDetail {
 
 func monitorsLookupNote(code int, err error) string {
 	return fmt.Sprintf("The run itself was found, but reading its per-monitor results failed (HTTP %d): %v. Retry, or check the run's monitor breakdown in the Collibra UI.", code, err)
+}
+
+func profileLookupNote(code int, err error) string {
+	return fmt.Sprintf("The run itself was found, but reading its column profile failed (HTTP %d): %v. Retry, or check the run's profile in the Collibra UI.", code, err)
 }
 
 func lookupError(code int, err error, runID string) Output {
