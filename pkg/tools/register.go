@@ -12,8 +12,10 @@ import (
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
+	"github.com/collibra/chip/pkg/tools/create_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/delete_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
@@ -54,6 +56,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
+	"github.com/collibra/chip/pkg/tools/update_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/validate_dq_rule"
 )
 
@@ -107,6 +110,9 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
 	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
+	toolRegister(server, toolConfig, create_dq_rule_template.NewTool(client))
+	toolRegister(server, toolConfig, update_dq_rule_template.NewTool(client))
+	toolRegister(server, toolConfig, delete_dq_rule_template.NewTool(client))
 	toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
 	toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
 	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
