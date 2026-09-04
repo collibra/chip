@@ -1244,6 +1244,68 @@ func SearchDqJobNames(ctx context.Context, collibraHttpClient *http.Client, jobN
 	return names, nil
 }
 
+// dqJobTableSearchResult is the shape of the PUBLIC GET /rest/dq/1.0/jobs (searchJobs) response when
+// filtered by tableName — enough to identify each candidate job and its data location for
+// disambiguation, without a further per-job GET.
+type dqJobTableSearchResult struct {
+	Results []struct {
+		JobName      string         `json:"jobName"`
+		DataLocation DqDataLocation `json:"dataLocation"`
+	} `json:"results"`
+}
+
+// DqJobTableMatch is a job matched by table name, with just enough data-location context to
+// disambiguate between several jobs on differently-located tables of the same name.
+type DqJobTableMatch struct {
+	JobName        string
+	SchemaName     string
+	DataSourceName string
+	EdgeSiteName   string
+	ConnectionName string
+}
+
+// SearchDqJobsByTable returns the jobs whose data location's tableName exactly matches tableName (and,
+// if schemaName is non-empty, whose data location's schemaName also exactly matches), via the PUBLIC
+// GET /rest/dq/1.0/jobs (searchJobs) tableName/schemaName filters, paging until results are exhausted.
+func SearchDqJobsByTable(ctx context.Context, collibraHttpClient *http.Client, tableName, schemaName string) ([]DqJobTableMatch, error) {
+	const pageSize = 500
+	var matches []DqJobTableMatch
+	for offset := 0; offset <= 100000; offset += pageSize {
+		v := url.Values{}
+		v.Set("tableName", tableName)
+		if schemaName != "" {
+			v.Set("schemaName", schemaName)
+		}
+		v.Set("limit", strconv.Itoa(pageSize))
+		v.Set("offset", strconv.Itoa(offset))
+		req, err := http.NewRequestWithContext(ctx, "GET", "/rest/dq/1.0/jobs?"+v.Encode(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create jobs-by-table request: %w", err)
+		}
+		body, err := executeRequest(collibraHttpClient, req)
+		if err != nil {
+			return nil, err
+		}
+		var page dqJobTableSearchResult
+		if err := json.Unmarshal(body, &page); err != nil {
+			return nil, fmt.Errorf("failed to parse jobs-by-table response: %w", err)
+		}
+		for _, r := range page.Results {
+			matches = append(matches, DqJobTableMatch{
+				JobName:        r.JobName,
+				SchemaName:     r.DataLocation.SchemaName,
+				DataSourceName: r.DataLocation.DataSourceName,
+				EdgeSiteName:   r.DataLocation.EdgeSiteName,
+				ConnectionName: r.DataLocation.EdgeConnectionName,
+			})
+		}
+		if len(page.Results) < pageSize {
+			break
+		}
+	}
+	return matches, nil
+}
+
 // =====================================================================================
 // DQ permission preflight (DGC-core global permissions).
 //

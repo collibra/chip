@@ -1,12 +1,21 @@
 // Package get_dq_job implements the dq_get_job MCP tool — read the full definition of a single
-// Collibra data-quality job by name.
+// Collibra data-quality job, by name or by the table it's configured on.
 //
-// The flow converges on the public single-job GET, with a fallback for a partial/fuzzy name:
+// By name, the flow converges on the public single-job GET, with a fallback for a partial/fuzzy
+// name:
 //
 //	Exact  : GET /rest/dq/1.0/jobs/{jobName} -> on success, return the job definition.
 //	Fuzzy  : on a 404, GET /rest/dq/1.0/jobs?jobName=<name> (searchJobs, %LIKE% match) -> zero
 //	         matches: not-found error; exactly one: fetch and return it; several: return the
 //	         candidate names (needs_input) so the caller can pick one and re-call with the exact name.
+//
+// By table (when name is not given), the flow searches only, and never matches on job name (job
+// names are free text and not guaranteed to match schema.table):
+//
+//	GET /rest/dq/1.0/jobs?tableName=<name> (searchJobs, exact tableName match) -> zero matches:
+//	not-found error; exactly one: fetch and return its full definition; several: return the
+//	candidates (needs_input) with enough data-location context to disambiguate, so the caller can
+//	re-call with the exact job name.
 //
 // This is a pure read: no confirm checkpoint, no writes. 400/401/403/404/500 and transport failures
 // are surfaced as messages with actionable guidance rather than Go errors.
@@ -31,9 +40,12 @@ const (
 	StatusError      Status = "error"
 )
 
-// Input is the tool's typed input.
+// Input is the tool's typed input. Supply exactly one lookup key: name, or tableName (optionally
+// narrowed by schemaName).
 type Input struct {
-	Name string `json:"name" jsonschema:"Required. The name of the data-quality job to retrieve (a job, also called a 'dataset', is a saved check on one database table), e.g. 'PUBLIC.SAMPLE_DATASET'. An exact match is tried first; if none is found, jobs whose name contains this text are offered as candidates."`
+	Name       string `json:"name,omitempty" jsonschema:"The name of the data-quality job to retrieve (a job, also called a 'dataset', is a saved check on one database table), e.g. 'PUBLIC.SAMPLE_DATASET'. An exact match is tried first; if none is found, jobs whose name contains this text are offered as candidates. Use this OR tableName."`
+	TableName  string `json:"tableName,omitempty" jsonschema:"The exact database table name to find the data-quality job for, e.g. 'NYSE'. Matches the job's configured data-location tableName only — not the job's own name. Use this when you know the table (e.g. from lineage) but not the job name. Use this OR name."`
+	SchemaName string `json:"schemaName,omitempty" jsonschema:"Optional, only with tableName. The exact database schema name to narrow the search, e.g. 'PUBLIC'. Use when several tables share the same tableName in different schemas."`
 }
 
 // JobDetail is the full job definition returned on success.
@@ -57,13 +69,24 @@ type JobDetail struct {
 	JobDetailsLink   string   `json:"jobDetailsLink,omitempty" jsonschema:"Job Details deep-link path (relative to the Collibra instance URL)."`
 }
 
+// TableMatch is a candidate job found by table name, with enough data-location context to tell
+// several same-named tables apart.
+type TableMatch struct {
+	JobName        string `json:"jobName"`
+	SchemaName     string `json:"schemaName,omitempty"`
+	DataSourceName string `json:"dataSourceName,omitempty"`
+	EdgeSiteName   string `json:"edgeSiteName,omitempty"`
+	ConnectionName string `json:"connectionName,omitempty"`
+}
+
 // Output is the typed response.
 type Output struct {
-	Status            Status     `json:"status" jsonschema:"'success' when the job was found; 'needs_input' when the name matched none or several jobs; 'error' for downstream DQ failures."`
-	Message           string     `json:"message" jsonschema:"Human-readable summary."`
-	Job               *JobDetail `json:"job,omitempty" jsonschema:"The job definition, on success."`
-	CandidateJobNames []string   `json:"candidateJobNames,omitempty" jsonschema:"When name matched several jobs: exact names to pick from — re-call with one of these."`
-	Guidance          string     `json:"guidance,omitempty" jsonschema:"On needs_input/error, what to do next."`
+	Status            Status       `json:"status" jsonschema:"'success' when exactly one job was found; 'needs_input' when the lookup key matched none, several, or no jobs; 'error' for downstream DQ failures."`
+	Message           string       `json:"message" jsonschema:"Human-readable summary."`
+	Job               *JobDetail   `json:"job,omitempty" jsonschema:"The job definition, on success."`
+	CandidateJobNames []string     `json:"candidateJobNames,omitempty" jsonschema:"When name matched several jobs: exact names to pick from — re-call with one of these."`
+	Candidates        []TableMatch `json:"candidates,omitempty" jsonschema:"When tableName matched several jobs: pick one by its data location and re-call with its jobName."`
+	Guidance          string       `json:"guidance,omitempty" jsonschema:"On needs_input/error, what to do next."`
 }
 
 // NewTool returns the registered tool.
@@ -72,15 +95,22 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:  "dq_get_job",
 		Title: "Get Data Quality Job",
 		Description: "Reads the full definition of a single Collibra data-quality job (a saved check on ONE " +
-			"database table; also called a 'dataset') by name. Returns its type (PUSHDOWN/PULLUP), edge site, " +
-			"connection, schema/table, source SQL, run-date window, configured monitors (adaptive + custom DQ " +
-			"rules), notifications, and schedule.\n\n" +
-			"An exact name match is tried first. If none is found, jobs whose name CONTAINS the given text are " +
-			"offered as candidates (status=needs_input) so you can pick the exact one and re-call.\n\n" +
+			"database table; also called a 'dataset'), by name or by the table it's configured on. Returns its " +
+			"type (PUSHDOWN/PULLUP), edge site, connection, schema/table, source SQL, run-date window, " +
+			"configured monitors (adaptive + custom DQ rules), notifications, and schedule.\n\n" +
+			"Supply name for an exact-then-fuzzy name lookup: an exact match is tried first, and if none is " +
+			"found, jobs whose name CONTAINS the given text are offered as candidates (status=needs_input) so " +
+			"you can pick the exact one and re-call.\n\n" +
+			"Supply tableName instead (optionally narrowed by schemaName) to find the job by its data-location " +
+			"table — never by the job's own name, since job names are free text and not guaranteed to match " +
+			"schema.table. Useful when you know the table (e.g. from lineage) but not the DQ job name. If " +
+			"several jobs are on same-named tables in different locations, status=needs_input with candidates " +
+			"(schema/data source/connection) to disambiguate — re-call with the chosen jobName.\n\n" +
 			"Note: a job definition has no 'id' or 'status' field in the API — only individual RUNS have a " +
 			"status. Use dq_get_job_run (or find/search run tools) for run-level status, score and results.\n\n" +
 			"Example user requests: \"Show me the data quality job for sales.orders\"; \"What monitors are " +
-			"configured on public.nyse?\"; \"Get the details of the DQ job on my customers table.\"",
+			"configured on public.nyse?\"; \"Get the details of the DQ job on my customers table.\"; \"Is " +
+			"there a DQ job on the ORDERS table?\"",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
@@ -90,11 +120,15 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
 		name := strings.TrimSpace(input.Name)
+		tableName := strings.TrimSpace(input.TableName)
 		if name == "" {
+			if tableName != "" {
+				return handleTableLookup(ctx, collibraClient, tableName, strings.TrimSpace(input.SchemaName))
+			}
 			return Output{
 				Status:   StatusNeedsInput,
 				Message:  "Provide the job to retrieve.",
-				Guidance: "Supply name — the name of the data-quality job to retrieve.",
+				Guidance: "Supply name, or tableName (optionally with schemaName).",
 			}, nil
 		}
 
@@ -132,6 +166,46 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				Guidance:          "Pick the exact name from candidateJobNames and re-call this tool with it.",
 			}, nil
 		}
+	}
+}
+
+// handleTableLookup resolves a job by its data-location table, never by job name (job names are
+// free text and not guaranteed to match schema.table).
+func handleTableLookup(ctx context.Context, collibraClient *http.Client, tableName, schemaName string) (Output, error) {
+	matches, err := clients.SearchDqJobsByTable(ctx, collibraClient, tableName, schemaName)
+	if err != nil {
+		return lookupError(0, err, tableName), nil
+	}
+	switch len(matches) {
+	case 0:
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("No data-quality job configured on table %q was found.", tableName),
+			Guidance: "Verify the table name, or the table may not have a DQ job configured.",
+		}, nil
+	case 1:
+		job, code, err := clients.GetDqJob(ctx, collibraClient, matches[0].JobName)
+		if err != nil {
+			return lookupError(code, err, matches[0].JobName), nil
+		}
+		return success(job, matches[0].JobName), nil
+	default:
+		candidates := make([]TableMatch, len(matches))
+		for i, m := range matches {
+			candidates[i] = TableMatch{
+				JobName:        m.JobName,
+				SchemaName:     m.SchemaName,
+				DataSourceName: m.DataSourceName,
+				EdgeSiteName:   m.EdgeSiteName,
+				ConnectionName: m.ConnectionName,
+			}
+		}
+		return Output{
+			Status:     StatusNeedsInput,
+			Candidates: candidates,
+			Message:    fmt.Sprintf("Found %d jobs on table %q.", len(matches), tableName),
+			Guidance:   "Pick the job whose data location matches, then re-call this tool with its jobName.",
+		}, nil
 	}
 }
 

@@ -229,3 +229,101 @@ func TestTransportError(t *testing.T) {
 		t.Fatalf("expected error on transport failure, got %q (%s)", out.Status, out.Message)
 	}
 }
+
+// ---- table-based lookup ----
+
+func TestMissingNameAndTableNameNeedsInput(t *testing.T) {
+	server := newServer(t, handlers{}) // no endpoint should be hit
+	defer server.Close()
+
+	out := run(t, server, tools.Input{})
+	if out.Status != tools.StatusNeedsInput {
+		t.Fatalf("expected needs_input when both name and tableName are empty, got %q (%s)", out.Status, out.Message)
+	}
+}
+
+func TestTableNoMatchIsError(t *testing.T) {
+	var query url.Values
+	server := newServer(t, handlers{
+		search: func(w http.ResponseWriter, r *http.Request) {
+			query = r.URL.Query()
+			jsonHandler(http.StatusOK, map[string]any{"results": []map[string]any{}})(w, r)
+		},
+	})
+	defer server.Close()
+
+	out := run(t, server, tools.Input{TableName: "NYSE"})
+	if out.Status != tools.StatusError {
+		t.Fatalf("expected error when no jobs match the table, got %q (%s)", out.Status, out.Message)
+	}
+	if got := query.Get("tableName"); got != "NYSE" {
+		t.Errorf("expected the tableName filter to be sent, got %q", got)
+	}
+}
+
+func TestTableSingleMatchIsFetchedAndReturned(t *testing.T) {
+	server := newServer(t, handlers{
+		get: jsonHandler(http.StatusOK, sampleJob()),
+		search: jsonHandler(http.StatusOK, map[string]any{"results": []map[string]any{
+			{"jobName": "public.nyse", "dataLocation": map[string]any{"schemaName": "PUBLIC"}},
+		}}),
+	})
+	defer server.Close()
+
+	out := run(t, server, tools.Input{TableName: "NYSE"})
+	if out.Status != tools.StatusSuccess {
+		t.Fatalf("expected success, got %q (%s)", out.Status, out.Message)
+	}
+	if out.Job == nil || out.Job.JobName != "public.nyse" {
+		t.Fatalf("expected the resolved job returned, got %+v", out.Job)
+	}
+}
+
+func TestTableMultipleMatchesNeedsSelection(t *testing.T) {
+	server := newServer(t, handlers{
+		search: jsonHandler(http.StatusOK, map[string]any{"results": []map[string]any{
+			{"jobName": "public.nyse", "dataLocation": map[string]any{"schemaName": "PUBLIC", "dataSourceName": "PRODSALESDB"}},
+			{"jobName": "sandbox.nyse_copy", "dataLocation": map[string]any{"schemaName": "SANDBOX", "dataSourceName": "DEVDB"}},
+		}}),
+	})
+	defer server.Close()
+
+	out := run(t, server, tools.Input{TableName: "NYSE"})
+	if out.Status != tools.StatusNeedsInput {
+		t.Fatalf("expected needs_input for multiple matches, got %q (%s)", out.Status, out.Message)
+	}
+	if len(out.Candidates) != 2 {
+		t.Fatalf("expected 2 candidates, got %v", out.Candidates)
+	}
+	if out.Candidates[0].SchemaName != "PUBLIC" || out.Candidates[1].DataSourceName != "DEVDB" {
+		t.Errorf("expected data-location context on candidates, got %+v", out.Candidates)
+	}
+}
+
+func TestTableSearchTransportError(t *testing.T) {
+	server := newServer(t, handlers{})
+	server.Close()
+
+	out := run(t, server, tools.Input{TableName: "NYSE"})
+	if out.Status != tools.StatusError {
+		t.Fatalf("expected error on transport failure, got %q (%s)", out.Status, out.Message)
+	}
+}
+
+func TestTableSingleMatchGetErrorSurfaces(t *testing.T) {
+	server := newServer(t, handlers{
+		get: jsonHandler(http.StatusForbidden, map[string]any{"message": "boom"}),
+		search: jsonHandler(http.StatusOK, map[string]any{"results": []map[string]any{
+			{"jobName": "public.nyse"},
+		}}),
+	})
+	defer server.Close()
+
+	out := run(t, server, tools.Input{TableName: "NYSE"})
+	if out.Status != tools.StatusError {
+		t.Fatalf("expected error, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, "403") {
+		t.Errorf("expected message to mention 403, got %q", out.Message)
+	}
+}
