@@ -15,15 +15,16 @@ import (
 // (system) templates; custom templates are user-defined. Field names follow the
 // public /rest/dq/1.0/ruleTemplates API.
 type DQRuleTemplate struct {
-	ID                string   `json:"id"`
-	Name              string   `json:"ruleTemplateName"`
-	Description       string   `json:"description,omitempty"`
-	SQL               string   `json:"sql,omitempty"`
-	Dialect           string   `json:"dialect,omitempty"`
-	Dimensions        []string `json:"dimensions,omitempty"`
-	Tolerance         *int     `json:"tolerance,omitempty"`
-	IsSystem          bool     `json:"isSystem"`
-	DeployedRuleCount int64    `json:"deployedRuleCount"`
+	ID                   string   `json:"id"`
+	Name                 string   `json:"ruleTemplateName"`
+	Description          string   `json:"description,omitempty"`
+	SQL                  string   `json:"sql,omitempty"`
+	Dialect              string   `json:"dialect,omitempty"`
+	Dimensions           []string `json:"dimensions,omitempty"`
+	Tolerance            *int     `json:"tolerance,omitempty"`
+	IsSystem             bool     `json:"isSystem"`
+	DeployedRuleCount    int64    `json:"deployedRuleCount"`
+	BusinessRuleAssetIDs []string `json:"businessRuleAssetIds,omitempty"`
 }
 
 // dqRuleTemplateListResponse is the paginated list envelope
@@ -118,7 +119,7 @@ func GetDQRuleTemplate(ctx context.Context, client *http.Client, ruleTemplateNam
 		case http.StatusForbidden:
 			return nil, fmt.Errorf("getting dq rule template: missing permission to view templates: %s", string(respBody))
 		case http.StatusNotFound:
-			return nil, fmt.Errorf("getting dq rule template: template %q not found: %s", ruleTemplateName, string(respBody))
+			return nil, fmt.Errorf("getting dq rule template: %w: %q: %s", ErrDQRuleTemplateNotFound, ruleTemplateName, string(respBody))
 		default:
 			return nil, fmt.Errorf("getting dq rule template: unexpected status %d: %s", status, string(respBody))
 		}
