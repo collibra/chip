@@ -73,7 +73,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"This tool does NOT set answers — the created assessment comes back with the template's questions unanswered. " +
 			"Use the returned question ids with edit_assessment to fill in the answers afterwards.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.assessments", "dgc.assessments-conduct-assessments"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }

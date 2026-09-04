@@ -35,7 +35,7 @@ type Input struct {
 
 type Output struct {
 	// Assessment is set for a direct lookup, or a filtered lookup with exactly one match.
-	Assessment *clients.Assessment `json:"assessment,omitempty" jsonschema:"the resolved assessment when a direct lookup is used or a filtered lookup matches exactly one. Includes id, name, status, template, content (each question's id, name, description, current answer {type,value} and comments), asset, assessmentReview, assignees, owner, isVisibleToEveryone and timestamps."`
+	Assessment *clients.Assessment `json:"assessment,omitempty" jsonschema:"the resolved assessment when a direct lookup is used or a filtered lookup matches exactly one. Includes id, name, status, template, content (each question's id, name, description, current answer (type, and value or items) and comments), asset, assessmentReview, assignees, owner, isVisibleToEveryone and timestamps."`
 	// Assessments is set for a filtered lookup that matches more than one.
 	Assessments []clients.Assessment `json:"assessments,omitempty" jsonschema:"the matching assessments when a filtered lookup returns more than one. Each has the same shape as the assessment field."`
 	NextCursor  string               `json:"nextCursor,omitempty" jsonschema:"cursor for the next page of a filtered lookup, if more results exist; pass it back as 'cursor'."`
@@ -51,7 +51,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Two modes: (1) a direct lookup of a single assessment via assessmentId (its own UUID) or assessmentReviewId (the linked Assessment Review asset UUID); or (2) a filtered lookup combining any of name (partial, case-insensitive), status (DRAFT/SUBMITTED/OBSOLETE), templateId (+templateVersion), assetId, and a lastModifiedFrom/lastModifiedTo range, with limit/cursor for paging. " +
 			"A direct id can't be combined with filters. With no fields at all it lists the assessments you can see. Returns each assessment's status, template, full question/answer content, assignees, owner, visibility, and timestamps.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.assessments"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
 	}
 }

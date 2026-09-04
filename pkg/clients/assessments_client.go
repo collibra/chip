@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -79,21 +80,104 @@ type QuestionAndAnswer struct {
 	Comments    string  `json:"comments,omitempty"`
 }
 
-// Answer is a typed answer. The concrete shape of Value depends on Type
-// (TEXT/HTML/EXPRESSION → string, NUMBER → number, BOOLEAN → bool,
-// DATE → "yyyy-MM-dd", ITEMS/ASSETS/USERORGROUPS/ATTACHMENTS → arrays). It is
-// carried as-is so every answer type round-trips; the tool layer builds and
-// validates the value per type.
+// Answer is a typed answer as returned by GET. The API sends the value in a
+// shape that depends on Type (TEXT/HTML/EXPRESSION/DATE → string, NUMBER →
+// number, BOOLEAN → bool, ITEMS/ASSETS/USERORGROUPS/ATTACHMENTS → arrays), so
+// the wire form is untyped. UnmarshalJSON narrows it onto concrete fields: a
+// scalar onto Value, a list of options onto Items.
+//
+// The fields must stay concrete. A tool schema is generated from these types,
+// and an untyped field makes the reflector emit a subschema with no type at
+// all, which strict MCP clients reject — one such tool can fail a client's
+// whole tool import.
 type Answer struct {
+	Type  string       `json:"type"`
+	Value string       `json:"value,omitempty"`
+	Items []AnswerItem `json:"items,omitempty"`
+}
+
+// AnswerItem is one selected option of a choice (ITEMS) answer.
+type AnswerItem struct {
+	ID    string `json:"id"`
+	Value string `json:"value,omitempty"`
+}
+
+func (a *Answer) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type  string `json:"type"`
+		Value any    `json:"value,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	a.Type = raw.Type
+	if items, ok := answerItems(raw.Value); ok {
+		a.Items = items
+		return nil
+	}
+	a.Value = answerString(raw.Value)
+	return nil
+}
+
+// answerItems recognises the [{id, value}] shape of a choice answer. It reports
+// false for any other list, which then falls back to a string value, so no
+// answer the API sends is dropped.
+func answerItems(v any) ([]AnswerItem, bool) {
+	list, ok := v.([]any)
+	if !ok || len(list) == 0 {
+		return nil, false
+	}
+	items := make([]AnswerItem, 0, len(list))
+	for _, e := range list {
+		m, ok := e.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		id, ok := m["id"].(string)
+		if !ok || id == "" {
+			return nil, false
+		}
+		items = append(items, AnswerItem{ID: id, Value: answerString(m["value"])})
+	}
+	return items, true
+}
+
+// answerString renders an untyped answer value as a string. A value that is not
+// a JSON scalar keeps its JSON form, so it stays readable and round-trips.
+func answerString(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case json.Number:
+		return t.String()
+	default:
+		b, err := json.Marshal(t)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	}
+}
+
+// AnswerInput is the write shape of an answer. Value stays untyped because the
+// API expects a different JSON type per answer type, and the tool layer builds
+// and validates it. It is never part of a tool schema — only Answer is.
+type AnswerInput struct {
 	Type  string `json:"type"`
 	Value any    `json:"value,omitempty"`
 }
 
 // QuestionIDAndAnswer is the write shape: a question id and the answer to set.
 type QuestionIDAndAnswer struct {
-	ID       string  `json:"id"`
-	Answer   *Answer `json:"answer,omitempty"`
-	Comments *string `json:"comments,omitempty"`
+	ID       string       `json:"id"`
+	Answer   *AnswerInput `json:"answer,omitempty"`
+	Comments *string      `json:"comments,omitempty"`
 }
 
 // UpdateAssessmentRequest is the PATCH body. All fields optional (partial
