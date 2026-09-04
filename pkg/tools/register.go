@@ -51,6 +51,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_catalog_columns"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
+	"github.com/collibra/chip/pkg/tools/search_dq_job_runs"
+	"github.com/collibra/chip/pkg/tools/search_dq_jobs"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
@@ -116,6 +118,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, update_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
+	toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
+	toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
