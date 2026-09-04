@@ -16,7 +16,7 @@ and `collibra/dq-rules`' monitor/result vocabulary (PASSING/BREAKING, dimensions
 
 ## Workflow
 
-1. **Get the starting failure.** Call `dq_get_job_run_monitors(run_id=<jobRunId>)`. Note
+1. **Get the starting failure.** Call `dq_get_job_run(run_id=<jobRunId>)`. Note
    every monitor with `state: BREAKING` — its `primaryColumn` and `dimensions` (e.g.
    Completeness/NULL) are what you're chasing upstream.
 2. **Bridge to the lineage graph.** If you only have a DGC asset UUID for the failing
@@ -36,9 +36,9 @@ and `collibra/dq-rules`' monitor/result vocabulary (PASSING/BREAKING, dimensions
    table by calling `dq_get_job(tableName=<displayName>, schemaName=<schema displayName if found>)`,
    using the values resolved in step 4 — never pass `name`, since job names are free text and not
    guaranteed to match `schema.table`. If multiple jobs are returned, first select the latest one
-   by comparing each job's `runDate.value` field. Then call `dq_get_job_run_monitors` on that job
-   and, from its runs, take the single most recent run (by run date/ID, not just the first one
-   returned). Look for `BREAKING` monitors on that run — especially ones in the same dimension as
+   by comparing each job's `runDate.value` field. Then, from its runs, take the single most recent
+   run (by run date/ID, not just the first one returned) and call `dq_get_job_run` on that run.
+   Look for `BREAKING` monitors on that run — especially ones in the same dimension as
    the original failure (e.g. another NULL/Completeness break) — these are candidate root causes.
    - Never check monitors from older/historical runs of the same job — a monitor that broke in
      a prior run but is passing in the latest run is not a live root cause.
