@@ -132,7 +132,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Answer types ASSETS, USERORGROUPS, and ATTACHMENTS are not yet supported and return a per-operation error. " +
 			"The whole request is applied as a single atomic PATCH: every operation is validated first and if any fails, none are applied.",
 		Handler:     handler(collibraClient),
-		Permissions: []string{},
+		Permissions: []string{"dgc.assessments", "dgc.assessments-conduct-assessments"},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(true), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
 	}
 }
@@ -205,7 +205,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				}
 				entry := clients.QuestionIDAndAnswer{
 					ID:     op.QuestionID,
-					Answer: &clients.Answer{Type: answerType, Value: value},
+					Answer: &clients.AnswerInput{Type: answerType, Value: value},
 				}
 				if op.Comments != "" {
 					entry.Comments = chip.Ptr(op.Comments)
