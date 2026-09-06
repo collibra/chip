@@ -66,7 +66,7 @@ const (
 // to leave that part of the template unchanged.
 type Input struct {
 	Name              string   `json:"name" jsonschema:"Required. Name of the existing rule template to update. The template is addressed by name; this tool never renames it."`
-	SQL               string   `json:"sql,omitempty" jsonschema:"Optional. Replacement parameterized SQL, up to 10000 characters, using a {{column}} placeholder for the column being checked. Omit to keep the stored SQL."`
+	SQL               string   `json:"sql,omitempty" jsonschema:"Optional. Replacement parameterized SQL, up to 10000 characters, using {{dq-jobname}} for the job's table and {{column}} for the column being checked. Omit to keep the stored SQL."`
 	Dialect           string   `json:"dialect,omitempty" jsonschema:"Optional. Replacement SQL dialect the query is authored in, e.g. 'snowflake'. Omit to keep the stored dialect. The data quality service rejects a dialect it cannot translate."`
 	Dimensions        []string `json:"dimensions,omitempty" jsonschema:"Optional. Replacement list of data quality dimensions, at least one and at most 20. This REPLACES the stored list rather than adding to it. Omit to keep the stored dimensions."`
 	Description       string   `json:"description,omitempty" jsonschema:"Optional. Replacement description, up to 1000 characters. Omit to keep the stored description."`
@@ -121,7 +121,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "update_data_quality_rule_template",
 		Title: "Update Data Quality Rule Template",
-		Description: "Change an existing data quality rule template — a parameterized SQL pattern, with a {{column}} placeholder, that is deployed as concrete rules " +
+		Description: "Change an existing data quality rule template — a parameterized SQL pattern, with {{dq-jobname}} standing in for the job's table and {{column}} for the column being checked, that is deployed as concrete rules " +
 			"(single data-quality checks on a table's data; Collibra calls them 'monitors') across many jobs (a job, also called a 'dataset', is a saved check on ONE database table). " +
 			"The template is identified by name, and the update is partial: supply only the fields you want to change and the rest keep their stored values. This tool cannot rename a template. " +
 			"IMPORTANT: the change ALWAYS cascades to every rule already deployed from the template — the data quality API updates the definition and its deployments in one transaction and offers no way to do one without the other. " +

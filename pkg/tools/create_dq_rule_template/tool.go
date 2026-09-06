@@ -44,7 +44,7 @@ const (
 // Input is the tool's typed input.
 type Input struct {
 	Name              string   `json:"name" jsonschema:"Required. Unique name for the new rule template, up to 255 characters, e.g. 'Row Count Range'. This name is the template's key: every other rule template tool addresses it by name, and creating a template whose name is already taken fails."`
-	SQL               string   `json:"sql" jsonschema:"Required. The parameterized SQL query defining the check, up to 10000 characters. Use a {{column}} placeholder where the column being checked should be substituted at deploy time, e.g. 'select * from @dataset where {{column}} is null'. The data quality service must be able to translate it to the dialects of the jobs it is deployed to."`
+	SQL               string   `json:"sql" jsonschema:"Required. The parameterized SQL query defining the check, up to 10000 characters. Two placeholders are substituted at deploy time: {{dq-jobname}} for the job's table and {{column}} for the column being checked, e.g. 'SELECT * FROM {{dq-jobname}} WHERE {{column}} IS NULL'. The data quality service must be able to translate it to the dialects of the jobs it is deployed to."`
 	Dialect           string   `json:"dialect" jsonschema:"Required. The SQL dialect the query is authored in, e.g. 'snowflake', 'postgres', 'bigquery'. Not a fixed list in the API: the data quality service validates the value and rejects one it does not support."`
 	Dimensions        []string `json:"dimensions" jsonschema:"Required, at least one and at most 20. Data quality dimensions the template's rules contribute to, e.g. ['Completeness'] or ['Validity','Accuracy']. Required by the data quality API even though it reads as optional in some documentation."`
 	Description       string   `json:"description" jsonschema:"Required, up to 1000 characters. Human-readable explanation of what the template checks and when to use it. Required by the data quality API even though it reads as optional in some documentation."`
@@ -89,7 +89,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "create_data_quality_rule_template",
 		Title: "Create Data Quality Rule Template",
-		Description: "Create a reusable data quality rule template — a parameterized SQL pattern, with a {{column}} placeholder, that can later be deployed as concrete rules " +
+		Description: "Create a reusable data quality rule template — a parameterized SQL pattern, with {{dq-jobname}} standing in for the job's table and {{column}} for the column being checked, that can later be deployed as concrete rules " +
 			"(single data-quality checks on a table's data; Collibra calls them 'monitors') across many columns and jobs (a job, also called a 'dataset', is a saved check on ONE database table). " +
 			"Creating a template does not check any data by itself: it adds an entry to the template library, which deploy_data_quality_rule_template then instantiates against real jobs. " +
 			"Use this to add a new reusable check to the library; to change one that already exists use update_data_quality_rule_template, and to write a one-off check on a single job use create_data_quality_rule instead. " +
