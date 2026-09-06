@@ -45,9 +45,10 @@ const (
 type Input struct {
 	Name              string   `json:"name" jsonschema:"Required. Unique name for the new rule template, up to 255 characters, e.g. 'Row Count Range'. This name is the template's key: every other rule template tool addresses it by name, and creating a template whose name is already taken fails."`
 	SQL               string   `json:"sql" jsonschema:"Required. The parameterized SQL query defining the check, up to 10000 characters. Two placeholders are substituted at deploy time: {{dq-jobname}} for the job's table and {{column}} for the column being checked, e.g. 'SELECT * FROM {{dq-jobname}} WHERE {{column}} IS NULL'. The data quality service must be able to translate it to the dialects of the jobs it is deployed to."`
-	Dialect           string   `json:"dialect" jsonschema:"Required. The SQL dialect the query is authored in, e.g. 'snowflake', 'postgres', 'bigquery'. Not a fixed list in the API: the data quality service validates the value and rejects one it does not support."`
+	Dialect           string   `json:"dialect" jsonschema:"Required. The SQL dialect the query is authored in. The data quality service supports exactly 'snowflake', 'bigquery', 'oracle', 'sqlserver', 'spark', 'redshift', 'databricks', 'sap', 'athena' or 'trino', matched case-insensitively, and rejects anything else — note that postgres and mysql are NOT supported, as neither is a deployment target for data quality rules."`
 	Dimensions        []string `json:"dimensions" jsonschema:"Required, at least one and at most 20. Data quality dimensions the template's rules contribute to, e.g. ['Completeness'] or ['Validity','Accuracy']. Required by the data quality API even though it reads as optional in some documentation."`
 	Description       string   `json:"description" jsonschema:"Required, up to 1000 characters. Human-readable explanation of what the template checks and when to use it. Required by the data quality API even though it reads as optional in some documentation."`
+	Tolerance         *int     `json:"tolerance,omitempty" jsonschema:"Optional. Number of failing ('breaking') records allowed before a rule deployed from this template is considered failed — a count, NOT a percentage. Must be 0 or greater. Omit to let the data quality service apply its own default, which is 0, meaning a single failing record fails the rule."`
 	BusinessRuleLinks []string `json:"businessRuleLinks,omitempty" jsonschema:"Optional, up to 100. Business Rule assets in the Collibra catalog that this template implements, each given either as the asset's exact name or as its UUID. Names are resolved to UUIDs before the write; a name matching no asset, or several, is reported as a validation error rather than guessed."`
 	Confirm           bool     `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of the exact template that would be created and writes NOTHING, so it can be reviewed with the user. Set true to actually create the template after the user has approved."`
 }
@@ -60,6 +61,7 @@ type TemplateDefinition struct {
 	SQL                  string   `json:"sql" jsonschema:"The parameterized SQL the template runs."`
 	Dialect              string   `json:"dialect" jsonschema:"The SQL dialect the query is authored in."`
 	Dimensions           []string `json:"dimensions" jsonschema:"Data quality dimensions the template's rules contribute to."`
+	Tolerance            *int     `json:"tolerance,omitempty" jsonschema:"Number of failing records allowed before a deployed rule is considered failed — a count, not a percentage. Absent when the service default applies."`
 	BusinessRuleAssetIDs []string `json:"businessRuleAssetIds,omitempty" jsonschema:"UUIDs of the linked Business Rule assets, after resolving any names supplied in businessRuleLinks."`
 }
 
@@ -71,6 +73,7 @@ type CreatedTemplate struct {
 	SQL                  string   `json:"sql,omitempty"`
 	Dialect              string   `json:"dialect,omitempty"`
 	Dimensions           []string `json:"dimensions,omitempty"`
+	Tolerance            *int     `json:"tolerance,omitempty" jsonschema:"Number of failing records allowed before a deployed rule is considered failed, as stored by the service."`
 	BusinessRuleAssetIDs []string `json:"businessRuleAssetIds,omitempty"`
 	IsSystem             bool     `json:"isSystem" jsonschema:"Whether the template is system-defined (out-of-the-box). Always false for a template created here."`
 }
@@ -94,8 +97,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Creating a template does not check any data by itself: it adds an entry to the template library, which deploy_data_quality_rule_template then instantiates against real jobs. " +
 			"Use this to add a new reusable check to the library; to change one that already exists use update_data_quality_rule_template, and to write a one-off check on a single job use create_data_quality_rule instead. " +
 			"name must be unique across the library — creating a template whose name is already taken fails, so check with list_data_quality_rule_templates first if unsure. " +
-			"sql, dialect, dimensions and description are all required by the data quality service. dialect is the SQL dialect the query is authored in (e.g. 'snowflake'); the service rejects a dialect it cannot translate. " +
-			"businessRuleLinks optionally ties the template to Business Rule assets in the catalog, given by exact name or UUID — names are resolved before the write and an ambiguous name is reported rather than guessed. " +
+			"sql, dialect, dimensions and description are all required by the data quality service. dialect is the SQL dialect the query is authored in and must be one of 'snowflake', 'bigquery', 'oracle', 'sqlserver', 'spark', 'redshift', 'databricks', 'sap', 'athena' or 'trino'; postgres and mysql are not supported. " +
+			"tolerance is the number of failing records a deployed rule allows before it is considered failed — a count, not a percentage — and defaults to 0, meaning one failing record fails the rule. businessRuleLinks optionally ties the template to Business Rule assets in the catalog, given by exact name or UUID — names are resolved before the write and an ambiguous name is reported rather than guessed. " +
 			"Built around a confirm checkpoint: confirm=false (default) returns a PREVIEW of the exact template that would be created and writes nothing — review it with the user; confirm=true creates it. " +
 			"Returns the created template including its server-assigned id. Requires permission to manage rule templates. " +
 			"Example user requests: \"Add a reusable null-check template\"; \"Create a rule template for row count ranges in Snowflake\"; \"Make a template that enforces our email format rule\".",
@@ -146,6 +149,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			SQL:                  definition.SQL,
 			Dialect:              definition.Dialect,
 			Dimensions:           definition.Dimensions,
+			Tolerance:            definition.Tolerance,
 			BusinessRuleAssetIDs: definition.BusinessRuleAssetIDs,
 		})
 		if err != nil {
@@ -162,6 +166,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				SQL:                  created.SQL,
 				Dialect:              created.Dialect,
 				Dimensions:           created.Dimensions,
+				Tolerance:            created.Tolerance,
 				BusinessRuleAssetIDs: created.BusinessRuleAssetIDs,
 				IsSystem:             created.IsSystem,
 			},
@@ -187,13 +192,15 @@ func validate(input Input) (*TemplateDefinition, *Output) {
 	case len(sql) > maxSQLLength:
 		return nil, invalid(fmt.Sprintf("sql is %d characters; the maximum is %d.", len(sql), maxSQLLength))
 	case dialect == "":
-		return nil, invalid("dialect is required — the SQL dialect the query is authored in, e.g. 'snowflake' or 'postgres'.")
+		return nil, invalid("dialect is required — the SQL dialect the query is authored in, one of 'snowflake', 'bigquery', 'oracle', 'sqlserver', 'spark', 'redshift', 'databricks', 'sap', 'athena' or 'trino'.")
 	case len(dialect) > maxDialectLength:
 		return nil, invalid(fmt.Sprintf("dialect is %d characters; the maximum is %d.", len(dialect), maxDialectLength))
 	case description == "":
 		return nil, invalid("description is required by the data quality service — a short explanation of what the template checks.")
 	case len(description) > maxDescriptionLength:
 		return nil, invalid(fmt.Sprintf("description is %d characters; the maximum is %d.", len(description), maxDescriptionLength))
+	case input.Tolerance != nil && *input.Tolerance < 0:
+		return nil, invalid(fmt.Sprintf("tolerance is %d; it must be 0 or greater — it is a count of failing records allowed, not a percentage.", *input.Tolerance))
 	case len(input.BusinessRuleLinks) > maxBusinessRuleLinks:
 		return nil, invalid(fmt.Sprintf("businessRuleLinks has %d entries; the maximum is %d.", len(input.BusinessRuleLinks), maxBusinessRuleLinks))
 	}
@@ -209,6 +216,7 @@ func validate(input Input) (*TemplateDefinition, *Output) {
 		SQL:         sql,
 		Dialect:     dialect,
 		Dimensions:  dimensions,
+		Tolerance:   input.Tolerance,
 	}, nil
 }
 
