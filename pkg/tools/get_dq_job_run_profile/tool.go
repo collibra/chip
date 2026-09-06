@@ -1,4 +1,4 @@
-// Package get_dq_job_run_profile implements the dq_get_job_run_profile MCP tool —
+// Package get_dq_job_run_profile implements the get_data_quality_job_run_profile MCP tool —
 // read the column-level profiling statistics a Collibra data-quality job run
 // produced, by run id.
 //
@@ -99,7 +99,7 @@ type Output struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "dq_get_job_run_profile",
+		Name:  "get_data_quality_job_run_profile",
 		Title: "Get Data Quality Job Run Profile",
 		Description: "Reads the column-level profiling statistics produced by a single Collibra data-quality job run, " +
 			"by its run_id (jobRunId). Per column: the type declared by the source schema and the type actually inferred from the " +

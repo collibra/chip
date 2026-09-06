@@ -1,4 +1,4 @@
-// Package get_dq_job_run_monitors implements the dq_get_job_run_monitors MCP tool —
+// Package get_dq_job_run_monitors implements the get_data_quality_job_run_monitors MCP tool —
 // read the per-monitor results, adaptive and custom, that a Collibra data-quality
 // job run produced, by run id.
 //
@@ -113,7 +113,7 @@ type Output struct {
 // NewTool returns the registered tool.
 func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
-		Name:  "dq_get_job_run_monitors",
+		Name:  "get_data_quality_job_run_monitors",
 		Title: "Get Data Quality Job Run Monitors",
 		Description: "Reads the per-monitor results of a single Collibra data-quality job run by its run_id (jobRunId) — both the " +
 			"adaptive monitors DQ learns and maintains itself (nulls, empties, uniqueness, min/max/mean, row count, data type, schema " +
