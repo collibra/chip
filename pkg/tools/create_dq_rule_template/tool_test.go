@@ -52,7 +52,7 @@ func createdTemplate() map[string]any {
 		"id":               "11111111-2222-3333-4444-555555555555",
 		"ruleTemplateName": "Row Count Range",
 		"description":      "Row count within the learned range",
-		"sql":              "select * from @dataset where {{column}} is null",
+		"sql":              "SELECT * FROM {{dq-jobname}} WHERE {{column}} IS NULL",
 		"dialect":          "snowflake",
 		"dimensions":       []string{"Completeness"},
 		"isSystem":         false,
@@ -62,7 +62,7 @@ func createdTemplate() map[string]any {
 func validInput() tools.Input {
 	return tools.Input{
 		Name:        "Row Count Range",
-		SQL:         "select * from @dataset where {{column}} is null",
+		SQL:         "SELECT * FROM {{dq-jobname}} WHERE {{column}} IS NULL",
 		Dialect:     "snowflake",
 		Dimensions:  []string{"Completeness"},
 		Description: "Row count within the learned range",
