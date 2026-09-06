@@ -67,9 +67,10 @@ const (
 type Input struct {
 	Name              string   `json:"name" jsonschema:"Required. Name of the existing rule template to update. The template is addressed by name; this tool never renames it."`
 	SQL               string   `json:"sql,omitempty" jsonschema:"Optional. Replacement parameterized SQL, up to 10000 characters, using {{dq-jobname}} for the job's table and {{column}} for the column being checked. Omit to keep the stored SQL."`
-	Dialect           string   `json:"dialect,omitempty" jsonschema:"Optional. Replacement SQL dialect the query is authored in, e.g. 'snowflake'. Omit to keep the stored dialect. The data quality service rejects a dialect it cannot translate."`
+	Dialect           string   `json:"dialect,omitempty" jsonschema:"Optional. Replacement SQL dialect the query is authored in, one of 'snowflake', 'bigquery', 'oracle', 'sqlserver', 'spark', 'redshift', 'databricks', 'sap', 'athena' or 'trino', matched case-insensitively. postgres and mysql are NOT supported. Omit to keep the stored dialect."`
 	Dimensions        []string `json:"dimensions,omitempty" jsonschema:"Optional. Replacement list of data quality dimensions, at least one and at most 20. This REPLACES the stored list rather than adding to it. Omit to keep the stored dimensions."`
 	Description       string   `json:"description,omitempty" jsonschema:"Optional. Replacement description, up to 1000 characters. Omit to keep the stored description."`
+	Tolerance         *int     `json:"tolerance,omitempty" jsonschema:"Optional. Number of failing ('breaking') records allowed before a rule deployed from this template is considered failed — a count, NOT a percentage. Must be 0 or greater. Omit to let the data quality service apply its own default, which is 0, meaning a single failing record fails the rule. Omit to keep the stored tolerance."`
 	BusinessRuleLinks []string `json:"businessRuleLinks,omitempty" jsonschema:"Optional, up to 100. Replacement list of Business Rule assets this template implements, each given as the asset's exact name or its UUID. This REPLACES the stored links rather than adding to them. Omit to keep the stored links. Names are resolved to UUIDs before the write; an ambiguous name is reported rather than guessed."`
 	Confirm           bool     `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of the merged template, plus the number of deployed rules the change will cascade onto, and writes NOTHING. Set true to apply the update after the user has approved."`
 }
@@ -84,7 +85,7 @@ type TemplateDefinition struct {
 	Dialect              string   `json:"dialect"`
 	Dimensions           []string `json:"dimensions"`
 	BusinessRuleAssetIDs []string `json:"businessRuleAssetIds,omitempty" jsonschema:"UUIDs of the linked Business Rule assets, after resolving any names supplied in businessRuleLinks."`
-	Tolerance            *int     `json:"tolerance,omitempty" jsonschema:"The template's stored tolerance, carried through unchanged. This tool cannot set it."`
+	Tolerance            *int     `json:"tolerance,omitempty" jsonschema:"Number of failing records allowed before a deployed rule is considered failed — a count, not a percentage."`
 }
 
 // DeploymentOutcome is how the cascade landed on one rule deployed from the
@@ -128,7 +129,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"The preview reports how many deployed rules will be affected, and the result reports per-rule outcomes, since a rule can be SKIPPED (for example when the template cannot be translated into that job's dialect) while others take the change. " +
 			"Use this to correct or evolve a template already in the library; to add a new one use create_data_quality_rule_template, and to change a single rule on one job use create_data_quality_rule instead. " +
 			"Out-of-the-box (system) templates are read-only and cannot be updated. " +
-			"dimensions and businessRuleLinks REPLACE the stored lists rather than adding to them; businessRuleLinks accepts Business Rule asset names or UUIDs and resolves names before the write. " +
+			"tolerance is the number of failing records a deployed rule allows before it is considered failed — a count, not a percentage. dimensions and businessRuleLinks REPLACE the stored lists rather than adding to them; businessRuleLinks accepts Business Rule asset names or UUIDs and resolves names before the write. " +
 			"Built around a confirm checkpoint: confirm=false (default) returns a PREVIEW of the merged template and the affected-rule count and writes nothing — review it with the user; confirm=true applies the update. " +
 			"Requires permission to manage rule templates. " +
 			"Example user requests: \"Update the null-check template's SQL\"; \"Change the dimensions on our row count template\"; \"Fix the template and push it to everything using it\".",
@@ -168,7 +169,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{
 				Status:   StatusValidationError,
 				Message:  fmt.Sprintf("No changes were supplied for rule template %q.", name),
-				Guidance: "Supply at least one of sql, dialect, dimensions, description or businessRuleLinks with a value that differs from the stored one.",
+				Guidance: "Supply at least one of sql, dialect, dimensions, description, tolerance or businessRuleLinks with a value that differs from the stored one.",
 			}, nil
 		}
 
@@ -218,6 +219,9 @@ func validateChanges(input Input) *Output {
 	if len(input.Dimensions) > maxDimensions {
 		return invalid(fmt.Sprintf("dimensions has %d entries; the maximum is %d.", len(input.Dimensions), maxDimensions))
 	}
+	if input.Tolerance != nil && *input.Tolerance < 0 {
+		return invalid(fmt.Sprintf("tolerance is %d; it must be 0 or greater — it is a count of failing records allowed, not a percentage.", *input.Tolerance))
+	}
 	if len(input.BusinessRuleLinks) > maxBusinessRuleLinks {
 		return invalid(fmt.Sprintf("businessRuleLinks has %d entries; the maximum is %d.", len(input.BusinessRuleLinks), maxBusinessRuleLinks))
 	}
@@ -249,6 +253,10 @@ func merge(ctx context.Context, collibraClient *http.Client, input Input, stored
 	if description := strings.TrimSpace(input.Description); description != "" && description != stored.Description {
 		merged.Description = description
 		changed = append(changed, "description")
+	}
+	if input.Tolerance != nil && (stored.Tolerance == nil || *input.Tolerance != *stored.Tolerance) {
+		merged.Tolerance = input.Tolerance
+		changed = append(changed, "tolerance")
 	}
 	if len(input.Dimensions) > 0 {
 		dimensions, out := cleanDimensions(input.Dimensions)
