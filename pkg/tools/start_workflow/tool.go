@@ -5,7 +5,9 @@
 // clients.WorkflowDefinition.StartFormJSONModelAvailable) — this tool fetches and submits through
 // whichever one the definition actually uses; the caller never needs to know which.
 //
-// This tool WRITES to Collibra once started. Everything up to confirm=true is read-only.
+// This tool WRITES to Collibra once started. Everything up to confirm=true is read-only. The
+// confirm gate is a checkpoint for the USER, not for the caller: the preview exists to be shown
+// and answered, so confirm=true belongs in a later turn than the preview it approves.
 package start_workflow
 
 import (
@@ -54,7 +56,12 @@ type Input struct {
 	// with an SDK-level message that names neither the field nor the convention.
 	FormProperties map[string]string `json:"formProperties,omitempty" jsonschema:"Values for the workflow's start-form fields, keyed by field id (see a prior needs_input response's formFields[].id) — e.g. {\"reason\": \"Need it for Q3 reporting\"}. Every value is a STRING, never an array or a number. A field marked multiValue in formFields takes several values as ONE comma-separated string, and that includes the single-value case — e.g. {\"relatedAssets\": \"uuid-a,uuid-b\"} or {\"relatedAssets\": \"uuid-a\"}. Omit or partially supply to have the tool report which required fields are still missing or invalid. Not needed for workflows with no start form."`
 
-	Confirm bool `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of exactly what will be started WITHOUT starting anything — review it with the user. true starts the workflow."`
+	// "Do not chain it yourself" is not redundant with "review it with the user". Observed live: a
+	// caller previewed, reviewed the preview only itself, and re-called with confirm=true in the
+	// SAME turn — reading the user's original "start it" as approval. The gate held mechanically
+	// (nothing was written before confirm=true) and was still worthless, because no human saw the
+	// payload. Naming the obligation is not enough; name the turn boundary.
+	Confirm bool `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of exactly what will be started WITHOUT starting anything. true starts the workflow, and is only correct AFTER the user has SEEN a preview and replied approving it. Do NOT set true on a first call, and do NOT follow your own preview with confirm=true in the same turn — end the turn on the preview and let the user answer. The user asking to start a workflow is NOT that approval: they have not seen the payload their request produced."`
 }
 
 // FormFieldOption is one allowed value for a FormField whose Options is set.
@@ -125,6 +132,11 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"this can take more than one round. Nothing is written until status=preview, which appears only once every " +
 			"requirement is satisfied. confirm=false (default) returns that preview without starting anything; " +
 			"confirm=true starts it.\n\n" +
+			"NEVER start a workflow on your own authority. Starting one is irreversible — there is no cancel tool — " +
+			"and it routes real tasks to real people. confirm=true is therefore the USER's decision, not yours: show " +
+			"them the preview, end your turn, and start only after they answer. Previewing and confirming in the same " +
+			"turn is not a checkpoint; and a user who asked you to start a workflow has not thereby approved a payload " +
+			"they have not seen.\n\n" +
 			"Even a clean preview does not guarantee the start will succeed: Collibra enforces who may actually start a " +
 			"given workflow at start time, and runs the workflow's own logic synchronously up to its first wait state, " +
 			"so a failure partway through creates NO instance at all — never assume a partial start.\n\n" +
@@ -250,7 +262,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 				// the form exists — then confirms and starts a process with every value unset.
 				FormFields:     toFormFields(formFields),
 				FormProperties: effective,
-				Message:        fmt.Sprintf("Preview only — nothing started. Will start workflow %q%s.%s Review with the user, then call again with confirm=true.", def.Name, previewBusinessItemClause(needsBusinessItem, businessItemID), unknownKeyClause(unknownKeys)),
+				// "then call again with confirm=true" named the next CALL and not the turn
+				// boundary, so it could be satisfied without ever stopping — and the obvious
+				// reading was to make that call immediately. The stop has to come first.
+				Message: fmt.Sprintf("Preview only — nothing started. Will start workflow %q%s.%s Show this preview to the user and END YOUR TURN. Only once they have seen it and answered, re-call with confirm=true.", def.Name, previewBusinessItemClause(needsBusinessItem, businessItemID), unknownKeyClause(unknownKeys)),
 			}, nil
 		}
 
