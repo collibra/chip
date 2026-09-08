@@ -29,11 +29,34 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+var dataQualityGatedTools = []string{
+	"get_data_quality_job_run_profile",
+	"get_data_quality_job_run_monitors",
+}
+
+func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range dataQualityGatedTools {
+		if slices.Contains(names, name) {
+			t.Errorf("expected %q to be absent without the %q feature; got tools=%v", name, tools.DataQualityFeature, names)
+		}
+	}
+}
+
+func TestRegisterAll_DataQualityToolsVisibleWhenEnabled(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.DataQualityFeature}})
+	for _, name := range dataQualityGatedTools {
+		if !slices.Contains(names, name) {
+			t.Errorf("expected %q to be present with the %q feature; got tools=%v", name, tools.DataQualityFeature, names)
+		}
+	}
+}
+
 func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
 	// Every gate on, so a feature-flagged tool can't skip the annotation check.
 	cfg := &chip.ServerToolConfig{
 		EnableDebugTools: true,
-		Experimental:     []string{tools.ContextSpecificationsFeature, skills.FeatureName},
+		Experimental:     []string{tools.ContextSpecificationsFeature, tools.DataQualityFeature, skills.FeatureName},
 	}
 	for _, tool := range listTools(t, cfg) {
 		if tool.Title == "" {

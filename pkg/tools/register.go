@@ -29,6 +29,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_dq_job"
 	"github.com/collibra/chip/pkg/tools/get_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/get_dq_job_run_monitors"
+	"github.com/collibra/chip/pkg/tools/get_dq_job_run_profile"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_results"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_template"
@@ -62,6 +64,10 @@ import (
 // ContextSpecificationsFeature is the experimental-feature identifier used to
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
+
+// DataQualityFeature is the experimental-feature identifier used to gate the
+// data quality tools.
+const DataQualityFeature = "data-quality"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -123,6 +129,11 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
+	}
+
+	if toolConfig.IsExperimentalEnabled(DataQualityFeature) {
+		toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
 	}
 
 	if toolConfig.EnableDebugTools {
