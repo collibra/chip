@@ -1,0 +1,8 @@
+inspect-ai
+# mcp 2.0.0 renamed McpError -> MCPError, which inspect-ai still imports, so an
+# unpinned install resolves to a combination that cannot load MCP tools at all.
+# inspect-ai's own floor is >=1.23.0; 1.23-1.26 satisfy both.
+mcp>=1.23.0,<2
+anthropic
+httpx
+pyyaml
