@@ -65,6 +65,10 @@ import (
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
 
+// DataQualityFeature is the experimental-feature identifier used to gate the
+// data quality tools.
+const DataQualityFeature = "data-quality"
+
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
 // instead of the standard DGC API.
@@ -120,13 +124,16 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, update_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
 	toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
 	toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
+	}
+
+	if toolConfig.IsExperimentalEnabled(DataQualityFeature) {
+		toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
 	}
 
 	if toolConfig.EnableDebugTools {
