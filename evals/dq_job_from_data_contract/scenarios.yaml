@@ -1,0 +1,95 @@
+# Scenarios for the dq-job-from-data-contract skill behavioral eval.
+#
+# Ported from the skill's own test plan (evals/evals.json in the skill's source
+# tree - see README.md for the full path) rather than written from scratch, so
+# the assertions trace back to that plan's five task evals: full flow, existing-job
+# reuse, verify-and-results, time-slice-not-possible, and the referential-integrity
+# block.
+#
+# Unlike evals/create_data_quality_job's scenarios, each of these drives a
+# *skill-guided workflow* across several tool calls (pull_data_contract_manifest,
+# get_asset_details, create_data_quality_job, find_data_quality_rules,
+# create_data_quality_rule, get_data_quality_rule_results), not one tool's schema.
+# `check` names a function in checks.py: check(calls) -> CheckResult, where calls
+# is the full ordered transcript across every one of those tools.
+#
+# `trials` is 3, not the 5 used in create_data_quality_job/scenarios.yaml - each
+# trial here is a multi-tool-call workflow (several LLM turns, each potentially
+# calling 1+ tools), so a full run is materially more expensive per trial than a
+# single-tool-call scenario. 3 trials still gives a pass-rate signal without
+# ballooning eval cost/runtime.
+#
+# The fixture's data contract ID (see fixtures/mock_collibra.py DATA_CONTRACT_ID)
+# is included directly in each prompt. The real skill would normally resolve this
+# from a data-product/table name via search or get_asset_details relations
+# (SKILL.md Phase 1), but the allowed toolset for this suite (see runner.py) does
+# not include a general asset-search tool, so prompts name the ID directly - this
+# keeps the suite focused on the skill's actual value-add (manifest reading,
+# connection matching, rule mapping, guardrails) rather than on asset discovery,
+# which belongs to collibra/discovery and is already exercised elsewhere.
+
+- name: email-full-flow
+  description: >
+    Stand up contract enforcement from scratch: read the manifest, match the job to
+    the manifest's Snowflake server (not the fixture's decoy Postgres copy), propose
+    tolerance-0 rules for the contract's clauses, and stop before any write.
+  trials: 3
+  prompt: >
+    I just published a data contract in Collibra for our EMPLOYEES table in
+    Snowflake (data contract ID d0000000-0000-0000-0000-000000000001). Can you set
+    up data quality monitoring that actually enforces what the contract promises,
+    not just generic profiling?
+  check: email_full_flow
+
+- name: existing-job-reuse
+  description: >
+    A DQ job already scans PUBLIC.EMPLOYEES (fixture job PUBLIC.EMPLOYEES_1). The
+    skill should detect it, run the duplicate-rule check before proposing anything
+    new, and prefer reusing the job over creating a second one.
+  trials: 3
+  prompt: >
+    There's already a DQ job scanning our PUBLIC.EMPLOYEES table. I've got a data
+    contract on it now (data contract ID d0000000-0000-0000-0000-000000000001). Add
+    the contract's checks to the existing monitoring rather than spinning up a whole
+    new job if you can.
+  check: existing_job_reuse
+
+- name: verify-and-results
+  description: >
+    Map the contract's clauses to rules, then explain/attempt the results side:
+    there's no on-demand run, so a "passing or failing" verdict has to come from
+    whatever run history get_data_quality_rule_results actually returns.
+  trials: 3
+  prompt: >
+    We have a data contract (ID d0000000-0000-0000-0000-000000000001) on the
+    employees table but I'm not confident the data meets it. Add the contract's
+    quality rules and then tell me whether it's passing or failing.
+  check: verify_and_results
+
+- name: timeslice-latest-only
+  description: >
+    EMPLOYEES' only date-like column, DATE_OF_HIRE, is stored as VARCHAR (see
+    fixtures/mock_collibra.py TABLE_COLUMNS) - there is no genuine load timestamp.
+    The skill should recognize this and not invent a time-slice column on a
+    non-date field.
+  trials: 3
+  prompt: >
+    When you set up the DQ job for the employees data contract (ID
+    d0000000-0000-0000-0000-000000000001), I only want each run to check
+    recently-loaded records, not rescan the whole table every time. Can you
+    configure that?
+  check: timeslice_latest_only
+
+- name: referential-integrity-clause-blocked
+  description: >
+    The manifest's DEPARTMENT_ID clause requires a row in DEPARTMENTS to exist
+    (fixtures/mock_collibra.py MANIFEST_YAML) - a cross-table check these tools
+    cannot express (rule 8: no JOIN/subquery support). The skill should still
+    propose the single-table clauses (EMPLOYEE_ID, EMAIL) but decline this one
+    explicitly rather than silently dropping it or approximating it.
+  trials: 3
+  prompt: >
+    The EMPLOYEES data contract (ID d0000000-0000-0000-0000-000000000001) also says
+    every DEPARTMENT_ID must exist in the DEPARTMENTS table. Add that check along
+    with the rest of the contract's rules.
+  check: referential_integrity_clause_blocked
