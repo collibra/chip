@@ -14,8 +14,11 @@ The server can be configured using the following environment variables:
 - `COLLIBRA_MCP_API_URL` - Collibra API base URL (e.g., `https://your-instance.collibra.com`)
 
 ### Authentication Variables (Optional)
-- `COLLIBRA_MCP_API_USR` - Collibra username (optional if using client-provided auth)
-- `COLLIBRA_MCP_API_PWD` - Collibra password (optional if using client-provided auth)
+- `COLLIBRA_MCP_API_USR` - Collibra username (optional if using client-provided or OAuth auth)
+- `COLLIBRA_MCP_API_PWD` - Collibra password (optional if using client-provided or OAuth auth)
+- `COLLIBRA_MCP_API_OAUTH_CLIENT_ID` - OAuth 2.0 client ID for the client credentials grant (cannot be combined with `COLLIBRA_MCP_API_USR`/`COLLIBRA_MCP_API_PWD`)
+- `COLLIBRA_MCP_API_OAUTH_CLIENT_SECRET` - OAuth 2.0 client secret (required together with the client ID)
+- `COLLIBRA_MCP_API_OAUTH_TOKEN_URL` - OAuth 2.0 token endpoint (optional, default: `<COLLIBRA_MCP_API_URL>/rest/oauth/v2/token`)
 
 ### Optional Variables
 - `COLLIBRA_MCP_MODE` - Server mode: `stdio` (default), `http`, `http-sse`, or `http-streamable`
@@ -43,6 +46,10 @@ api:
   url: "https://your-collibra-instance.com"
   username: "your-username"      # optional - can be provided by client
   password: "your-password"      # optional - can be provided by client
+  # oauth:                       # optional - alternative to username/password
+  #   client-id: "your-client-id"
+  #   client-secret: "your-client-secret"
+  #   token-url: ""              # optional, default: <url>/rest/oauth/v2/token
   http-skip-tls-verify: false
   proxy: "http://proxy.example.com:8080"  # optional
 
@@ -74,6 +81,10 @@ The configuration is organized into two main sections:
 - `url` - Collibra API base URL (required)
 - `username` - Authentication username (optional - can be provided by client requests)
 - `password` - Authentication password (optional - can be provided by client requests)
+- `oauth` section (optional - OAuth 2.0 client credentials, cannot be combined with `username`/`password`):
+  - `client-id` - OAuth client ID registered in Collibra
+  - `client-secret` - OAuth client secret (required together with `client-id`)
+  - `token-url` - Token endpoint (optional, default: `<url>/rest/oauth/v2/token`)
 - `http-skip-tls-verify` - Whether to skip TLS certificate verification (boolean)
 - `proxy` - HTTP proxy URL for API requests (optional)
 
@@ -90,7 +101,7 @@ The configuration is organized into two main sections:
 
 ## Authentication Approaches
 
-The server supports two authentication methods:
+The server supports three authentication methods:
 
 ### Server-wide Authentication
 Configure credentials at the server level. All API requests will use these credentials:
@@ -106,6 +117,17 @@ Let MCP clients provide Basic Auth headers with each request:
 - MCP clients include `Authorization: Basic <credentials>` headers in requests
 - **Benefit**: Proper attribution of actions to individual users
 - **Note**: Only works with HTTP transport modes, not stdio mode.
+
+### OAuth 2.0 Client Credentials
+Let the server obtain Bearer tokens from Collibra using an OAuth client:
+- Use this when the Collibra instance is fronted by SSO (SAML/OIDC) and users have no local password for Basic auth
+- Register an OAuth client in Collibra with the `client_credentials` grant (see the [client registration API](https://developer.collibra.com/api/references/oauth-client-management/client-registration.md)); the client secret is shown once at registration time
+- Set `COLLIBRA_MCP_API_OAUTH_CLIENT_ID` and `COLLIBRA_MCP_API_OAUTH_CLIENT_SECRET`, or configure `oauth.client-id` and `oauth.client-secret` in the config file
+- The token endpoint defaults to `<api url>/rest/oauth/v2/token`; override it with `COLLIBRA_MCP_API_OAUTH_TOKEN_URL` or `oauth.token-url` only if your instance uses a different one
+- The token is fetched once, cached, and refreshed before it expires; proxy and TLS settings also apply to the token request
+- Works with both stdio and HTTP transport modes
+- Cannot be combined with `username`/`password`; the server refuses to start if both are set
+- **Warning**: Like server-wide Basic auth, this attributes all actions to a single service account
 
 ## Usage Examples
 
@@ -130,6 +152,12 @@ export COLLIBRA_MCP_HTTP_PORT="9000"
 export COLLIBRA_MCP_API_URL="https://your-instance.collibra.com"
 export COLLIBRA_MCP_MODE="http"
 export COLLIBRA_MCP_HTTP_PORT="9000"
+./mcp-server
+
+# OAuth 2.0 client credentials (e.g. SSO-only instances)
+export COLLIBRA_MCP_API_URL="https://your-instance.collibra.com"
+export COLLIBRA_MCP_API_OAUTH_CLIENT_ID="your-client-id"
+export COLLIBRA_MCP_API_OAUTH_CLIENT_SECRET="your-client-secret"
 ./mcp-server
 
 # Skip TLS verification (for development/testing)
@@ -216,6 +244,9 @@ All environment variables use the `COLLIBRA_MCP_` prefix. The configuration syst
 - `COLLIBRA_MCP_API_URL` → `api.url`
 - `COLLIBRA_MCP_API_USR` → `api.username`
 - `COLLIBRA_MCP_API_PWD` → `api.password`
+- `COLLIBRA_MCP_API_OAUTH_CLIENT_ID` → `api.oauth.client-id`
+- `COLLIBRA_MCP_API_OAUTH_CLIENT_SECRET` → `api.oauth.client-secret`
+- `COLLIBRA_MCP_API_OAUTH_TOKEN_URL` → `api.oauth.token-url`
 - `COLLIBRA_MCP_API_SKIP_TLS_VERIFY` → `api.http-skip-tls-verify`
 - `COLLIBRA_MCP_API_PROXY` → `api.proxy`
 - `HTTP_PROXY` → `api.proxy`
