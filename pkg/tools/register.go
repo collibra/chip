@@ -12,8 +12,10 @@ import (
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
+	"github.com/collibra/chip/pkg/tools/create_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/delete_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
@@ -29,6 +31,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_debug_mcp_init_request"
 	"github.com/collibra/chip/pkg/tools/get_dq_job"
 	"github.com/collibra/chip/pkg/tools/get_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/get_dq_job_run_monitors"
+	"github.com/collibra/chip/pkg/tools/get_dq_job_run_profile"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_results"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_template"
@@ -56,12 +60,17 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
+	"github.com/collibra/chip/pkg/tools/update_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/validate_dq_rule"
 )
 
 // ContextSpecificationsFeature is the experimental-feature identifier used to
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
+
+// DataQualityFeature is the experimental-feature identifier used to gate the
+// data quality tools.
+const DataQualityFeature = "data-quality"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -101,28 +110,36 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
-	toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
-	toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
 	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
-	toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, update_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
-	toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
+	}
+
+	if toolConfig.IsExperimentalEnabled(DataQualityFeature) {
+		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
+		toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, create_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, update_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
+		toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
+		toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, update_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
+		toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
+		toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
 	}
 
 	if toolConfig.EnableDebugTools {
