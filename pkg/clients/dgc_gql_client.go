@@ -78,6 +78,11 @@ query GetAssetDetails(%s) {
         name
       }
     }
+    multiValueAttributes(limit: $attributesLimit) {
+      type {
+        name
+      }
+    }
     %s {
       type {
         id
@@ -152,17 +157,18 @@ type AssetQueryData struct {
 }
 
 type Asset struct {
-	ID                string             `json:"id"`
-	DisplayName       string             `json:"displayName"`
-	Type              *AssetType         `json:"type,omitempty"`
-	Domain            *Domain            `json:"domain,omitempty"`
-	Status            *Status            `json:"status,omitempty"`
-	StringAttributes  []StringAttribute  `json:"stringAttributes,omitempty"`
-	NumericAttributes []NumericAttribute `json:"numericAttributes,omitempty"`
-	BooleanAttributes []BooleanAttribute `json:"booleanAttributes,omitempty"`
-	DateAttributes    []DateAttribute    `json:"dateAttributes,omitempty"`
-	OutgoingRelations []OutgoingRelation `json:"outgoingRelations,omitempty"`
-	IncomingRelations []IncomingRelation `json:"incomingRelations,omitempty"`
+	ID                   string                `json:"id"`
+	DisplayName          string                `json:"displayName"`
+	Type                 *AssetType            `json:"type,omitempty"`
+	Domain               *Domain               `json:"domain,omitempty"`
+	Status               *Status               `json:"status,omitempty"`
+	StringAttributes     []StringAttribute     `json:"stringAttributes,omitempty"`
+	NumericAttributes    []NumericAttribute    `json:"numericAttributes,omitempty"`
+	BooleanAttributes    []BooleanAttribute    `json:"booleanAttributes,omitempty"`
+	DateAttributes       []DateAttribute       `json:"dateAttributes,omitempty"`
+	MultiValueAttributes []MultiValueAttribute `json:"multiValueAttributes,omitempty"`
+	OutgoingRelations    []OutgoingRelation    `json:"outgoingRelations,omitempty"`
+	IncomingRelations    []IncomingRelation    `json:"incomingRelations,omitempty"`
 }
 
 type AssetType struct {
@@ -194,6 +200,11 @@ type BooleanAttribute struct {
 
 type DateAttribute struct {
 	Value string         `json:"dateValue"`
+	Type  *AttributeType `json:"type,omitempty"`
+}
+
+type MultiValueAttribute struct {
+	Value string         `json:"value,omitempty"`
 	Type  *AttributeType `json:"type,omitempty"`
 }
 
