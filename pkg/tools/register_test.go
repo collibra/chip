@@ -29,12 +29,32 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+// dataQualityGatedTools is every tool behind DataQualityFeature. Kept in the
+// same order as their registration so the two lists are easy to diff by eye.
 var dataQualityGatedTools = []string{
-	"get_data_quality_job_run_profile",
-	"get_data_quality_job_run_monitors",
+	"create_data_quality_job",
+	"create_data_quality_rule",
+	"get_data_quality_rule",
+	"get_data_quality_rule_results",
+	"validate_data_quality_rule",
+	"list_data_quality_rule_templates",
+	"get_data_quality_rule_template",
+	"deploy_data_quality_rule_template",
 	"create_data_quality_rule_template",
 	"update_data_quality_rule_template",
 	"delete_data_quality_rule_template",
+	"generate_data_quality_rule_sql",
+	"find_data_quality_rules",
+	"dq_cancel_job_run",
+	"dq_delete_job_run",
+	"dq_delete_job",
+	"dq_update_job",
+	"dq_get_job",
+	"dq_get_job_run",
+	"get_data_quality_job_run_profile",
+	"get_data_quality_job_run_monitors",
+	"dq_search_jobs",
+	"dq_search_job_runs",
 }
 
 func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {
