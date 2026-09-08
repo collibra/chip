@@ -32,6 +32,9 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 var dataQualityGatedTools = []string{
 	"get_data_quality_job_run_profile",
 	"get_data_quality_job_run_monitors",
+	"create_data_quality_rule_template",
+	"update_data_quality_rule_template",
+	"delete_data_quality_rule_template",
 }
 
 func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {

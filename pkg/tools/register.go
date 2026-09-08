@@ -118,9 +118,6 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
 	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
 	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, update_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, delete_dq_rule_template.NewTool(client))
 	toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
 	toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
 	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
@@ -138,6 +135,9 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	}
 
 	if toolConfig.IsExperimentalEnabled(DataQualityFeature) {
+		toolRegister(server, toolConfig, create_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, update_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_rule_template.NewTool(client))
 		toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
 		toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
 	}
