@@ -189,6 +189,9 @@ type Tool[In, Out any] struct {
 	Description string
 	Handler     ToolHandlerFunc[In, Out]
 	Permissions []string
+	// TypeSchemas overrides the generated schema of the given types. Use it for a
+	// type whose JSON shape reflection cannot derive, such as a tagged union.
+	TypeSchemas map[reflect.Type]*jsonschema.Schema
 	Annotations *mcp.ToolAnnotations
 }
 
@@ -235,14 +238,14 @@ func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 		Name:         tool.Name,
 		Title:        tool.Title,
 		Description:  tool.Description,
-		InputSchema:  buildSchema[In](),
-		OutputSchema: buildSchema[Out](),
+		InputSchema:  buildSchema[In](tool.TypeSchemas),
+		OutputSchema: buildSchema[Out](tool.TypeSchemas),
 		Annotations:  tool.Annotations,
 	}, handler)
 }
 
-func buildSchema[Schema any]() *jsonschema.Schema {
-	inputSchema, err := jsonschema.For[Schema](nil)
+func buildSchema[Schema any](typeSchemas map[reflect.Type]*jsonschema.Schema) *jsonschema.Schema {
+	inputSchema, err := jsonschema.For[Schema](&jsonschema.ForOptions{TypeSchemas: typeSchemas})
 	if err != nil {
 		log.Fatal(err)
 	}

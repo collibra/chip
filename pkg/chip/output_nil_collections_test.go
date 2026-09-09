@@ -29,7 +29,7 @@ func TestNilCollectionOutputValidatesAgainstSchema(t *testing.T) {
 		ExtraMap  map[string]string `json:"extraMap,omitempty"`
 	}
 
-	resolved, err := buildSchema[output]().Resolve(nil)
+	resolved, err := buildSchema[output](nil).Resolve(nil)
 	if err != nil {
 		t.Fatalf("resolve schema: %v", err)
 	}
