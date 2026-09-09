@@ -12,7 +12,7 @@ type nullableProbe struct {
 }
 
 func TestBuildSchemaCollapsesNullableUnions(t *testing.T) {
-	s := buildSchema[nullableProbe]()
+	s := buildSchema[nullableProbe](nil)
 
 	cases := map[string]string{
 		"list":    "array",
