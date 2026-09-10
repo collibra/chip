@@ -47,6 +47,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/run_dq_job"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
 	"github.com/collibra/chip/pkg/tools/search_catalog_columns"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
@@ -62,6 +63,13 @@ import (
 // ContextSpecificationsFeature is the experimental-feature identifier used to
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
+
+// DataQualityExperimental is the experimental-feature identifier used to gate
+// data quality tools that are still experimental. It is deliberately separate
+// from the generally-available data quality tools, which register
+// unconditionally: a tool graduates by moving out of this block, not by
+// flipping the flag's meaning.
+const DataQualityExperimental = "data-quality-experimental"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -120,6 +128,9 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
 	toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
 	toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
+	if toolConfig.IsExperimentalEnabled(DataQualityExperimental) {
+		toolRegister(server, toolConfig, run_dq_job.NewTool(client))
+	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))

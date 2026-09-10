@@ -29,11 +29,37 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+// dataQualityExperimentalToolNames lists the data quality tools that are still
+// experimental and therefore gated behind tools.DataQualityExperimental. The
+// generally-available data quality tools register unconditionally and are
+// deliberately not covered here.
+var dataQualityExperimentalToolNames = []string{
+	"dq_run_job",
+}
+
+func TestRegisterAll_DataQualityExperimentalToolsHiddenByDefault(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range dataQualityExperimentalToolNames {
+		if slices.Contains(names, name) {
+			t.Fatalf("expected %q to be absent without the %q experimental feature; got tools=%v", name, tools.DataQualityExperimental, names)
+		}
+	}
+}
+
+func TestRegisterAll_DataQualityExperimentalToolsVisibleWhenEnabled(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.DataQualityExperimental}})
+	for _, name := range dataQualityExperimentalToolNames {
+		if !slices.Contains(names, name) {
+			t.Fatalf("expected %q to be present with the %q experimental feature; got tools=%v", name, tools.DataQualityExperimental, names)
+		}
+	}
+}
+
 func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
 	// Every gate on, so a feature-flagged tool can't skip the annotation check.
 	cfg := &chip.ServerToolConfig{
 		EnableDebugTools: true,
-		Experimental:     []string{tools.ContextSpecificationsFeature, skills.FeatureName},
+		Experimental:     []string{tools.ContextSpecificationsFeature, tools.DataQualityExperimental, skills.FeatureName},
 	}
 	for _, tool := range listTools(t, cfg) {
 		if tool.Title == "" {
