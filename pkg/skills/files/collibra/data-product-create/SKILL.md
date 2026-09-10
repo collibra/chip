@@ -105,7 +105,7 @@ adjust (rule 1):
 - **Owner / steward — always ask.** Explicitly ask the user who should own the product (a user or
   group). You may offer the requester as the default, but **present the question** for the user to
   confirm or change — never assign an owner silently. Set it in Phase 7 via `set_responsibility`
-  (`role: "Owner"`/`"Steward"`, `userId` = email/username/UUID).
+  (`role: "Owner"`/`"Steward"`, `userId` = email/username/full name/UUID).
 - **Access Method (Port)** — a single-select whose allowed values are instance-specific. Fetch
   them with `prepare_create_asset` (`assetType: "Data Product Port"`, chosen domain), propose the
   closest fit (for a physical table, typically `Table`), and let the user confirm — never assume a

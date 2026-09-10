@@ -712,14 +712,21 @@ func ListRoles(ctx context.Context, client *http.Client) ([]EditAssetRole, error
 	return all, nil
 }
 
-// EditAssetUser is a Collibra user, used to resolve a username or email
-// to the user's UUID before assigning responsibilities.
+// EditAssetUser is a Collibra user, used to resolve a username, email or
+// display name to the user's UUID before assigning responsibilities.
 type EditAssetUser struct {
 	ID           string `json:"id"`
 	UserName     string `json:"userName,omitempty"`
 	EmailAddress string `json:"emailAddress,omitempty"`
 	FirstName    string `json:"firstName,omitempty"`
 	LastName     string `json:"lastName,omitempty"`
+}
+
+// FullName is the user's display name, "First Last". Either part may be blank
+// on a service account, in which case the other is returned on its own; a user
+// with neither yields "".
+func (u EditAssetUser) FullName() string {
+	return strings.TrimSpace(strings.TrimSpace(u.FirstName) + " " + strings.TrimSpace(u.LastName))
 }
 
 // editAssetUsersList is the paginated wrapper returned by GET /rest/2.0/users.
@@ -730,25 +737,50 @@ type editAssetUsersList struct {
 	Results []EditAssetUser `json:"results"`
 }
 
-// FindUserByUsername returns the user whose username exactly matches, or nil if
-// none exists. The /rest/2.0/users `name` filter is a loose partial search over
-// username, first name and last name, so we scan the results for an exact
-// (case-insensitive) username match rather than trusting the first row —
-// otherwise an unrelated user could be returned and bound.
-func FindUserByUsername(ctx context.Context, client *http.Client, username string) (*EditAssetUser, error) {
+// userNameSearchFields are the fields the /rest/2.0/users `name` filter
+// searches. They are the endpoint's own defaults, sent explicitly so a change
+// of server-side default cannot silently narrow the search: FIRSTNAME_LASTNAME
+// and LASTNAME_FIRSTNAME match the concatenated display name, which is what
+// makes a two-word name like "Jane Smith" resolvable.
+var userNameSearchFields = []string{
+	"USERNAME",
+	"FIRSTNAME",
+	"LASTNAME",
+	"FIRSTNAME_LASTNAME",
+	"LASTNAME_FIRSTNAME",
+}
+
+// FindUsersByName returns EVERY enabled user the /rest/2.0/users `name` filter
+// matches — a loose, case-insensitive partial search over the fields in
+// userNameSearchFields, so "smith" matches the username `jsmith`, the surname
+// Smith and the display name "Jane Smith" alike. Callers reduce the candidates
+// to one (see pkg/tools/resolve); returning them all is what lets an ambiguous
+// name be reported as ambiguous instead of collapsing to an arbitrary row.
+// Disabled accounts are excluded.
+func FindUsersByName(ctx context.Context, client *http.Client, name string) ([]EditAssetUser, error) {
 	params := url.Values{}
-	params.Set("name", username)
-	params.Set("limit", "100")
-	users, err := listUsers(ctx, client, params)
-	if err != nil {
-		return nil, err
+	params.Set("name", name)
+	for _, f := range userNameSearchFields {
+		params.Add("nameSearchFields", f)
 	}
+	params.Set("includeDisabled", "false")
+	params.Set("limit", "100")
+	return listUsers(ctx, client, params)
+}
+
+// exactUsernameMatch returns the user whose username equals username, ignoring
+// case, or nil. The `name` filter is a partial search over username, first
+// name, last name and both concatenations of the two, so callers scan its
+// results for an exact username rather than trusting the first row — otherwise
+// an unrelated user could be returned and bound. Usernames are unique in
+// Collibra, so the first hit is the hit.
+func exactUsernameMatch(users []EditAssetUser, username string) *EditAssetUser {
 	for i := range users {
 		if strings.EqualFold(users[i].UserName, username) {
-			return &users[i], nil
+			return &users[i]
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 // FindUserByEmail returns the user with the given email address, or nil if none

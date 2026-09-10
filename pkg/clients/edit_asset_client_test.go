@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/collibra/chip/pkg/tools/testutil"
@@ -477,5 +479,98 @@ func TestGetEffectiveAssignmentForAsset_ExcludesDerivedRelationTypeFromTrait(t *
 	}
 	if findRel(got, explicitRelID) == nil {
 		t.Errorf("explicit relation from trait inheritance should be kept: %+v", got.RelationTypes)
+	}
+}
+
+// userSearchServer serves GET /rest/2.0/users the way the real endpoint does —
+// a partial, case-insensitive match over the nameSearchFields, including both
+// concatenations of first and last name — and records every query it received.
+func userSearchServer(t *testing.T, queries *[]url.Values, users ...EditAssetUser) *http.Client {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/users", func(w http.ResponseWriter, r *http.Request) {
+		*queries = append(*queries, r.URL.Query())
+		needle := strings.ToLower(r.URL.Query().Get("name"))
+		var matches []EditAssetUser
+		for _, u := range users {
+			first, last := strings.TrimSpace(u.FirstName), strings.TrimSpace(u.LastName)
+			for _, field := range []string{u.UserName, first, last,
+				strings.TrimSpace(first + " " + last), strings.TrimSpace(last + " " + first)} {
+				if field != "" && strings.Contains(strings.ToLower(field), needle) {
+					matches = append(matches, u)
+					break
+				}
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"total": len(matches), "results": matches})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return testutil.NewClient(srv)
+}
+
+// The endpoint's own defaults are sent explicitly, so a change of server-side
+// default cannot silently narrow the search — in particular dropping the two
+// concatenated forms, without which no two-word name would ever match.
+func TestFindUsersByName_SendsSearchFieldsAndExcludesDisabled(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServer(t, &queries,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"})
+
+	users, err := FindUsersByName(t.Context(), client, "Jane Smith")
+	if err != nil {
+		t.Fatalf("FindUsersByName: %v", err)
+	}
+	if len(users) != 1 || users[0].ID != "u-1" {
+		t.Fatalf("expected the concatenated name to match u-1, got %+v", users)
+	}
+	if len(queries) != 1 {
+		t.Fatalf("expected one request, got %d", len(queries))
+	}
+	want := []string{"USERNAME", "FIRSTNAME", "LASTNAME", "FIRSTNAME_LASTNAME", "LASTNAME_FIRSTNAME"}
+	got := queries[0]["nameSearchFields"]
+	if len(got) != len(want) {
+		t.Fatalf("nameSearchFields = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("nameSearchFields = %v, want %v", got, want)
+		}
+	}
+	if v := queries[0].Get("includeDisabled"); v != "false" {
+		t.Fatalf("includeDisabled = %q, want %q", v, "false")
+	}
+}
+
+// FindUsersByName returns every match; reducing them to one is the caller's
+// job, which is what lets an ambiguous name be reported as ambiguous.
+func TestFindUsersByName_ReturnsEveryMatch(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServer(t, &queries,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"},
+		EditAssetUser{ID: "u-2", UserName: "jsmith2", FirstName: "Jane", LastName: "Smith"})
+
+	users, err := FindUsersByName(t.Context(), client, "Jane Smith")
+	if err != nil {
+		t.Fatalf("FindUsersByName: %v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("expected both users, got %+v", users)
+	}
+}
+
+// Recipient resolution still collapses to the one exact username match, so an
+// unrelated partial hit can never be bound.
+func TestFindRecipientByName_RequiresAnExactUsername(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServer(t, &queries,
+		EditAssetUser{ID: "u-1", UserName: "jane.smithers", FirstName: "Janet", LastName: "Smithers"})
+
+	user, err := findRecipientByName(t.Context(), client, "jane.smith")
+	if err != nil {
+		t.Fatalf("findRecipientByName: %v", err)
+	}
+	if user != nil {
+		t.Fatalf("expected no match on a partial username, got %+v", user)
 	}
 }

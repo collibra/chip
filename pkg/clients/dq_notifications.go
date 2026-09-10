@@ -130,10 +130,11 @@ type RecipientResolution struct {
 	Unresolved []string
 }
 
-// ResolveNotificationRecipients resolves each username/email to an active user's UUID. An entry
-// containing '@' is looked up by email, otherwise by username. Not-found or disabled accounts land
-// in Unresolved (the list endpoint excludes disabled users and the email lookup 404s), so the
-// caller can warn and decide whether to proceed without them. Duplicates are de-duped.
+// ResolveNotificationRecipients resolves each username/email/display name to an active user's
+// UUID. An entry containing '@' is looked up by email, otherwise by username and then by display
+// name ("First Last"). Not-found, ambiguous or disabled accounts land in Unresolved (the list
+// endpoint excludes disabled users and the email lookup 404s), so the caller can warn and decide
+// whether to proceed without them. Duplicates are de-duped.
 func ResolveNotificationRecipients(ctx context.Context, client *http.Client, recipients []string) (RecipientResolution, error) {
 	var res RecipientResolution
 	seen := map[string]bool{}
@@ -149,7 +150,7 @@ func ResolveNotificationRecipients(ctx context.Context, client *http.Client, rec
 		if strings.Contains(r, "@") {
 			u, err = FindUserByEmail(ctx, client, r)
 		} else {
-			u, err = FindUserByUsername(ctx, client, r)
+			u, err = findRecipientByName(ctx, client, r)
 		}
 		if err != nil {
 			return res, err
@@ -169,6 +170,31 @@ func ResolveNotificationRecipients(ctx context.Context, client *http.Client, rec
 		}
 	}
 	return res, nil
+}
+
+// findRecipientByName resolves a recipient given as a username or as a display name
+// ("First Last"), in that order of precedence: an exact username wins, otherwise a display name
+// matching exactly one enabled user resolves. No match, or a name several users share, returns nil
+// so the caller lists it as unresolved — a notification must never go to a guessed person.
+func findRecipientByName(ctx context.Context, client *http.Client, name string) (*EditAssetUser, error) {
+	users, err := FindUsersByName(ctx, client, name)
+	if err != nil {
+		return nil, err
+	}
+	if u := exactUsernameMatch(users, name); u != nil {
+		return u, nil
+	}
+	var match *EditAssetUser
+	for i := range users {
+		if !strings.EqualFold(users[i].FullName(), strings.TrimSpace(name)) {
+			continue
+		}
+		if match != nil {
+			return nil, nil
+		}
+		match = &users[i]
+	}
+	return match, nil
 }
 
 // GetCurrentUser returns the invoking user (GET /rest/2.0/users/current) — the default notification

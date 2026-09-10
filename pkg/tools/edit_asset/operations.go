@@ -8,6 +8,7 @@ import (
 
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/collibra/chip/pkg/markdown"
+	"github.com/collibra/chip/pkg/tools/resolve"
 	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/google/uuid"
 )
@@ -378,7 +379,7 @@ func validateResponsibilityOp(ec *editContext, plan opPlan) opPlan {
 		return plan
 	}
 	if strings.TrimSpace(op.UserID) == "" {
-		plan.result = newErrorResult(op, fmt.Sprintf("userId is required for %s (UUID, username, or email)", op.Type))
+		plan.result = newErrorResult(op, fmt.Sprintf(`userId is required for %s (a UUID, email address, username, or full name such as "Jane Smith")`, op.Type))
 		return plan
 	}
 	role, ok := ec.roleByName[normalize(op.Role)]
@@ -393,40 +394,19 @@ func validateResponsibilityOp(ec *editContext, plan opPlan) opPlan {
 	return plan
 }
 
-// resolveOwnerID turns a user identifier (UUID, email, or username) into the
-// owner UUID used by responsibility writes. A UUID passes through; an email
-// goes to the exact email lookup; anything else is treated as a username.
-// Returns ("", nil) when no user matches and ("", err) on a lookup failure.
+// resolveOwnerID turns a user identifier into the owner UUID used by
+// responsibility writes. Delegates to the shared resolver, which accepts a
+// UUID (passed through without a lookup), an email address, a username, or a
+// full name such as "Jane Smith", and returns a self-correcting error naming
+// the candidates when a name is shared by several users.
 func resolveOwnerID(ctx context.Context, client *http.Client, userID string) (string, error) {
-	if _, parseErr := uuid.Parse(userID); parseErr == nil {
-		return userID, nil
-	}
-	var (
-		user *clients.EditAssetUser
-		err  error
-	)
-	if strings.Contains(userID, "@") {
-		user, err = clients.FindUserByEmail(ctx, client, userID)
-	} else {
-		user, err = clients.FindUserByUsername(ctx, client, userID)
-	}
-	if err != nil {
-		return "", err
-	}
-	if user == nil {
-		return "", nil
-	}
-	return user.ID, nil
+	return resolve.UserID(ctx, client, userID, resolve.Hints{})
 }
 
 func executeSetResponsibility(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
 	ownerID, err := resolveOwnerID(ctx, client, plan.op.UserID)
 	if err != nil {
-		plan.result = newErrorResult(plan.op, fmt.Sprintf("resolving user %q: %s", plan.op.UserID, err.Error()))
-		return plan
-	}
-	if ownerID == "" {
-		plan.result = newErrorResult(plan.op, fmt.Sprintf("no user found matching %q (try the user's username, email, or UUID)", plan.op.UserID))
+		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
 	}
 
@@ -449,11 +429,7 @@ func executeSetResponsibility(ctx context.Context, client *http.Client, ec *edit
 func executeRemoveResponsibility(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
 	ownerID, err := resolveOwnerID(ctx, client, plan.op.UserID)
 	if err != nil {
-		plan.result = newErrorResult(plan.op, fmt.Sprintf("resolving user %q: %s", plan.op.UserID, err.Error()))
-		return plan
-	}
-	if ownerID == "" {
-		plan.result = newErrorResult(plan.op, fmt.Sprintf("no user found matching %q (try the user's username, email, or UUID)", plan.op.UserID))
+		plan.result = newErrorResult(plan.op, err.Error())
 		return plan
 	}
 

@@ -95,7 +95,7 @@ type Operation struct {
 
 	// Responsibility ops — set_responsibility and remove_responsibility.
 	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility / remove_responsibility: resource role name (e.g. 'Steward', 'Owner'). The server resolves this to the role UUID. remove_responsibility deletes only a responsibility defined directly on this asset (not one inherited from a parent domain or community)."`
-	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility / remove_responsibility: identifies the user (or user group) the role is assigned to. Accepts a UUID, a username (e.g. 'jane.smith'), or an email address (e.g. 'jane@example.com'). Names are resolved server-side."`
+	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility / remove_responsibility: identifies the user (or user group) the role is assigned to. Accepts a UUID, a username (e.g. 'jane.smith'), an email address (e.g. 'jane@example.com'), or a person's full name (e.g. 'Jane Smith'). Everything but a UUID is resolved to the user's UUID; a full name shared by several users returns an error listing the candidates instead of picking one."`
 }
 
 // OutputStatus summarises the result of the call.

@@ -1,6 +1,9 @@
 package clients
 
-import "testing"
+import (
+	"net/url"
+	"testing"
+)
 
 func TestBuildNotificationOptionsDefaultsAndQuantities(t *testing.T) {
 	opts, unknown := BuildNotificationOptions(
@@ -63,5 +66,32 @@ func TestDefaultNotificationKeysMatchCatalog(t *testing.T) {
 		if n.DefaultEnabled != defaults[n.Key] {
 			t.Errorf("%s: DefaultEnabled=%v but membership=%v", n.Key, n.DefaultEnabled, defaults[n.Key])
 		}
+	}
+}
+
+// A recipient given as a person's name resolves like a username does; a name
+// nobody (or more than one person) answers to still lands in Unresolved, so
+// the caller can warn instead of notifying a guessed account.
+func TestResolveNotificationRecipientsAcceptsFullNames(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServer(t, &queries,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"},
+		EditAssetUser{ID: "u-2", UserName: "bjones", FirstName: "Bob", LastName: "Jones"},
+		EditAssetUser{ID: "u-3", UserName: "bjones2", FirstName: "Bob", LastName: "Jones"})
+
+	res, err := ResolveNotificationRecipients(t.Context(), client,
+		[]string{"Jane Smith", "bjones", "Bob Jones", "Nobody Here"})
+	if err != nil {
+		t.Fatalf("ResolveNotificationRecipients: %v", err)
+	}
+	if len(res.UserIDs) != 2 || res.UserIDs[0] != "u-1" || res.UserIDs[1] != "u-2" {
+		t.Fatalf("expected [u-1 u-2], got %v", res.UserIDs)
+	}
+	if len(res.Usernames) != 2 || res.Usernames[0] != "jane.smith" || res.Usernames[1] != "bjones" {
+		t.Fatalf("expected [jane.smith bjones], got %v", res.Usernames)
+	}
+	// "Bob Jones" is shared by two accounts, "Nobody Here" matches none.
+	if len(res.Unresolved) != 2 || res.Unresolved[0] != "Bob Jones" || res.Unresolved[1] != "Nobody Here" {
+		t.Fatalf("expected [Bob Jones, Nobody Here] unresolved, got %v", res.Unresolved)
 	}
 }

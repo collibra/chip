@@ -276,6 +276,80 @@ func TestCreatedByFilterResolvesUsernameToUUID(t *testing.T) {
 	}
 }
 
+// A createdByFilter naming a person, not a username, resolves through the
+// same display-name path — and when two people share that name the filter
+// reports them as candidates instead of claiming no user matched.
+func TestCreatedByFilterAmbiguousNameReturnsCandidates(t *testing.T) {
+	mux := http.NewServeMux()
+	var got []clients.SearchFilter
+	captureFilters(mux, &got)
+	type userRec struct {
+		ID        string `json:"id"`
+		UserName  string `json:"userName"`
+		FirstName string `json:"firstName"`
+		LastName  string `json:"lastName"`
+	}
+	type userResp struct {
+		Results []userRec `json:"results"`
+		Total   int       `json:"total"`
+	}
+	mux.Handle("/rest/2.0/users", testutil.JsonHandlerOut(func(*http.Request) (int, userResp) {
+		return http.StatusOK, userResp{Total: 2, Results: []userRec{
+			{ID: "user-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"},
+			{ID: "user-2", UserName: "jsmith2", FirstName: "Jane", LastName: "Smith"},
+		}}
+	}))
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	_, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), tools.Input{
+		Query:           "revenue",
+		CreatedByFilter: []string{"Jane Smith"},
+	})
+	if err == nil {
+		t.Fatal("expected an ambiguity error for a shared user name")
+	}
+	for _, want := range []string{"ambiguous", "user-1", "user-2", "jane.smith", "jsmith2", "createdByFilter"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+func TestCreatedByFilterResolvesFullNameToUUID(t *testing.T) {
+	userID := uuid.New().String()
+	mux := http.NewServeMux()
+	var got []clients.SearchFilter
+	captureFilters(mux, &got)
+	type userRec struct {
+		ID        string `json:"id"`
+		UserName  string `json:"userName"`
+		FirstName string `json:"firstName"`
+		LastName  string `json:"lastName"`
+	}
+	type userResp struct {
+		Results []userRec `json:"results"`
+		Total   int       `json:"total"`
+	}
+	mux.Handle("/rest/2.0/users", testutil.JsonHandlerOut(func(*http.Request) (int, userResp) {
+		return http.StatusOK, userResp{Total: 1, Results: []userRec{
+			{ID: userID, UserName: "jsmith", FirstName: "Jane", LastName: "Smith"},
+		}}
+	}))
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	if _, err := tools.NewTool(testutil.NewClient(server)).Handler(t.Context(), tools.Input{
+		Query:           "revenue",
+		CreatedByFilter: []string{"Jane Smith"},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if vals := filterValues(got, "createdBy"); len(vals) != 1 || vals[0] != userID {
+		t.Fatalf("expected createdBy filter [%s], got %v", userID, vals)
+	}
+}
+
 func TestKeywordSearch(t *testing.T) {
 	assetId, _ := uuid.NewUUID()
 	handler := http.NewServeMux()

@@ -19,6 +19,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/resolve"
 	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -63,15 +64,15 @@ type Operation struct {
 	Value string `json:"value,omitempty" jsonschema:"For set_answer with a scalar type: the value as a string (NUMBER must parse as a number, BOOLEAN as 'true'/'false', DATE as 'yyyy-MM-dd', TEXT/HTML/EXPRESSION passed through). For set_status: DRAFT, SUBMITTED, or OBSOLETE. For set_name: the new assessment name. For set_visibility: 'true' or 'false'. Not used for ITEMS answers (use 'items')."`
 
 	// set_owner
-	UserID string `json:"userId,omitempty" jsonschema:"For set_owner: UUID of the user to set as the assessment owner."`
+	UserID string `json:"userId,omitempty" jsonschema:"For set_owner: the user to set as the assessment owner, given as their UUID, email address, username, or full name such as 'Jane Smith'. Anything but a UUID is resolved to the user's UUID; a full name shared by several users returns an error listing the candidates."`
 
 	// set_assignees
-	Assignees []AssigneeInput `json:"assignees,omitempty" jsonschema:"For set_assignees: the full list of assignees to set (replaces existing). Each has an id (UUID) and type (USER or GROUP)."`
+	Assignees []AssigneeInput `json:"assignees,omitempty" jsonschema:"For set_assignees: the full list of assignees to set (replaces existing). Each has a type (USER or GROUP) and an id: for a USER that id may be a UUID, email address, username, or full name such as 'Jane Smith'; for a GROUP it must be the group's UUID."`
 }
 
 // AssigneeInput is one user/group assignment in a set_assignees op.
 type AssigneeInput struct {
-	ID   string `json:"id" jsonschema:"UUID of the user or group."`
+	ID   string `json:"id" jsonschema:"The user or group to assign. For type USER: a UUID, email address, username, or full name such as 'Jane Smith'. For type GROUP: the group's UUID (group names are not resolved)."`
 	Type string `json:"type" jsonschema:"USER or GROUP."`
 }
 
@@ -124,7 +125,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"set_answer (set a question's answer by questionId, with an optional comment); " +
 			"set_status (DRAFT, SUBMITTED, or OBSOLETE); " +
 			"set_name (rename the assessment); " +
-			"set_owner (set the owner by user UUID); " +
+			"set_owner (set the owner, given as a user UUID, email address, username, or full name such as 'Jane Smith'); " +
 			"set_assignees (replace the assignee list with the given users/groups); " +
 			"set_visibility ('true'/'false' for whether the assessment is visible to everyone). " +
 			"For set_answer, supported answer types are TEXT, HTML, EXPRESSION (value passed through), NUMBER (must parse), BOOLEAN ('true'/'false'), DATE ('yyyy-MM-dd') — all via 'value' — and ITEMS (choice questions) via 'items'. " +
@@ -174,7 +175,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 
 		// Phase 2: validate every operation, building the single PATCH as we go.
-		// Any failure aborts before the PATCH (it's all-or-nothing).
+		// Any failure aborts before the PATCH (it's all-or-nothing). set_owner
+		// and set_assignees resolve their user references here — a lookup per
+		// non-UUID name, still ahead of the write, so an unresolvable or
+		// ambiguous name changes nothing.
 		results := make([]OperationResult, len(input.Operations))
 		req := clients.UpdateAssessmentRequest{}
 		failed := false
@@ -231,27 +235,15 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 
 			case OpSetOwner:
 				res.Value = op.UserID
-				if err := validation.UUID("userId", op.UserID); err != nil {
-					res.Status, res.Error = "error", err.Error()
+				ownerID, oerr := resolve.UserID(ctx, collibraClient, op.UserID, resolve.Hints{})
+				if oerr != nil {
+					res.Status, res.Error = "error", oerr.Error()
 					break
 				}
-				req.Owner = &clients.AssessmentRef{ID: op.UserID}
+				req.Owner = &clients.AssessmentRef{ID: ownerID}
 
 			case OpSetAssignees:
-				assignees := make([]clients.Assignee, 0, len(op.Assignees))
-				var aerr error
-				for _, a := range op.Assignees {
-					if err := validation.UUID("assignee id", a.ID); err != nil {
-						aerr = err
-						break
-					}
-					t := strings.ToUpper(strings.TrimSpace(a.Type))
-					if t != "USER" && t != "GROUP" {
-						aerr = fmt.Errorf("assignee type must be USER or GROUP; got %q", a.Type)
-						break
-					}
-					assignees = append(assignees, clients.Assignee{ID: a.ID, Type: t})
-				}
+				assignees, aerr := resolveAssignees(ctx, collibraClient, op.Assignees)
 				if aerr != nil {
 					res.Status, res.Error = "error", aerr.Error()
 					break
@@ -302,6 +294,33 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			Assessment: updated,
 		}, nil
 	}
+}
+
+// resolveAssignees turns each assignee reference into the {id, type} pair the
+// API takes. A USER may be given as a UUID, email address, username or full
+// name — the shared resolver reports an ambiguous name as an error rather than
+// assigning a guessed person. A GROUP must be given as its UUID: group names
+// are not resolvable through the user lookup.
+func resolveAssignees(ctx context.Context, client *http.Client, assignees []AssigneeInput) ([]clients.Assignee, error) {
+	out := make([]clients.Assignee, 0, len(assignees))
+	for _, a := range assignees {
+		switch strings.ToUpper(strings.TrimSpace(a.Type)) {
+		case "USER":
+			id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, clients.Assignee{ID: id, Type: "USER"})
+		case "GROUP":
+			if err := validation.UUID("assignee id", a.ID); err != nil {
+				return nil, fmt.Errorf("%w (a GROUP assignee must be given as its UUID)", err)
+			}
+			out = append(out, clients.Assignee{ID: a.ID, Type: "GROUP"})
+		default:
+			return nil, fmt.Errorf("assignee type must be USER or GROUP; got %q", a.Type)
+		}
+	}
+	return out, nil
 }
 
 // resolveAssessmentID turns the caller's assessment reference into a single
