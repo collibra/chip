@@ -89,9 +89,9 @@ type WorkflowDefinition struct {
 	Description string `json:"description,omitempty"`
 	Enabled     bool   `json:"enabled"`
 	// StartLabel is the caption the product shows on the button/menu entry that starts this
-	// workflow — often NOT the same string as Name (live check: 8 of 26 global definitions differ,
-	// e.g. name "Propose New Business Term" vs label "Propose Business Term"). It is what a user
-	// actually sees and will quote, so search matches on it as well as on Name.
+	// workflow — often NOT the same string as Name (e.g. name "Propose New Business Term" vs label
+	// "Propose Business Term"; how often is measured in list_workflow_definitions' filterByName). It
+	// is what a user actually sees and will quote, so search matches on it as well as on Name.
 	StartLabel string `json:"startLabel,omitempty"`
 	// FormRequired is true when starting this workflow requires filling in a start form — of
 	// EITHER model. Check StartFormJSONModelAvailable to know which.
@@ -217,11 +217,11 @@ func GetWorkflowDefinition(ctx context.Context, client *http.Client, workflowDef
 // Why not the public REST search, which has a `global` query param? Because that param only
 // narrows the rows, it does not change how they are selected: the server picks its
 // authorization-checked code path purely on whether a business item was supplied, so `global=true`
-// with no resource lands in the raw, unchecked query. Measured on a live instance, of 26 enabled
-// global definitions only 8 were startable by a user without an admin role — REST would have
-// offered all 26 and 18 of them would have failed with 403 at start time. The trap is that both
-// sources return an identical 26 for an ADMIN, since admin rights short-circuit the check before
-// it runs: the bug is invisible in testing and only appears for ordinary users in production.
+// with no resource lands in the raw, unchecked query. Measured on a live instance in September
+// 2026, of 26 enabled global definitions only 8 were startable by a user without an admin role —
+// REST would have offered all 26 and 18 of them would have failed with 403 at start time. The trap
+// is that both sources returned an identical 26 for an ADMIN, since admin rights short-circuit the
+// check before it runs: the bug is invisible in testing and only appears for ordinary users.
 //
 // globalCreate is deliberately NOT passed. The server only narrows by that flag when the argument
 // is present, so omitting it returns every global-scope definition the user is permitted to start
@@ -229,11 +229,12 @@ func GetWorkflowDefinition(ctx context.Context, client *http.Client, workflowDef
 // INTENT ("offer this in the Create menu"), not capability: workflows triggered by a timer, or
 // called by another workflow, are commonly global with the flag unset, yet a permitted user can
 // still start them. The tool's contract is "what can I start", so capability is the right
-// criterion. This reverses an earlier, narrower reading of the requirement.
+// criterion.
 //
-// The cost of that choice, measured against a live instance: omitting the argument returns 26
-// definitions instead of 23, and the three extra ones — "Escalation Process" (fires when a task
-// exceeds its due date), "AssessmentPrePopulationFlow" (event-driven), plus a stray test workflow
+// The cost of that choice, measured on a live instance in September 2026: omitting the argument
+// returned 26 definitions instead of 23, and the three extra ones — "Escalation Process" (fires
+// when a task exceeds its due date), "AssessmentPrePopulationFlow" (event-driven), plus a stray
+// test workflow
 // — are startable but not meaningful to start by hand. The tool description therefore tells the
 // caller that some listed workflows are normally triggered automatically, so it can say so rather
 // than blithely offering to start an escalation process.
@@ -340,14 +341,13 @@ func stripGraphQLGlobalIDPrefix(id string) string {
 
 // --- Legacy start form (BPMN <formProperty>) ---
 
-// legacyFormFieldOptionWire is the wire shape shared by all four DropdownValue-carrying fields on
-// the legacy FormProperty (enumValues, proposedDropdownValues, defaultDropdownValues,
-// multiProposedDropdownValues) — but only enumValues (populated for "enum" and "dynamicEnum"
-// field types) is mapped here. The other
-// three carry the SAME shape but belong to resource-PICKER field types (term/user/group/role/
-// community/domainType/vocabulary/assetType/attributeType/relationType/roleInCommunity —
-// the resource-picker types), which this client does not resolve values for; see
-// workflowFormFieldIsResourcePicker.
+// legacyFormFieldOptionWire is the wire shape of a DropdownValue on the legacy FormProperty.
+// Three fields carry it and all three are mapped: enumValues (the "enum" and "dynamicEnum" types)
+// and the proposedDropdownValues / defaultDropdownValues pair the server fills for every
+// resource-PICKER type (legacyResourcePickerFormTypes). The fourth, multiProposedDropdownValues,
+// is a DIFFERENT shape — a map keyed by resource type — and only AbstractMultiDropdownFormType
+// populates it; its one concrete subclass is roleInCommunity, which this client reports as
+// unsupported regardless (legacyRoleInCommunityFormType).
 //
 // idAsString, not id, is the value that must be sent back. The server parses `id` as a UUID and
 // leaves it null whenever the option key is not one — which, for an ordinary textual enum, is
@@ -398,10 +398,15 @@ type legacyStartFormDataWire struct {
 	FormProperties []legacyFormPropertyWire `json:"formProperties"`
 }
 
-// WorkflowFormField is one field of a workflow's start form, normalized from either the legacy
-// or the JSON model into a single shape. Type is the raw underlying type name (legacy model
-// only — see workflowFormFieldIsResourcePicker) or empty (JSON model — see
-// GetWorkflowStartFormJSONModel). Value must be submitted keyed by ID.
+// WorkflowFormField is one field of a workflow's start form, normalized from either the legacy or
+// the JSON model into a single shape. Value must be submitted keyed by ID.
+//
+// Type is the source model's own raw type name, not a normalized enum: a legacy FormProperty type
+// ("enum", "user", "date", …) or a JSON-model col type ("text", "number", "checkboxGroup", …). It
+// is set and load-bearing on BOTH models, each reading only its own vocabulary — the legacy names
+// decide ResourcePicker (legacyResourcePickerFormTypes), the JSON ones decide which values leave
+// as typed JSON rather than as strings (start_workflow's toTypedMap). Dropping it would silently
+// turn every boolean and number back into a string.
 type WorkflowFormField struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -415,7 +420,7 @@ type WorkflowFormField struct {
 	// role, community, term, or similar) rather than a plain value or a fixed choice — resolving
 	// one correctly means looking it up first (e.g. via search_asset_keyword), which is out of
 	// scope for this client. Only ever set for the legacy model; see
-	// workflowFormFieldIsResourcePicker.
+	// WorkflowFormFieldIsResourcePicker.
 	ResourcePicker bool `json:"resourcePicker,omitempty"`
 	// OptionsExhaustive reports whether Options is the COMPLETE set of legal values. Choice fields
 	// (enum, checkbox, radio) and fixed pickers are exhaustive; a picker whose server-supplied list
@@ -453,10 +458,9 @@ type WorkflowFormFieldOption struct {
 }
 
 // legacyResourcePickerFormTypes are the legacy-model field types that ask for a real Collibra
-// resource rather than a plain value or fixed choice — every concrete subclass of
-// the server's dropdown form types (the server populates proposedDropdownValues /
-// #convertMultiDropdownProperties populate proposedDropdownValues/defaultDropdownValues for
-// these, which this client does not resolve).
+// resource rather than a plain value or a fixed choice: the concrete subclasses of the server's
+// AbstractSingleDropdownFormType, which is exactly the set it populates proposedDropdownValues /
+// defaultDropdownValues for.
 var legacyResourcePickerFormTypes = map[string]bool{
 	"term": true, "user": true, "group": true, "role": true,
 	"community": true, "domainType": true, "vocabulary": true, "assetType": true,
@@ -541,16 +545,16 @@ func GetWorkflowStartFormData(ctx context.Context, client *http.Client, workflow
 // the engine is concerned — the process may well branch on one — so they are NOT hidden. What is
 // dropped is their reported value: the button renderer answers "false" for every model value it is
 // given, null included, so the value says nothing about the field and only invites the caller to
-// submit a "default" that was never declared. Measured over 225 BPMN files (75 button
-// declarations): the declared default is "false" 52 times and absent 23 times, and never anything
-// else — so dropping it discards no information in any observed case.
+// submit a "default" that was never declared. Measured September 2026 over 225 BPMN files (75
+// button declarations): the declared default was "false" 52 times and absent 23 times, never
+// anything else — so dropping it discarded no information in any observed case.
 //
 // KNOWN LIMITATION, accepted deliberately. Dropping the value also drops the signal
 // validateFormProperties uses to tell "the engine has a default for this" from "nobody has one",
 // so a REQUIRED button with a declared default would be demanded from the caller although the
 // engine would have resolved it. That costs one extra question whose answer is legal either way —
 // a safe failure. Restoring the signal would mean carrying a second default-ish field through the
-// public shape for a case that does not occur: in the same 225 files every required button is an
+// public shape for a case that does not occur: in that same corpus every required button is an
 // approve/reject on a USER TASK, and this tool only ever reads START forms.
 var legacyButtonFormTypes = map[string]bool{"button": true, "activityButton": true, "taskButton": true}
 
@@ -736,34 +740,33 @@ func GetWorkflowStartFormJSONModel(ctx context.Context, client *http.Client, wor
 	return fields, code, nil
 }
 
+// jsonFormFieldBinding matches a col's `value` when it is a single {{variable}} expression. That
+// variable — NOT the col's `id` — is the process variable the field writes to, and therefore the
+// key a start request must submit it under. `id` is the designer's element id and routinely
+// differs: in the OOTB "Propose New Asset" form the ids are text1 / parent-asset-type /
+// collibra-assetType6 while the bound variables are signifier / intakeVocabulary / conceptType.
+// Submitting under the id leaves those variables unset, and because such start events commonly
+// carry flowable:formFieldValidation="false" the start SUCCEEDS — silently creating an empty
+// result. (Measured over the OOTB form corpus, September 2026: 20 of 35 fields diverge.)
+//
+// Deliberately conservative: only a plain identifier counts as a binding. Anything else (a
+// computed expression, a literal) falls back to the id rather than inventing a key.
+var jsonFormFieldBinding = regexp.MustCompile(`^\s*\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}\s*$`)
+
 // jsonFormBindingBraces finds a {{...}} binding anywhere in a col's `value`. The engine's own rule
 // is simply "if value contains {{, the field writes to a variable"; display-only components
 // (a horizontal rule, a link, a read-only output) have no binding, and emitting them as fillable
 // fields invites the caller to overwrite an existing value or to invent junk process variables.
 //
-// It is a FALLBACK that never fires on anything measured: across every .form in the OOTB and
-// customizations corpora, all 37 bindings are exact single expressions and are matched by the
-// strict pattern above. Removing it was considered and rejected — it would make this client
-// stricter than the engine, so a field the engine WOULD bind (a binding written with surrounding
-// text, a shape the designer does not currently emit) would vanish from the form with no error,
-// and the caller would start the workflow with that variable unset. That silent-omission failure
-// is the one this whole area exists to prevent; an extra field the caller can see in the preview
-// is the lesser risk.
+// It is a FALLBACK that fires on nothing measured — every binding across the OOTB and
+// customizations corpora is an exact single expression matched by the strict pattern above
+// (September 2026: 37 of 37). It stays regardless: dropping it would make this client stricter
+// than the engine, so a field the engine WOULD bind (a binding written with surrounding text, a
+// shape the designer does not currently emit) would vanish from the form with no error and the
+// caller would start the workflow with that variable unset. That silent omission is the failure
+// this whole area exists to prevent; an extra field the caller can see in the preview is the
+// lesser risk.
 var jsonFormBindingBraces = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
-
-// jsonFormFieldBinding matches a col's `value` when it is a single {{variable}} expression. That
-// variable — NOT the col's `id` — is the process variable the field writes to, and therefore the
-// key a start request must submit it under. `id` is the designer's element id and routinely
-// differs: in the OOTB "Propose New Asset" form the ids are text1 / parent-asset-type /
-// collibra-assetType6 while the bound variables are signifier / intakeVocabulary / conceptType
-// (20 of the 35 fields in the OOTB form corpus diverge this way). Submitting under the id leaves
-// those variables unset, and because such start events commonly carry
-// flowable:formFieldValidation="false" the start SUCCEEDS — silently creating an empty result.
-//
-// Deliberately conservative: only a plain identifier counts as a binding. Anything else (a
-// computed expression, a literal) falls back to the id rather than inventing a key. Every field
-// in the OOTB corpus is a plain identifier.
-var jsonFormFieldBinding = regexp.MustCompile(`^\s*\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}\s*$`)
 
 // collectJSONFormFields walks rows[].cols[], appending every input field and recursing into
 // layout containers.
@@ -777,9 +780,9 @@ var jsonFormFieldBinding = regexp.MustCompile(`^\s*\{\{\s*([A-Za-z_][A-Za-z0-9_]
 //	                                                (a panel), NOT a row
 //	extraSettings.expandablePanel                 — a single nested col
 //
-// An earlier version instead scanned a col's direct values for anything rows-shaped. Nothing is
-// stored that way, so no field inside any container was ever found — such a form produced zero
-// fields and no error, and the workflow was then started with an empty form.
+// Guessing structurally instead — scanning a col's direct values for anything rows-shaped — finds
+// nothing, because nothing is stored that way: every field inside a container is dropped, the form
+// yields zero fields and no error, and the workflow is then started with nothing filled in.
 func collectJSONFormFields(rows []rowDefinitionWire, out *[]WorkflowFormField) {
 	for _, row := range rows {
 		collectJSONFormCols(row.Cols, out)
@@ -1017,7 +1020,6 @@ func jsonFormUnsupported(stencil string) string {
 	return ""
 }
 
-// jsonFormSubmissionKey returns the key a value for this col must be sent under.
 // jsonFormSubmissionKey returns the process variable this col writes to, or "" when it writes to
 // none (a display-only component). A single {{identifier}} is the overwhelmingly common shape and
 // is taken verbatim; anything else containing braces still binds a variable in the engine, so the

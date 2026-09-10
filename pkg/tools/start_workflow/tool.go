@@ -13,6 +13,7 @@ package start_workflow
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -212,11 +213,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 
 		// One map, computed once, and from here on the ONLY one: it is validated, previewed and
-		// submitted. Every defect of this shape found in review came from deriving these
-		// separately and letting them drift — a value validated after trimming but sent raw, a
-		// required field reported missing although the form's own default would have filled it.
-		// Anything that changes what gets sent must change it here, above the validation, or the
-		// invariant test that pins validated == previewed == sent will fail.
+		// submitted. Derive these separately and they drift silently — a value validated after
+		// trimming but sent raw, a required field reported missing although the form's own default
+		// would have filled it. Anything that changes what gets sent must change it here, above the
+		// validation, or the invariant test that pins validated == previewed == sent will fail.
 		supplied := normalizeFormProperties(input.FormProperties)
 		effective := effectiveFormProperties(def, formFields, supplied)
 
@@ -418,17 +418,20 @@ func quoteAll(values []string) []string {
 }
 
 // checkNoValueForReadOnlyFields refuses a caller-supplied value for a field the form declares
-// read-only. This is pre-flight on purpose (TOOL_CONTRIBUTION_STANDARDS.md §6.1): on the LEGACY
-// model the engine answers a value for a non-writable property with a hard failure —
+// read-only, before any write (TOOL_CONTRIBUTION_STANDARDS.md §6.1). The legacy engine answers a
+// value for a non-writable property with a hard failure —
 //
 //	if (!isWritable && properties.containsKey(id)) throw ... "form property '<id>' is not writable"
 //
-// — and it throws even when the value is the field's own declared one. The start is transactional,
-// so the whole thing rolls back into an opaque 500 AFTER the user approved the preview. The same
-// rule is applied to the JSON model: a field the form does not collect input for is not one this
-// tool should be writing either, and bouncing it here is recoverable where a 500 is not.
+// — and it tests the KEY, so the field's own declared value and an empty string are refused just
+// the same; key presence is what is checked here for that reason. The start is transactional, so
+// letting one through costs an opaque 500 after the user approved the preview.
 //
-// This matters more since the form's declared value became visible in formFields: echoing that
+// The JSON model's endpoint would accept the key, and the rule is applied there too: a field the
+// form does not collect input for is not one this tool should be writing. What the FORM declares
+// for it is still submitted on that path — see volunteerDefault.
+//
+// This is easy to trip now that the form's declared value is visible in formFields: echoing that
 // value back is the obvious thing for a caller to do, and it is exactly what fails.
 func checkNoValueForReadOnlyFields(fields []clients.WorkflowFormField, supplied map[string]string) []string {
 	var problems []string
@@ -436,7 +439,7 @@ func checkNoValueForReadOnlyFields(fields []clients.WorkflowFormField, supplied 
 		if !f.ReadOnly {
 			continue
 		}
-		if v, ok := supplied[f.ID]; ok && v != "" {
+		if _, ok := supplied[f.ID]; ok {
 			problems = append(problems, fmt.Sprintf("%q is read-only on this form and does not accept a submitted value — remove it from formProperties (the workflow supplies it itself)", f.ID))
 		}
 	}
@@ -480,6 +483,16 @@ func validateFormProperties(fields []clients.WorkflowFormField, supplied map[str
 			if !ok && f.DefaultValue != "" {
 				continue
 			}
+			// A field the form hides UNCONDITIONALLY cannot be asked about either. The product never
+			// renders it, so the user has never seen it and has nothing to answer; the server does not
+			// enforce requiredness for a hidden field, so the product's own start leaves it unset and
+			// succeeds. Reporting it missing only invites a model to invent a value for a field the
+			// author deliberately hid. A CONDITIONALLY hidden one is different and stays reported —
+			// the condition may well hold, and the caller can say so. (A default needs no report at
+			// all: volunteerDefault already put it in `supplied`.)
+			if f.VisibleWhen == clients.VisibleWhenNever {
+				continue
+			}
 			missing = append(missing, f.ID)
 			problems = append(problems, describeMissingField(f))
 			continue
@@ -508,13 +521,20 @@ func describeMissingField(f clients.WorkflowFormField) string {
 
 // checkValue reports what is wrong with a supplied value, if anything.
 //
-// Two rules that used to be missing. A multi-value field takes several option keys in ONE
-// comma-separated string, so each part is checked separately — previously "a,b" was compared
-// whole against the option list, failed, and was re-reported forever with no hint that a list was
-// even legal. And an option list is only enforced when it is closed: for a resource picker the
-// server sends a SHORTLIST, and rejecting anything outside it would refuse ids that are perfectly
-// valid.
+// A non-finite number is checked first because it is the one value that cannot reach Collibra at
+// all: json.Marshal refuses NaN and ±Inf, and a marshal failure carries no HTTP status — which
+// startError has to read as "the request may have been sent", so the caller is told the outcome is
+// unknown and not to retry, for a start that never left the process.
+//
+// An option list is enforced only when it is CLOSED: for a resource picker the server sends a
+// SHORTLIST, and rejecting anything outside it would refuse ids that are perfectly valid. A
+// multi-value field takes several option keys in ONE comma-separated string, so each part is
+// checked separately — comparing "a,b" whole against the option list fails it and re-reports it
+// forever with no hint that a list is even legal.
 func checkValue(f clients.WorkflowFormField, value string) []string {
+	if problem := checkFiniteNumber(f, value); problem != "" {
+		return []string{problem}
+	}
 	if len(f.Options) == 0 || !f.OptionsExhaustive {
 		return nil
 	}
@@ -535,6 +555,21 @@ func checkValue(f clients.WorkflowFormField, value string) []string {
 		problems = append(problems, fmt.Sprintf("%q's value %q is not one of this field's allowed options — pass one of the option keys shown in formFields, not a label", f.ID, part))
 	}
 	return problems
+}
+
+// checkFiniteNumber rejects a value toTypedMap would turn into a non-finite JSON number. Scoped to
+// exactly what that conversion covers — a single-valued numeric field — so the two cannot drift:
+// whatever toTypedMap leaves as a string reaches the server, and rejecting it is the server's job,
+// not this tool's.
+func checkFiniteNumber(f clients.WorkflowFormField, value string) string {
+	if f.MultiValue || !numericFormFieldTypes[strings.ToLower(f.Type)] {
+		return ""
+	}
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil || (!math.IsNaN(n) && !math.IsInf(n, 0)) {
+		return ""
+	}
+	return fmt.Sprintf("%q's value %q is not a finite number — supply an ordinary numeric value", f.ID, value)
 }
 
 func hasOptionKey(options []clients.WorkflowFormFieldOption, key string) bool {
@@ -686,36 +721,31 @@ func parseLooseBool(v string) (bool, bool) {
 	return false, false
 }
 
-// toTypedMap widens the string-keyed form values into the object map the form engine expects,
-// converting the two types where a string would be actively wrong.
-//
-// The whole reason this path uses the form-engine endpoint is that it carries typed values;
-// handing it the string "false" for a boolean field defeats that, because in Groovy a non-empty
-// string is truthy, so a start script's `if (urgent)` takes the branch the user did not choose.
-// Numbers have the same problem in arithmetic. Everything else stays a string: the form model has
-// many textual types and guessing beyond the two unambiguous cases would be worse than not trying.
-// A value that does not parse is passed through untouched so the server can reject it plainly
-// rather than this client silently substituting something.
 // volunteerDefault reports whether this tool should put a field's declared default on the wire
 // when the caller supplied nothing. It governs only what chip volunteers — an explicit value from
-// the caller is always sent.
+// the caller is always sent — and it is reached on the JSON path ONLY, the one path where nothing
+// server-side fills a missing value in.
+//
+// Read-only is deliberately NOT an exclusion, and that is the whole of the model split. The legacy
+// engine rejects any value for a non-writable property, its own default included — but the legacy
+// path volunteers nothing at all, so that rule never reaches this function. The JSON model's start
+// endpoint applies no such rule and resolves no defaults either: its variable extractor is
+// literally `new HashMap<>(submitted)` (Flowable's DefaultSubmittedVariablesExtractor, for which
+// DGC registers no replacement), so whatever this tool omits reaches the process UNSET.
+// Omitting a read-only field's default therefore hands a start script an unbound identifier — an
+// opaque 500, after the user approved a preview — for a workflow the product's own UI starts
+// happily. The caller still may not write the field (see checkNoValueForReadOnlyFields); what goes
+// out is the form's own declared value, not one this tool invented.
 //
 // Optional fields the form will not take a value for are left alone: nothing is lost by staying
 // quiet, and a rejection would arrive AFTER the user approved the preview, naming a field the
 // caller never supplied and cannot correct.
 //
-// Required ones are the opposite, and the distinction is not a nicety. Suppressing the default of
-// a required field turns a start that would have worked into one that can NEVER work: the value
-// cannot come from the caller either (that is what read-only means), so validation reports it
-// missing and the caller has no move left. The default is also not something this tool invented —
-// it is the form's own declared value, so sending it back is the most faithful option available.
+// Required ones are volunteered whatever else is true of them. The form declares the value, the
+// caller cannot be asked for it (read-only) or has never seen the field (never shown), and nothing
+// on this path will bind it otherwise — so the form's own value is both the most faithful option
+// and the only one.
 func volunteerDefault(f clients.WorkflowFormField) bool {
-	// Read-only is absolute, and it is the one case with hard evidence: the legacy engine rejects
-	// ANY value for a non-writable property, its own default included. There is no dead end to
-	// avoid here either, because validateFormProperties no longer demands such a field.
-	if f.ReadOnly {
-		return false
-	}
 	if f.Required {
 		return true
 	}
@@ -745,6 +775,21 @@ func splitMultiValue(v string) []string {
 	return out
 }
 
+// numericFormFieldTypes are the JSON-model field types whose value goes on the wire as a number
+// rather than a string. Shared with checkFiniteNumber so validation covers exactly the values this
+// conversion touches, no more and no less.
+var numericFormFieldTypes = map[string]bool{"integer": true, "number": true, "decimal": true}
+
+// toTypedMap widens the string-keyed form values into the object map the form engine expects,
+// converting the two types where a string would be actively wrong.
+//
+// The whole reason this path uses the form-engine endpoint is that it carries typed values;
+// handing it the string "false" for a boolean field defeats that, because in Groovy a non-empty
+// string is truthy, so a start script's `if (urgent)` takes the branch the user did not choose.
+// Numbers have the same problem in arithmetic. Everything else stays a string: the form model has
+// many textual types and guessing beyond the two unambiguous cases would be worse than not trying.
+// A value that does not parse is passed through untouched so the server can reject it plainly
+// rather than this client silently substituting something.
 func toTypedMap(fields []clients.WorkflowFormField, m map[string]string) map[string]interface{} {
 	if len(m) == 0 {
 		return nil
@@ -760,19 +805,16 @@ func toTypedMap(fields []clients.WorkflowFormField, m map[string]string) map[str
 		// A field that takes several values must go out as a JSON ARRAY, not as the comma-joined
 		// string the caller writes it in. This is the JSON model only: the legacy endpoint takes
 		// map[string]string and the server splits the commas itself, so the same string is right
-		// there and wrong here.
-		//
-		// Proven against a live instance: the OOTB "Issue Creation" form has two multi-value asset
-		// pickers, its start script does `relatedAssets.each { ... }`, and a Groovy String iterates
-		// per CHARACTER — so one asset id was fed to the process 36 times, one character at a
-		// time, and the start died with an opaque HTTP 500 after the user had confirmed it. A
-		// single value is therefore still wrapped: [id], never id.
+		// there and wrong here — nothing splits it, and a Groovy String iterates per CHARACTER, so a
+		// start script's `each` runs once per character of the id. A single value is therefore still
+		// wrapped: [id], never id. Measured against a live instance in
+		// TestStartWorkflow_JSONMultiValueGoesOutAsAnArray.
 		if multi[k] {
 			out[k] = splitMultiValue(v)
 			continue
 		}
-		switch kind[k] {
-		case "boolean", "checkbox":
+		switch t := kind[k]; {
+		case t == "boolean", t == "checkbox":
 			// Not ParseBool alone: it rejects yes/no/on/off, which then travel as non-empty
 			// strings — and every non-empty string is truthy in Groovy, so "no" would switch the
 			// workflow ON while the user is told it was set to no.
@@ -780,7 +822,8 @@ func toTypedMap(fields []clients.WorkflowFormField, m map[string]string) map[str
 				out[k] = b
 				continue
 			}
-		case "integer", "number", "decimal":
+		case numericFormFieldTypes[t]:
+			// checkFiniteNumber has already refused NaN/±Inf, which json.Marshal cannot encode.
 			if n, err := strconv.ParseFloat(v, 64); err == nil {
 				out[k] = n
 				continue

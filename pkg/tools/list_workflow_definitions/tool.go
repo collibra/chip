@@ -223,9 +223,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 // case-sensitive Java String.contains over the name only, and the global GraphQL field takes no
 // name argument at all; the product's own workflow search, meanwhile, is case-insensitive over
 // name OR start label. Matching the server would mean a user who types what they read on screen
-// gets nothing back: live, 8 of 26 global definitions have a start label that differs from the
-// name ("Propose New Business Term" vs "Propose Business Term", "Issue Creation" vs "Log Issue"),
-// and lowercase input misses everything. So the filter is applied here instead, and the scoped
+// gets nothing back: measured on a live instance in September 2026, 8 of 26 global definitions had
+// a start label differing from the name ("Propose New Business Term" vs "Propose Business Term",
+// "Issue Creation" vs "Log Issue"), and lowercase input misses everything regardless. So the
+// filter is applied here instead, and the scoped
 // lane deliberately does not forward `name` to the server — see handler.
 func filterByName(defs []clients.WorkflowDefinition, nameContains string) []clients.WorkflowDefinition {
 	if nameContains == "" {

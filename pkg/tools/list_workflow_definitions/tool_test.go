@@ -481,10 +481,10 @@ func TestListWorkflowDefinitions_ReadOnlyAnnotations(t *testing.T) {
 // filters in Go, while the scoped lane deliberately stops forwarding `name` to the server (whose
 // own filter is a case-SENSITIVE match on the name only) and filters here instead.
 //
-// Both halves matter in practice. Live, 8 of 26 global definitions have a start label that differs
-// from the name — "Propose New Business Term" is labelled "Propose Business Term" — so a user who
-// quotes what the product showed them would otherwise get nothing, and lowercase input would miss
-// everything regardless.
+// Both halves matter in practice: a start label routinely differs from the name — "Propose New
+// Business Term" is labelled "Propose Business Term" — so a user who quotes what the product
+// showed them would otherwise get nothing, and lowercase input would miss everything regardless.
+// How often that happens is measured on filterByName.
 func TestListWorkflowDefinitions_NameMatchIsCaseInsensitiveAndCoversStartLabel(t *testing.T) {
 	const name, label = "Propose New Business Term", "Propose Business Term"
 

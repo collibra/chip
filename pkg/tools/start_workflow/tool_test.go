@@ -67,7 +67,8 @@ func handleLegacyForm(mux *http.ServeMux, id, rawJSON string) {
 }
 
 // handleJSONModelForm serves the GraphQL endpoint's workflowStartFormJsonModel field — itself a
-// JSON-encoded STRING (a Flowable SimpleFormModel), matching the real API's double-encoding.
+// JSON-encoded STRING (a com.flowable.form.model.FlowableFormModel — rows[].cols[], not
+// org.flowable's flat SimpleFormModel), matching the real API's double-encoding.
 func handleJSONModelForm(mux *http.ServeMux, formModelJSON string) {
 	mux.HandleFunc("POST /graphql", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -392,9 +393,10 @@ func TestStartWorkflow_JSONModelForm_CollibraStencilIsResourcePicker(t *testing.
 // children would otherwise be invisible — a form built with a Panel or Subform wrapper is the
 // common case in Workflow Designer, not an edge case.
 //
-// The fixtures use the shapes the platform actually serializes. An earlier version of this test
-// hand-wrote `{"type":"panel","rows":[…]}` — a shape nothing ever emits — so it passed against a
-// parser that found no container field at all. Both real shapes are covered: panel/subform nest
+// The fixtures use the shapes the platform actually serializes, and that is the whole point: a
+// hand-written `{"type":"panel","rows":[…]}` is a shape nothing emits, so a test built on one
+// passes against a parser that finds no container field at all. Both real shapes are covered:
+// panel/subform nest
 // under extraSettings.layoutDefinition.rows, while tabs and friends nest under
 // extraSettings.sections[], whose entries are themselves COL-shaped rather than rows.
 func TestStartWorkflow_JSONModelForm_NestedContainerFieldsAreFound(t *testing.T) {
@@ -777,8 +779,9 @@ func TestStartWorkflow_SuccessReturnsInstanceID(t *testing.T) {
 // (workflows-ootb ProposeNewAssetApp/form-proposeNewAssetForm.form) rather than hand-written.
 //
 // A col's `id` is the designer's element id; the process variable it writes to is the {{...}} in
-// its `value`, and the two routinely differ — 20 of the 35 fields in the OOTB corpus diverge.
-// Submitting under the id leaves the real variables unset, and because these start events carry
+// its `value`, and the two routinely differ (how often is measured on jsonFormFieldBinding, in
+// pkg/clients). Submitting under the id leaves the real variables unset, and because these start
+// events carry
 // flowable:formFieldValidation="false" the start SUCCEEDS: the tool reported success while the
 // proposed asset had no name and no type.
 //
@@ -1022,16 +1025,13 @@ func TestStartWorkflow_PreviewShowsOptionalFieldsNobodyAskedFor(t *testing.T) {
 	}
 }
 
-// TestStartWorkflow_JSONStartFillsDeclaredDefaults is the regression test for a defect found only
-// by starting a real OOTB workflow. A start form's script task reads its inputs as bare Groovy
-// identifiers, so an unbound one raises MissingPropertyException and — the script being
-// synchronous — kills the start with an opaque HTTP 500 naming no field. OOTB "Issue Creation"
-// marks `priority` and `responsibleCommunity` optional while dereferencing both; sending the
-// defaults the form declares is what makes it start, and is also what the product itself submits.
+// TestStartWorkflow_JSONStartFillsDeclaredDefaults pins the rule effectiveFormProperties exists
+// for: on the JSON model a declared default is submitted, because an omitted one reaches the start
+// script as an unbound identifier and kills the start with an opaque 500.
 //
-// The test equally pins what must NOT happen: a declared field with no default is left out rather
-// than nulled. Nulling everything would also fix the start, but the same helper reused for
-// completing a user task would overwrite already-set process variables with null.
+// It equally pins what must NOT happen: a declared field with no default is left OUT rather than
+// nulled. Nulling everything would also fix the start, but the same helper reused for completing a
+// user task would overwrite already-set process variables with null.
 func TestStartWorkflow_JSONStartFillsDeclaredDefaults(t *testing.T) {
 	mux, c := newServer(t)
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Issueish", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
@@ -1101,14 +1101,11 @@ func TestStartWorkflow_JSONStartKeepsKeysNotOnTheForm(t *testing.T) {
 	}
 }
 
-// TestStartWorkflow_UnsuppliedFieldSubmitsTheFormsDefaultNotNull: a form field can declare a
-// defaultValue, which the product pre-fills. A caller who does not mention that field means
-// "leave it as it comes", so the default must be submitted — nulling it produces a different
-// outcome than the same action in the UI.
-//
-// Real case: OOTB "Issue Creation" defaults priority to "Normal". Nulling it created issues with
-// no priority at all, while the product creates them as Normal. An explicit null is still
-// available to a caller who genuinely wants the field cleared — that is what an empty string does.
+// TestStartWorkflow_UnsuppliedFieldSubmitsTheFormsDefaultNotNull covers the caller-facing half of
+// the same rule: a declared default is VISIBLE in formFields, and a caller who does not mention
+// that field means "leave it as it comes", so the default goes out. Nulling it instead produces a
+// different outcome than the identical action in the product UI — an issue with no priority where
+// the form says "Normal". A caller who genuinely wants the field cleared passes an empty string.
 func TestStartWorkflow_UnsuppliedFieldSubmitsTheFormsDefaultNotNull(t *testing.T) {
 	mux, c := newServer(t)
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Defaults", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
@@ -1235,11 +1232,11 @@ func TestStartWorkflow_PreviewShowsTheDefaultsItWillActuallySend(t *testing.T) {
 	}
 }
 
-// --- Findings from the JSON-form-model review round ---
+// --- JSON form model ---
 
-// TestStartWorkflow_ConditionallyVisibleRequiredFieldStaysRequired: an earlier version reported a
-// field with a `visible` expression as optional, reasoning the server would reject the start if it
-// turned out to be needed. It does not: the engine's required-field validator ignores visibility,
+// TestStartWorkflow_ConditionallyVisibleRequiredFieldStaysRequired. A field with a `visible`
+// expression must not be reported optional on the theory that the server will reject the start if
+// it turns out to be needed. It does not: the engine's required-field validator ignores visibility,
 // and these start events commonly set formFieldValidation="false" so no validator runs at all.
 // The real OOTB "Propose New Asset" form has exactly this shape, and the effect was an asset
 // created with no type and no error anywhere. Report it required; surface the condition instead.
@@ -1528,8 +1525,8 @@ func TestStartWorkflow_OptionsExhaustiveReachesTheCaller(t *testing.T) {
 // --- Invariants ---
 //
 // These tests do not check one branch each. They assert a property across the whole space, because
-// the defects they guard kept coming back through NEW branches: three separate review rounds found
-// the same shape of bug in a different place. A per-case test only pins the case it names.
+// the defects they guard recur through NEW branches — the same shape of bug reappearing somewhere
+// no existing case reaches, and a per-case test only pins the case it names.
 
 // TestInvariant_NoStartFailureEverInvitesABlindRetryOfASucceededWrite sweeps every status code the
 // start call can plausibly return and enforces two rules that must hold for a non-idempotent write:
@@ -1556,8 +1553,8 @@ func TestInvariant_NoStartFailureEverInvitesABlindRetryOfASucceededWrite(t *test
 
 			if code == 0 {
 				// A real transport failure, not a status: the start endpoint is simply not
-				// reachable. Writing a 200 here (as an earlier version of this test did) exercised
-				// the success path instead and left the whole code-0 rule unverified.
+				// reachable. A 200 here would exercise the success path instead and leave the
+				// whole code-0 rule unverified.
 				mux.HandleFunc("POST /rest/2.0/workflowInstances", func(w http.ResponseWriter, r *http.Request) {
 					hj, ok := w.(http.Hijacker)
 					if !ok {
@@ -1607,14 +1604,13 @@ func TestInvariant_NoStartFailureEverInvitesABlindRetryOfASucceededWrite(t *test
 
 func itoa(i int) string { return fmt.Sprintf("%d", i) }
 
-// TestInvariant_ValidatedEqualsPreviewedEqualsSent is the structural guard for the defect that
-// recurred in three separate review rounds: the value that gets validated, the value shown in the
-// preview and the value put on the wire were each derived separately and drifted apart — trimmed
-// here but not there, defaults applied after validation rather than before, a list normalised for
-// checking but submitted raw.
+// TestInvariant_ValidatedEqualsPreviewedEqualsSent is the structural guard for the defect this
+// area keeps producing: the value that gets validated, the value shown in the preview and the value
+// put on the wire derived separately and drifting apart — trimmed here but not there, defaults
+// applied after validation rather than before, a list normalised for checking but submitted raw.
 //
-// Rather than pin each instance, this sweeps inputs that have historically broken and asserts the
-// three are identical. Any future change that reintroduces a second derivation fails here.
+// Rather than pin each instance, this sweeps the inputs that break that way and asserts the three
+// are identical. Any change that reintroduces a second derivation fails here.
 func TestInvariant_ValidatedEqualsPreviewedEqualsSent(t *testing.T) {
 	const wf = "22222222-2222-2222-2222-222222222222"
 	model := `{"rows":[{"cols":[
@@ -1739,17 +1735,16 @@ func TestRequiredFieldWithADefaultIsNotReportedMissing(t *testing.T) {
 }
 
 // TestStartWorkflow_NoDefaultIsInjectedForAFieldTheFormWillNotAccept. Defaults are injected so the
-// process sees what the product's own UI would have sent. That reasoning stops at fields the form
-// will not accept a value for: a disabled one (the server rejects a submitted value outright), an
-// unsupported one (the caller was just told it cannot be produced from here), and one the form
-// hides unconditionally. Sending their defaults anyway turns a helpful pre-fill into a 400 — or
-// worse, writes a value for a field the user was never shown.
+// process sees what the product's own UI would have sent. That reasoning stops at two kinds of
+// OPTIONAL field: an unsupported one (the caller was just told its value cannot be produced from
+// here) and one the form hides unconditionally (the user was never shown it). Volunteering their
+// defaults buys nothing and risks a rejection landing after the preview was approved. Read-only is
+// NOT in this set — see TestStartWorkflow_AReadOnlyFieldsDefaultIsSubmittedOnTheJSONPath.
 func TestStartWorkflow_NoDefaultIsInjectedForAFieldTheFormWillNotAccept(t *testing.T) {
 	mux, c := newServer(t)
 	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Guarded", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
 	handleJSONModelForm(mux, `{"rows":[{"cols":[
 	  {"id":"f1","type":"text","label":"Subject","isRequired":true,"value":"{{subject}}"},
-	  {"id":"f2","type":"text","label":"Disabled","value":"{{locked}}","defaultValue":"lockedDefault","enabled":false},
 	  {"id":"f3","type":"collibra-fileUpload","label":"Attachment","value":"{{upload}}","defaultValue":"uploadDefault","designInfo":{"stencilId":"collibra-fileUpload"}},
 	  {"id":"f4","type":"text","label":"Hidden","value":"{{hidden}}","defaultValue":"hiddenDefault","visible":false},
 	  {"id":"f5","type":"text","label":"Ordinary","value":"{{ordinary}}","defaultValue":"ordinaryDefault"}]}]}`)
@@ -1769,7 +1764,7 @@ func TestStartWorkflow_NoDefaultIsInjectedForAFieldTheFormWillNotAccept(t *testi
 		t.Fatalf("unparseable request body %q: %v", body, uerr)
 	}
 	props, _ := sent["formProperties"].(map[string]any)
-	for _, key := range []string{"locked", "upload", "hidden"} {
+	for _, key := range []string{"upload", "hidden"} {
 		if v, present := props[key]; present && v != nil {
 			t.Errorf("%s = %v, want absent-or-null: the form does not accept a value for this field", key, v)
 		}
@@ -1823,6 +1818,10 @@ func TestStartWorkflow_AnExplicitValueForAGuardedFieldIsStillSent(t *testing.T) 
 //
 // It is easy to trip: formFields shows the form's declared value, and echoing that value back is
 // the obvious thing for a caller to do.
+//
+// An EMPTY value is refused on the same footing, because the engine's test is
+// `properties.containsKey(id)` — presence of the key, not what is in it. A caller trying to clear
+// a field it may not write would otherwise sail past this check and hit the same 500.
 func TestStartWorkflow_AValueForAReadOnlyFieldIsRefusedBeforeTheWrite(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -1837,31 +1836,36 @@ func TestStartWorkflow_AValueForAReadOnlyFieldIsRefusedBeforeTheWrite(t *testing
 			handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"text","label":"Locked","value":"{{locked}}","defaultValue":"fromTheForm","enabled":false}]}]}`)
 		}},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			mux, c := newServer(t)
-			tc.setup(mux)
-			started := false
-			handleStart(t, mux, nil, &started, http.StatusCreated)
-			handleStartWithForm(t, mux, nil, &started)
+		for _, v := range []struct{ name, value string }{
+			{"the form's own value", "fromTheForm"},
+			{"an empty string", ""},
+		} {
+			t.Run(tc.name+"/"+v.name, func(t *testing.T) {
+				mux, c := newServer(t)
+				tc.setup(mux)
+				started := false
+				handleStart(t, mux, nil, &started, http.StatusCreated)
+				handleStartWithForm(t, mux, nil, &started)
 
-			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
-				WorkflowDefinitionID: workflowID,
-				FormProperties:       map[string]string{"locked": "fromTheForm"},
-				Confirm:              true,
+				out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+					WorkflowDefinitionID: workflowID,
+					FormProperties:       map[string]string{"locked": v.value},
+					Confirm:              true,
+				})
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if out.Status != start_workflow.StatusNeedsInput {
+					t.Fatalf("status = %q, want needs_input: a value for a read-only field must be refused, not written", out.Status)
+				}
+				if started {
+					t.Error("nothing may be started when the payload carries a key the engine will reject")
+				}
+				if !strings.Contains(strings.Join([]string{out.Message, out.Guidance}, " "), "read-only") {
+					t.Errorf("the caller must be told WHY: %q", out.Message)
+				}
 			})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if out.Status != start_workflow.StatusNeedsInput {
-				t.Fatalf("status = %q, want needs_input: a value for a read-only field must be refused, not written", out.Status)
-			}
-			if started {
-				t.Error("nothing may be started when the payload carries a value the engine will reject")
-			}
-			if !strings.Contains(strings.Join([]string{out.Message, out.Guidance}, " "), "read-only") {
-				t.Errorf("the caller must be told WHY: %q", out.Message)
-			}
-		})
+		}
 	}
 }
 
@@ -1970,18 +1974,16 @@ func TestStartWorkflow_FormFetchFailuresAreToldApart(t *testing.T) {
 // caller has no way to supply must not come back as "missing" — that is a needs_input nobody can
 // satisfy, and the caller loops on it.
 //
-// The two cases resolve differently, and the difference is the engines', not a preference:
-//   - read-only: the value is OMITTED. The legacy engine rejects any value for a non-writable
-//     property and resolves its defaultExpression itself, so omitting is both the only legal move
-//     and the correct one.
-//   - never shown but writable: the form's declared default IS sent, because nothing server-side
-//     will fill it in and the variable would otherwise reach the process unset.
+// On the JSON path both cases resolve the same way: the form's declared default IS sent. Nothing
+// server-side fills a missing value in there, so the variable would otherwise reach the process
+// unset — and a start script reading it dies with an opaque 500 for a workflow the product starts
+// happily. The value is the form's own, which is the most faithful thing available.
 func TestStartWorkflow_ARequiredFieldTheCallerCannotWriteIsNeverADeadEnd(t *testing.T) {
 	for _, tc := range []struct {
 		name, col string
 		wantSent  any
 	}{
-		{"read-only", `{"id":"f2","type":"text","label":"Locked","isRequired":true,"value":"{{locked}}","defaultValue":"fromTheForm","enabled":false}`, nil},
+		{"read-only", `{"id":"f2","type":"text","label":"Locked","isRequired":true,"value":"{{locked}}","defaultValue":"fromTheForm","enabled":false}`, "fromTheForm"},
 		{"never visible", `{"id":"f2","type":"text","label":"Hidden","isRequired":true,"value":"{{locked}}","defaultValue":"fromTheForm","visible":false}`, "fromTheForm"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2011,6 +2013,161 @@ func TestStartWorkflow_ARequiredFieldTheCallerCannotWriteIsNeverADeadEnd(t *test
 			}
 		})
 	}
+}
+
+// TestStartWorkflow_AReadOnlyFieldsDefaultIsSubmittedOnTheJSONPath. The two models are opposite
+// here, and the reason is entirely server-side.
+//
+// LEGACY volunteers nothing: the engine rejects any value for a non-writable property and resolves
+// the property's own defaultExpression itself when the key is absent, so omitting is both the only
+// legal move and the correct one.
+//
+// JSON submits the form's declared default. That endpoint's variable extractor is
+// `new HashMap<>(submitted)`, so it resolves no defaults and refuses no keys — whatever is omitted
+// reaches the process UNSET, and a start script reading it dies with an opaque 500 after the user
+// approved the preview, for a workflow the product's own UI starts happily.
+func TestStartWorkflow_AReadOnlyFieldsDefaultIsSubmittedOnTheJSONPath(t *testing.T) {
+	t.Run("json model", func(t *testing.T) {
+		mux, c := newServer(t)
+		handleDefinition(mux, wireDefinition{ID: workflowID, Name: "RO", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+		handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"text","label":"Locked","value":"{{locked}}","defaultValue":"fromTheForm","enabled":false}]}]}`)
+		var body string
+		started := false
+		handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, &started, http.StatusCreated)
+
+		if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+			WorkflowDefinitionID: workflowID, Confirm: true,
+		}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !started {
+			t.Fatal("the JSON-model start was never called")
+		}
+		var sent map[string]any
+		if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+			t.Fatalf("unparseable request body %q: %v", body, uerr)
+		}
+		props, _ := sent["formProperties"].(map[string]any)
+		if props["locked"] != "fromTheForm" {
+			t.Errorf("locked = %#v, want %q: nothing else binds this variable, so the form's own value must go out", props["locked"], "fromTheForm")
+		}
+	})
+
+	t.Run("legacy", func(t *testing.T) {
+		mux, c := newServer(t)
+		handleDefinition(mux, wireDefinition{ID: workflowID, Name: "RO", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+		handleLegacyForm(mux, workflowID, `{"formProperties":[
+		  {"id":"locked","name":"Locked","type":"string","writable":false,"value":"fromTheForm"},
+		  {"id":"subject","name":"Subject","type":"string","writable":true,"required":true}]}`)
+		var captured clients.StartWorkflowInstanceRequest
+		started := false
+		handleStart(t, mux, &captured, &started, http.StatusCreated)
+
+		if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+			WorkflowDefinitionID: workflowID,
+			FormProperties:       map[string]string{"subject": "x"},
+			Confirm:              true,
+		}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !started {
+			t.Fatal("the legacy start was never called, so the absence below would pass for the wrong reason")
+		}
+		if v, present := captured.FormProperties["locked"]; present {
+			t.Errorf("locked = %q, want the key ABSENT: the legacy engine rejects any submitted value for a non-writable property", v)
+		}
+	})
+}
+
+// TestStartWorkflow_AnAlwaysHiddenRequiredFieldWithNoDefaultDoesNotBlockTheStart. A field marked
+// required that the form hides UNCONDITIONALLY has no answer the caller could give: the product
+// never renders it, so the user has never seen it, and the server does not enforce requiredness for
+// a hidden field — the product's own start leaves it unset and succeeds. Reporting it missing asked
+// a model to invent a value for a field the author deliberately hid, in a sentence that read "the
+// form only shows it when never".
+//
+// A CONDITIONALLY hidden required field stays reported — that condition may well hold and the
+// caller can say so; see TestStartWorkflow_ConditionallyVisibleRequiredFieldStaysRequired.
+func TestStartWorkflow_AnAlwaysHiddenRequiredFieldWithNoDefaultDoesNotBlockTheStart(t *testing.T) {
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Hidden", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+	handleJSONModelForm(mux, `{"rows":[{"cols":[{"id":"f1","type":"text","label":"Hidden","isRequired":true,"value":"{{hidden}}","visible":false}]}]}`)
+	started := false
+	handleStartWithForm(t, mux, nil, &started)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID, Confirm: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusSuccess {
+		t.Fatalf("status = %q (%s), want success: a required field the form never shows cannot be asked about", out.Status, out.Message)
+	}
+	if len(out.MissingFields) != 0 {
+		t.Errorf("missingFields = %v, want none", out.MissingFields)
+	}
+	if !started {
+		t.Error("the workflow was never started")
+	}
+}
+
+// TestStartWorkflow_ANonFiniteNumberIsRefusedBeforeTheWrite. strconv.ParseFloat accepts "NaN",
+// "Inf" and their spellings, json.Marshal then refuses the value it produces, and a marshal failure
+// carries no HTTP status — so startError can only read it as "the request may have been sent". The
+// caller was told the outcome was unknown and not to retry, for a start that never left the process.
+//
+// The finite case is asserted in the same place, because a guard that rejects too much would be
+// just as wrong: an ordinary number must still reach the engine typed.
+func TestStartWorkflow_ANonFiniteNumberIsRefusedBeforeTheWrite(t *testing.T) {
+	const form = `{"rows":[{"cols":[{"id":"c1","type":"number","label":"Amount","value":"{{amount}}"}]}]}`
+
+	for _, value := range []string{"NaN", "nan", "Inf", "-Inf", "+infinity"} {
+		t.Run(value, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Num", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+			handleJSONModelForm(mux, form)
+			started := false
+			handleStartWithForm(t, mux, nil, &started)
+
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				FormProperties:       map[string]string{"amount": value},
+				Confirm:              true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status != start_workflow.StatusNeedsInput {
+				t.Fatalf("status = %q (%s), want needs_input: this value cannot be encoded, so it can never be sent", out.Status, out.Message)
+			}
+			if started {
+				t.Error("the request was attempted although its body cannot be marshalled")
+			}
+		})
+	}
+
+	t.Run("an ordinary number is sent typed", func(t *testing.T) {
+		mux, c := newServer(t)
+		handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Num", Enabled: true, FormRequired: true, StartFormJSONModelAvailable: true, BusinessItemResourceType: "GLOBAL"})
+		handleJSONModelForm(mux, form)
+		var body string
+		handleStartRaw(mux, "/rest/2.0/internal/workflow/startWithForm", &body, nil, http.StatusCreated)
+
+		if _, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+			WorkflowDefinitionID: workflowID,
+			FormProperties:       map[string]string{"amount": "42.5"},
+			Confirm:              true,
+		}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var sent map[string]any
+		if uerr := json.Unmarshal([]byte(body), &sent); uerr != nil {
+			t.Fatalf("unparseable request body %q: %v", body, uerr)
+		}
+		props, _ := sent["formProperties"].(map[string]any)
+		if props["amount"] != 42.5 {
+			t.Errorf("amount = %#v (%T), want the number 42.5 — arithmetic in a start script needs a number, not a string", props["amount"], props["amount"])
+		}
+	})
 }
 
 // TestStartWorkflow_AnAbsentWritableFlagMeansWritable pins the direction of the fail-safe. The
