@@ -299,41 +299,6 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	}
 }
 
-// resolveAssignees turns each assignee reference into the {id, type} pair the
-// API takes. A USER may be given as a UUID, email address, username or full
-// name — the shared resolver reports an ambiguous name as an error rather than
-// assigning a guessed person. A GROUP must be given as its UUID: group names
-// are not resolvable through the user lookup.
-// Everything checkable locally is checked first, across the whole list, so a
-// bad type or a named group costs no user lookup (standards 6.1).
-func resolveAssignees(ctx context.Context, client *http.Client, assignees []AssigneeInput) ([]clients.Assignee, error) {
-	out := make([]clients.Assignee, len(assignees))
-	for i, a := range assignees {
-		switch strings.ToUpper(strings.TrimSpace(a.Type)) {
-		case "USER":
-			continue // resolved below, once the whole list is known to be well-formed
-		case "GROUP":
-			if err := validation.UUID("assignee id", a.ID); err != nil {
-				return nil, fmt.Errorf("%w (a GROUP assignee must be given as its UUID)", err)
-			}
-			out[i] = clients.Assignee{ID: a.ID, Type: "GROUP"}
-		default:
-			return nil, fmt.Errorf("assignee type must be USER or GROUP; got %q", a.Type)
-		}
-	}
-	for i, a := range assignees {
-		if out[i].Type != "" {
-			continue
-		}
-		id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
-		if err != nil {
-			return nil, err
-		}
-		out[i] = clients.Assignee{ID: id, Type: "USER"}
-	}
-	return out, nil
-}
-
 // resolveAssessmentID turns the caller's assessment reference into a single
 // assessment UUID. A UUID is used as-is; a name is resolved (case-insensitive,
 // exact match preferred) and must land on exactly one assessment, else a
@@ -375,6 +340,42 @@ func resolveAssessmentID(ctx context.Context, client *http.Client, ref string) (
 	}
 	sort.Strings(lines)
 	return "", fmt.Errorf("assessment name %q is ambiguous; matched %d — %s. Specify the exact name or the assessment UUID", ref, len(matches), strings.Join(lines, "; "))
+}
+
+// resolveAssignees turns each assignee reference into the {id, type} pair the
+// API takes. A USER may be given as a UUID, email address, username or full
+// name — the shared resolver reports an ambiguous name as an error rather than
+// assigning a guessed person. A GROUP must be given as its UUID: group names
+// are not resolvable through the user lookup.
+//
+// Everything checkable locally is checked first, across the whole list, so a
+// bad type or a named group costs no user lookup (standards 6.1).
+func resolveAssignees(ctx context.Context, client *http.Client, assignees []AssigneeInput) ([]clients.Assignee, error) {
+	out := make([]clients.Assignee, len(assignees))
+	for i, a := range assignees {
+		switch strings.ToUpper(strings.TrimSpace(a.Type)) {
+		case "USER":
+			continue // resolved below, once the whole list is known to be well-formed
+		case "GROUP":
+			if err := validation.UUID("assignee id", a.ID); err != nil {
+				return nil, fmt.Errorf("%w (a GROUP assignee must be given as its UUID)", err)
+			}
+			out[i] = clients.Assignee{ID: a.ID, Type: "GROUP"}
+		default:
+			return nil, fmt.Errorf("assignee type must be USER or GROUP; got %q", a.Type)
+		}
+	}
+	for i, a := range assignees {
+		if out[i].Type != "" {
+			continue
+		}
+		id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
+		if err != nil {
+			return nil, err
+		}
+		out[i] = clients.Assignee{ID: id, Type: "USER"}
+	}
+	return out, nil
 }
 
 // resolveAnswerType picks the answer type for a set_answer op. A previously

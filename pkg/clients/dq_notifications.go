@@ -126,9 +126,10 @@ func BuildNotificationOptions(enabledKeys []string, quantities map[string]int, m
 // channels (which take usernames), UserIDs are kept for callers that need the UUID.
 //
 // Unresolved holds every recipient that could not be bound, as the caller wrote it. Ambiguous is the
-// subset of those that matched MORE than one account rather than none — the two need different advice
-// ("that name is shared, use a username" vs "that name matches nobody"), so the caller can say which
-// happened instead of reporting a typo either way.
+// subset of those that could not be pinned to ONE account — a name several accounts share, or a
+// search too broad to be sure of — rather than one that matched nobody. The two need different
+// advice ("use a username" vs "that name matches nobody"), so the caller can say which happened
+// instead of reporting a typo either way.
 type RecipientResolution struct {
 	UserIDs    []string
 	Usernames  []string
@@ -205,7 +206,7 @@ func UnresolvedRecipientsMessage(res RecipientResolution) string {
 	}
 	if len(shared) > 0 {
 		parts = append(parts, fmt.Sprintf(
-			"These match more than one active account and were not bound to anyone: %s — give the intended person's username or email address instead of their name.",
+			"These matched more than one active account, or too many to be sure, and were not bound to anyone: %s — give the intended person's username or email address instead of their name.",
 			strings.Join(shared, ", ")))
 	}
 	return strings.Join(parts, " ")
@@ -218,9 +219,12 @@ func UnresolvedRecipientsMessage(res RecipientResolution) string {
 // second return says the name matched several accounts, which the caller reports differently from
 // a name that matched none.
 //
-// A truncated search window counts as ambiguous for display-name matching: a single match inside
-// the window says nothing about a second holder of the name outside it. An exact username is
-// unaffected, usernames being unique.
+// A truncated search window counts as ambiguous for ALL display-name matching, whatever happens to
+// be inside the window: a match inside it says nothing about a second holder of the name outside
+// it, and NO match inside it says nothing about the accounts that were never returned — reporting
+// that as "no active account" would be a false statement and would send the caller after a typo
+// that does not exist. Same rule as pkg/tools/resolve applies to the write paths. An exact username
+// is unaffected, usernames being unique.
 func findRecipientByName(ctx context.Context, client *http.Client, name string) (*EditAssetUser, bool, error) {
 	search, err := FindUsersByName(ctx, client, name)
 	if err != nil {
@@ -228,6 +232,9 @@ func findRecipientByName(ctx context.Context, client *http.Client, name string) 
 	}
 	if u := exactUsernameMatch(search.Users, name); u != nil {
 		return u, false, nil
+	}
+	if search.Truncated {
+		return nil, true, nil
 	}
 	var match *EditAssetUser
 	for i := range search.Users {
@@ -238,9 +245,6 @@ func findRecipientByName(ctx context.Context, client *http.Client, name string) 
 			return nil, true, nil
 		}
 		match = &search.Users[i]
-	}
-	if match != nil && search.Truncated {
-		return nil, true, nil
 	}
 	return match, false, nil
 }

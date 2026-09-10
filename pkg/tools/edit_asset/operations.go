@@ -31,7 +31,7 @@ func validateSetAttribute(ec *editContext, plan opPlan) opPlan {
 		plan.result = newErrorResult(op, fmt.Sprintf(
 			"attribute %q is not valid for asset type %q in this domain.%s",
 			op.AttributeName, ec.asset.Type.Name,
-			suggestionSuffix("Attributes", ec.availableAttributeNames(), 10)))
+			resolve.SuggestionSuffix("Attributes", ec.availableAttributeNames(), 10)))
 		return plan
 	}
 	if err := validateAttributeValue(attrType, op.Value); err != nil {
@@ -98,7 +98,7 @@ func validateAddAttribute(ec *editContext, plan opPlan) opPlan {
 		plan.result = newErrorResult(op, fmt.Sprintf(
 			"attribute %q is not valid for asset type %q in this domain.%s",
 			op.AttributeName, ec.asset.Type.Name,
-			suggestionSuffix("Attributes", ec.availableAttributeNames(), 10)))
+			resolve.SuggestionSuffix("Attributes", ec.availableAttributeNames(), 10)))
 		return plan
 	}
 	if err := validateAttributeValue(attrType, op.Value); err != nil {
@@ -195,7 +195,7 @@ func validateUpdateProperty(ec *editContext, plan opPlan) opPlan {
 			if !ok {
 				plan.result = newErrorResult(op, fmt.Sprintf(
 					"status %q is not defined in Collibra.%s",
-					op.Value, suggestionSuffix("Statuses", ec.availableStatusNames(), 10)))
+					op.Value, resolve.SuggestionSuffix("Statuses", ec.availableStatusNames(), 10)))
 				return plan
 			}
 			statusID = st.ID
@@ -293,7 +293,7 @@ func validateAddRelation(ec *editContext, plan opPlan) opPlan {
 		plan.result = newErrorResult(op, fmt.Sprintf(
 			"relation type %q is not valid for asset type %q in this domain.%s",
 			op.RelationType, ec.asset.Type.Name,
-			suggestionSuffix("Relation roles", ec.availableRelationRoles(), 25)))
+			resolve.SuggestionSuffix("Relation roles", ec.availableRelationRoles(), 25)))
 		return plan
 	}
 	plan.relationTypeID = rt.ID
@@ -386,7 +386,7 @@ func validateResponsibilityOp(ec *editContext, plan opPlan) opPlan {
 	if !ok {
 		plan.result = newErrorResult(op, fmt.Sprintf(
 			"role %q is not defined in Collibra.%s",
-			op.Role, suggestionSuffix("Roles", ec.availableRoleNames(), 10)))
+			op.Role, resolve.SuggestionSuffix("Roles", ec.availableRoleNames(), 10)))
 		return plan
 	}
 	plan.roleID = role.ID

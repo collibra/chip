@@ -89,3 +89,19 @@ func TestGetUserIDByName_UnknownNameNamesAcceptedForms(t *testing.T) {
 		}
 	}
 }
+
+// The not-found error itself has to carry the group carve-out: a model told to
+// resolve "Data Stewards" learns from the error that groups are out of scope,
+// not just from the tool description it may no longer be reading.
+func TestGetUserIDByName_UnknownNameSaysGroupsAreNotResolved(t *testing.T) {
+	client := usersServer(t, clients.EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"})
+	_, err := tool.NewTool(client).Handler(t.Context(), tool.Input{Name: "Data Stewards"})
+	if err == nil {
+		t.Fatal("expected a not-found error")
+	}
+	for _, want := range []string{"GROUP", "UUID", "search_asset_keyword"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not mention %q", err, want)
+		}
+	}
+}

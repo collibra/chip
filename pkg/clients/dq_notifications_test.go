@@ -117,3 +117,47 @@ func TestUnresolvedRecipientsMessageSeparatesAmbiguousFromMissing(t *testing.T) 
 		t.Fatalf("an all-resolved resolution must render an empty message, got %q", got)
 	}
 }
+
+// A truncated recipient search knows nothing about the accounts it never
+// returned, so it must be reported as "could not be pinned down", never as
+// "no active Collibra account" — the same rule the write paths follow.
+func TestResolveNotificationRecipientsTreatsTruncatedSearchAsAmbiguous(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServerWithTotal(t, &queries, 250,
+		EditAssetUser{ID: "u-1", UserName: "jsmith", FirstName: "Janet", LastName: "Smithers"})
+
+	res, err := ResolveNotificationRecipients(t.Context(), client, []string{"Jane Smith"})
+	if err != nil {
+		t.Fatalf("ResolveNotificationRecipients: %v", err)
+	}
+	if len(res.UserIDs) != 0 {
+		t.Fatalf("expected nobody bound from a truncated search, got %v", res.UserIDs)
+	}
+	if len(res.Unresolved) != 1 || res.Unresolved[0] != "Jane Smith" {
+		t.Fatalf("expected [Jane Smith] unresolved, got %v", res.Unresolved)
+	}
+	if len(res.Ambiguous) != 1 || res.Ambiguous[0] != "Jane Smith" {
+		t.Fatalf("expected [Jane Smith] ambiguous, got %v", res.Ambiguous)
+	}
+	if msg := UnresolvedRecipientsMessage(res); strings.Contains(msg, "no active Collibra account") {
+		t.Fatalf("a truncated search must not be reported as no such account: %q", msg)
+	}
+}
+
+// The companion case: an exact username still resolves over a truncated page.
+func TestResolveNotificationRecipientsResolvesUsernameOverTruncatedSearch(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServerWithTotal(t, &queries, 250,
+		EditAssetUser{ID: "u-1", UserName: "jsmith", FirstName: "Janet", LastName: "Smithers"})
+
+	res, err := ResolveNotificationRecipients(t.Context(), client, []string{"jsmith"})
+	if err != nil {
+		t.Fatalf("ResolveNotificationRecipients: %v", err)
+	}
+	if len(res.UserIDs) != 1 || res.UserIDs[0] != "u-1" {
+		t.Fatalf("expected [u-1] resolved, got %v (unresolved=%v)", res.UserIDs, res.Unresolved)
+	}
+	if len(res.Unresolved) != 0 || len(res.Ambiguous) != 0 {
+		t.Fatalf("expected nothing unresolved, got unresolved=%v ambiguous=%v", res.Unresolved, res.Ambiguous)
+	}
+}

@@ -123,55 +123,6 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	}
 }
 
-// resolveOwnerID resolves the optional owner reference to a user UUID. A blank
-// owner stays blank (the field is optional); anything else goes through the
-// shared user resolver, which accepts a UUID, email address, username or full
-// name and reports an ambiguous name as an error rather than picking a person.
-func resolveOwnerID(ctx context.Context, client *http.Client, owner string) (string, error) {
-	if strings.TrimSpace(owner) == "" {
-		return "", nil
-	}
-	return resolve.UserID(ctx, client, owner, resolve.Hints{})
-}
-
-// resolveAssignees validates each assignee's type and resolves USER assignees
-// by UUID, email address, username or full name. GROUP assignees must be given
-// as a UUID: group names are not resolvable through the user lookup.
-//
-// Everything that can be checked locally is checked first, across the whole
-// list, so a bad type or a named group is reported without spending a user
-// lookup on the entries before it (standards 6.1).
-func resolveAssignees(ctx context.Context, client *http.Client, assignees []InputAssignee) ([]clients.Assignee, error) {
-	if len(assignees) == 0 {
-		return nil, nil
-	}
-	out := make([]clients.Assignee, len(assignees))
-	for i, a := range assignees {
-		switch strings.ToUpper(strings.TrimSpace(a.Type)) {
-		case "USER":
-			continue // resolved below, once the whole list is known to be well-formed
-		case "GROUP":
-			if err := validation.UUID(fmt.Sprintf("assignees[%d].id", i), a.ID); err != nil {
-				return nil, fmt.Errorf("%w (a GROUP assignee must be given as its UUID)", err)
-			}
-			out[i] = clients.Assignee{ID: a.ID, Type: "GROUP"}
-		default:
-			return nil, fmt.Errorf("assignees[%d].type must be USER or GROUP, got %q", i, a.Type)
-		}
-	}
-	for i, a := range assignees {
-		if out[i].Type != "" {
-			continue
-		}
-		id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
-		if err != nil {
-			return nil, fmt.Errorf("assignees[%d]: %w", i, err)
-		}
-		out[i] = clients.Assignee{ID: id, Type: "USER"}
-	}
-	return out, nil
-}
-
 // resolveTemplateID turns the caller's template input into a template UUID.
 // A UUID is used as-is; a name is resolved against the latest version of each
 // template (case-insensitive), preferring an exact name match and returning a
@@ -223,6 +174,55 @@ func resolveTemplateID(ctx context.Context, client *http.Client, template string
 	}
 	sort.Strings(names)
 	return "", fmt.Errorf("template %q is ambiguous; matched: %s — specify the exact name or the template UUID", template, strings.Join(names, ", "))
+}
+
+// resolveOwnerID resolves the optional owner reference to a user UUID. A blank
+// owner stays blank (the field is optional); anything else goes through the
+// shared user resolver, which accepts a UUID, email address, username or full
+// name and reports an ambiguous name as an error rather than picking a person.
+func resolveOwnerID(ctx context.Context, client *http.Client, owner string) (string, error) {
+	if strings.TrimSpace(owner) == "" {
+		return "", nil
+	}
+	return resolve.UserID(ctx, client, owner, resolve.Hints{})
+}
+
+// resolveAssignees validates each assignee's type and resolves USER assignees
+// by UUID, email address, username or full name. GROUP assignees must be given
+// as a UUID: group names are not resolvable through the user lookup.
+//
+// Everything that can be checked locally is checked first, across the whole
+// list, so a bad type or a named group is reported without spending a user
+// lookup on the entries before it (standards 6.1).
+func resolveAssignees(ctx context.Context, client *http.Client, assignees []InputAssignee) ([]clients.Assignee, error) {
+	if len(assignees) == 0 {
+		return nil, nil
+	}
+	out := make([]clients.Assignee, len(assignees))
+	for i, a := range assignees {
+		switch strings.ToUpper(strings.TrimSpace(a.Type)) {
+		case "USER":
+			continue // resolved below, once the whole list is known to be well-formed
+		case "GROUP":
+			if err := validation.UUID(fmt.Sprintf("assignees[%d].id", i), a.ID); err != nil {
+				return nil, fmt.Errorf("%w (a GROUP assignee must be given as its UUID)", err)
+			}
+			out[i] = clients.Assignee{ID: a.ID, Type: "GROUP"}
+		default:
+			return nil, fmt.Errorf("assignees[%d].type must be USER or GROUP, got %q", i, a.Type)
+		}
+	}
+	for i, a := range assignees {
+		if out[i].Type != "" {
+			continue
+		}
+		id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
+		if err != nil {
+			return nil, fmt.Errorf("assignees[%d]: %w", i, err)
+		}
+		out[i] = clients.Assignee{ID: id, Type: "USER"}
+	}
+	return out, nil
 }
 
 func summarise(a *clients.Assessment) *AssessmentSummary {

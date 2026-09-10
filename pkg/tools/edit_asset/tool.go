@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -25,20 +24,6 @@ import (
 // match prevents a class of LLM-typos.
 func normalize(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
-}
-
-// suggestionSuffix renders a short list of valid names to append to a
-// "not valid" error so the calling model can self-correct in one step
-// instead of round-tripping through another tool.
-func suggestionSuffix(label string, names []string, max int) string {
-	if len(names) == 0 {
-		return ""
-	}
-	sort.Strings(names)
-	if len(names) <= max {
-		return fmt.Sprintf(" %s available: %s.", label, strings.Join(names, ", "))
-	}
-	return fmt.Sprintf(" %s available: %s (and %d more).", label, strings.Join(names[:max], ", "), len(names)-max)
 }
 
 // OperationType enumerates the kinds of edits edit_asset can perform. Phases 2+

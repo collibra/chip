@@ -23,7 +23,7 @@ type User struct {
 // Hint wording for user resolution. Both are overridable per caller via Hints;
 // these apply when the caller has nothing more specific to say.
 const (
-	userNotFoundHint   = `Accepted forms: the user's UUID, their email address, their username, or their full name as "First Last". Only enabled (non-deactivated) accounts are searched by name or username, so a deactivated leaver will not be found under any of them.`
+	userNotFoundHint   = `Accepted forms: the user's UUID, their email address, their username, or their full name as "First Last". Only enabled (non-deactivated) accounts are searched by name or username, so a deactivated leaver will not be found under any of them. A user GROUP is not resolvable by name — pass the group's UUID instead, or find it with search_asset_keyword (resourceTypeFilters ["UserGroup"]).`
 	userAmbiguityHint  = "do NOT pick one — ask which person is meant, then call again with that user's username or UUID"
 	userCandidateLabel = "Closest matches"
 )

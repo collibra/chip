@@ -39,6 +39,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Returns the user's UUID together with their full name and username so the right person can be confirmed; it never returns email addresses. " +
 			"If several users share the name, the call FAILS with an error listing every candidate (full name, username, UUID) — do NOT pick one of them yourself: ask which person is meant, then call again with that user's username or UUID. " +
 			"If nothing matches, the error names the accepted input forms. Only enabled (non-deactivated) accounts are searched by name or username, so a deactivated leaver will not be found that way; the email lookup goes to a different endpoint and may still find one. " +
+			"Do NOT use it for a user GROUP (a named set of users, e.g. 'Data Stewards'): it resolves individual users only, group names are not resolvable at all, and a group must be given to the calling tool as the group's UUID. " +
+			"When a person cannot be resolved here — too many namesakes, a deactivated account, or a group rather than a person — use search_asset_keyword with resourceTypeFilters ['User'] (or ['UserGroup'] for a group) and take the id from its results. " +
 			"Read-only: it queries the user directory and creates or changes nothing. Any authenticated user can call it. " +
 			"Example questions it answers: 'What's John Doe's user id?'; 'Make Jane Smith the owner of the Customer Data assessment' (call this first to get her UUID); 'Assign the Steward role on this table to jane.smith'; 'Who is bob@example.com in Collibra?'.",
 		Handler:     handler(collibraClient),
