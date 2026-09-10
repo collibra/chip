@@ -730,13 +730,18 @@ func TestToLegacyFormField_ResourcePickerNamesOnlyARouteThatWorks(t *testing.T) 
 	}
 }
 
-// TestToJSONFormField_ResourcePickerRouteMatchesTheLegacyOne. The palette stencil is named after
-// the legacy form type it stands in for, so one table answers both models — the alternative is two
-// lists of resolution advice that drift apart silently. An unknown stencil is the case worth
-// pinning: it must yield NO route rather than a guessed one, leaving the caller with the generic
-// "this needs a real resource" it would have had anyway.
+// TestToJSONFormField_ResourcePickerRouteMatchesTheLegacyOne pins that a stencil gets the same
+// resolution advice its legacy twin gets — the alternative is two lists that drift apart silently.
+// collibra-asset and collibra-domain are the cases that matter: their legacy twins are named
+// "term" and "vocabulary", so a route table keyed by the stencil minus its prefix answers them
+// with nothing, and a required asset picker then reports "no tool here resolves that resource
+// type" for the type search answers best. An unknown stencil is the other case worth pinning: it
+// must yield NO route rather than a guessed one, leaving the caller with the generic "this needs a
+// real resource" it would have had anyway.
 func TestToJSONFormField_ResourcePickerRouteMatchesTheLegacyOne(t *testing.T) {
 	for _, tc := range []struct{ stencil, want string }{
+		{"collibra-asset", `resolve it with search_asset_keyword (resourceTypeFilters: ["Asset"])`},
+		{"collibra-domain", `resolve it with search_asset_keyword (resourceTypeFilters: ["Domain"])`},
 		{"collibra-user", `resolve it with search_asset_keyword (resourceTypeFilters: ["User"])`},
 		{"collibra-assetType", "resolve it with list_asset_types (id)"},
 		{"collibra-somethingNobodyHasShippedYet", ""},

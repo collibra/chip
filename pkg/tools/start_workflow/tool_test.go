@@ -2742,6 +2742,9 @@ func TestStartWorkflow_MalformedRoleInCommunityValueIsRefusedBeforeTheWrite(t *t
 		{"an empty role id", `[["","comm-1"]]`},
 		{"a pair the form does not propose", `[["role-9","comm-9"]]`},
 		{"two pairs on a single-value field", `[["role-1","comm-1"],["role-2",""]]`},
+		// The role expression is legal as the WHOLE value and nowhere else. Matched as a
+		// substring it let any malformed value carrying it skip every check below.
+		{"a role expression buried inside a pair", `[["role(Steward,Marketing)"]]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mux, c := roleInCommunityServer(t, "")
@@ -2761,6 +2764,42 @@ func TestStartWorkflow_MalformedRoleInCommunityValueIsRefusedBeforeTheWrite(t *t
 			}
 			if started {
 				t.Error("nothing may be started on a value the engine will refuse")
+			}
+		})
+	}
+}
+
+// TestStartWorkflow_EmptyRoleInCommunityListIsReportedMissing. "[]" and "null" are valid JSON that
+// parses to NO pairs, so every per-pair check has nothing to run and the value reads as fine — but
+// the field ends up unset, and the server does not enforce requiredness, so a required field would
+// be started blank with the caller told nothing. It has to come back as MISSING, not merely
+// invalid: missingFields is what the caller re-calls against.
+func TestStartWorkflow_EmptyRoleInCommunityListIsReportedMissing(t *testing.T) {
+	for _, tc := range []struct{ name, value string }{
+		{"an empty array", "[]"},
+		{"a JSON null", "null"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := roleInCommunityServer(t, "")
+			started := false
+			handleStart(t, mux, nil, &started, http.StatusCreated)
+
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				FormProperties:       map[string]string{"stakeholders": tc.value},
+				Confirm:              true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status != start_workflow.StatusNeedsInput {
+				t.Fatalf("status = %q (%s), want needs_input", out.Status, out.Message)
+			}
+			if started {
+				t.Error("a required field with no pairs in it may not start anything")
+			}
+			if len(out.MissingFields) != 1 || out.MissingFields[0] != "stakeholders" {
+				t.Errorf("missingFields = %v, want [stakeholders] — a value with no pairs leaves the field unsupplied", out.MissingFields)
 			}
 		})
 	}

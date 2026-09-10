@@ -516,6 +516,29 @@ var legacyResourcePickerFormTypes = map[string]string{
 	"role": "",
 }
 
+// jsonFormResourcePickerRoutes answers the same question as legacyResourcePickerFormTypes for the
+// JSON model, keyed by the palette stencil. It is a SEPARATE map because the two models do not
+// share one vocabulary: most stencils are the legacy type with the prefix bolted on, but an asset
+// picker is "term" in the legacy names and a domain picker "vocabulary", so trimming the prefix
+// and reading the legacy map left exactly those two with no route — telling the caller "no tool
+// here resolves that resource type" for the two types search_asset_keyword answers best, next to a
+// schema line saying not to substitute another lookup.
+//
+// The route STRINGS are read from the legacy map rather than copied, so a route can only ever be
+// edited in one place and the two vocabularies cannot drift apart in what they advise.
+var jsonFormResourcePickerRoutes = map[string]string{
+	"collibra-asset":         legacyResourcePickerFormTypes["term"],
+	"collibra-domain":        legacyResourcePickerFormTypes["vocabulary"],
+	"collibra-user":          legacyResourcePickerFormTypes["user"],
+	"collibra-group":         legacyResourcePickerFormTypes["group"],
+	"collibra-role":          legacyResourcePickerFormTypes["role"],
+	"collibra-community":     legacyResourcePickerFormTypes["community"],
+	"collibra-assetType":     legacyResourcePickerFormTypes["assetType"],
+	"collibra-domainType":    legacyResourcePickerFormTypes["domainType"],
+	"collibra-attributeType": legacyResourcePickerFormTypes["attributeType"],
+	"collibra-relationType":  legacyResourcePickerFormTypes["relationType"],
+}
+
 // legacyFileUploadFormType cannot be filled via a plain form-property value at all.
 const legacyFileUploadFormType = "fileUpload"
 
@@ -812,6 +835,11 @@ var jsonFormContainerTypes = map[string]bool{
 // Collibra resource, so the prefix alone is a reliable resource-picker signal — the generic
 // cloud-* stencils never carry it. Read from designInfo.stencilId, since the serialized `type`
 // for these collapses to a generic FormFieldTypes value and cannot distinguish them.
+//
+// The prefix says a stencil NEEDS a resource; it says nothing about how to get one. That is per
+// stencil, in jsonFormResourcePickerRoutes (or, for the two nothing here can produce,
+// jsonFormUnsupported) — a stencil added to this list belongs in one of them too, or it is
+// reported as a picker with no way to answer it.
 const jsonFormCollibraStencilPrefix = "collibra-"
 
 // workflowStartFormJSONModelQuery calls the ONLY entry point for this data — see the package
@@ -1150,16 +1178,12 @@ func jsonFormDefaultValue(col map[string]any) string {
 	return ""
 }
 
-// jsonFormResolveWith reuses the legacy routes for the JSON model: a collibra- palette stencil is
-// named after the legacy form type it stands in for ("collibra-user", "collibra-assetType"), so one
-// lookup answers both models and they cannot drift apart. A stencil the map does not know yields no
-// hint rather than a guessed one, which leaves the caller with the generic "this needs a real
-// resource" — no worse off than before any route was named.
+// jsonFormResolveWith names the route for a palette stencil. A stencil the map does not know
+// yields no hint rather than a guessed one, which leaves the caller with the generic "this needs a
+// real resource" — no worse off than before any route was named. No prefix check is needed: a
+// cloud-* stencil is simply absent from the map.
 func jsonFormResolveWith(stencil string) string {
-	if !strings.HasPrefix(stencil, jsonFormCollibraStencilPrefix) {
-		return ""
-	}
-	return legacyResourcePickerFormTypes[strings.TrimPrefix(stencil, jsonFormCollibraStencilPrefix)]
+	return jsonFormResourcePickerRoutes[stencil]
 }
 
 // jsonFormUnsupported mirrors the legacy path's honesty for the JSON model: a file upload cannot

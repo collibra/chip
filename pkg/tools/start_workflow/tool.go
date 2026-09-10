@@ -85,7 +85,7 @@ type FormField struct {
 	MultiValue        bool `json:"multiValue,omitempty" jsonschema:"True when this field takes SEVERAL values at once. Give them as ONE comma-separated string (e.g. 'a,b') whether you have one value or many — this tool converts that to whatever the workflow expects. A field without this flag rejects a comma-separated list. Ignore this convention when idPairs is set and follow that field's shape instead; multiValue then only tells you whether more than one pair is allowed."`
 	// IDPairs carries its own composition rule because the caller, not this tool, assembles the
 	// value — the same reason the multi-value convention is spelled out on MultiValue.
-	IDPairs      bool   `json:"idPairs,omitempty" jsonschema:"True when this field's value is a JSON ARRAY of the option keys shown for it, each key already being one [roleId, communityId] pair. Put the keys you want inside one array and pass that as the value: [[\"role-uuid\",\"community-uuid\"]] for a single pair, [[\"role-uuid\",\"community-uuid\"],[\"other-role\",\"\"]] for two. The community half may be an empty string when the role is not scoped to one. Pass the keys verbatim — a role id cannot be resolved from a name here."`
+	IDPairs      bool   `json:"idPairs,omitempty" jsonschema:"True when this field's value is a JSON ARRAY of the option keys shown for it, each key already being one [roleId, communityId] pair. Put the keys you want inside one array and pass it as a STRING containing that JSON array: '[[\"role-uuid\",\"community-uuid\"]]' for a single pair, '[[\"role-uuid\",\"community-uuid\"],[\"other-role\",\"\"]]' for two. The community half may be an empty string when the role is not scoped to one. Pass the keys verbatim — a role id cannot be resolved from a name here."`
 	DefaultValue string `json:"defaultValue,omitempty" jsonschema:"What the form pre-fills for this field. Leave it out of formProperties to accept that — the value is applied either way, by this tool or by Collibra itself, matching what the product does. Pass a value only to OVERRIDE it, and never for a readOnly field: that is refused before anything is started."`
 	HelpText     string `json:"helpText,omitempty" jsonschema:"The hint Collibra's own UI shows beside this field — worth relaying to the user when asking them for a value."`
 	VisibleWhen  string `json:"visibleWhen,omitempty" jsonschema:"Present when the form only shows this field under a condition, quoted verbatim. The condition cannot be evaluated here, so the field is still reported with its declared required flag: supply a value if the condition plausibly holds, and say so to the user rather than assuming the field does not apply."`
@@ -473,7 +473,7 @@ func validateFormProperties(fields []clients.WorkflowFormField, supplied map[str
 		if f.ReadOnly {
 			continue
 		}
-		if f.Required && (!ok || value == "") {
+		if f.Required && (!ok || isBlankFormValue(f, value)) {
 			// A declared default means the value is already accounted for, on both models — so
 			// demanding it would make the caller invent one that is at best redundant and at
 			// worst wrong. Live example: a workflow whose required duration fields declare "B3D"
@@ -588,6 +588,23 @@ func checkFiniteNumber(f clients.WorkflowFormField, value string) string {
 	return fmt.Sprintf("%q's value %q is not a finite number — supply an ordinary numeric value", f.ID, value)
 }
 
+// isBlankFormValue reports a supplied value that leaves the field with nothing in it. For most
+// fields that is the empty string; an idPairs field has two more spellings of "no pairs", "[]"
+// and "null", and both used to pass as valid — they parse, and checkIDPairValue's per-pair loop
+// then has nothing to iterate. The server does not enforce requiredness for the field either, so
+// a required roleInCommunity went through the confirm and started the workflow with the field
+// unset, having reported the value fine.
+func isBlankFormValue(f clients.WorkflowFormField, value string) bool {
+	if value == "" {
+		return true
+	}
+	if !f.IDPairs {
+		return false
+	}
+	var pairs [][]string
+	return json.Unmarshal([]byte(value), &pairs) == nil && len(pairs) == 0
+}
+
 // checkIDPairValue validates the JSON-array-of-pairs shape before the write. Every way of getting
 // it wrong fails INSIDE the transactional start: the engine reads the value with an ObjectMapper
 // and answers anything it cannot parse with a blanket JSON_INPUT_UNEXPECTED_FORMAT that names
@@ -596,8 +613,13 @@ func checkFiniteNumber(f clients.WorkflowFormField, value string) string {
 // The role-expression shape is passed through untouched. That is what the engine renders a declared
 // value as, so it is what formFields reports as defaultValue: refusing it here would reject the
 // form's own value handed straight back, which is the obvious thing for a caller to do.
+//
+// HasPrefix, not Contains: the expression is the WHOLE value or it is not that shape at all.
+// Matching a substring handed a free pass to anything with "role(" somewhere in it — including a
+// malformed pair array like [["role(Steward,Marketing)"]], which then skipped every check here
+// and failed inside the start, after the user had approved the preview.
 func checkIDPairValue(f clients.WorkflowFormField, value string) []string {
-	if strings.Contains(value, clients.LegacyRoleExpressionPrefix) {
+	if strings.HasPrefix(value, clients.LegacyRoleExpressionPrefix) {
 		return nil
 	}
 	var pairs [][]string
