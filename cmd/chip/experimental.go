@@ -19,6 +19,7 @@ import (
 var knownExperimentalFeatures = map[string]string{
 	skills.FeatureName:                 "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
 	tools.ContextSpecificationsFeature: "Context specification tools: list_context_specifications, get_context_specification, and contextSpecificationId parameter on get_asset_details.",
+	tools.WorkflowsFeatureName:         "Workflow trigger tools: discover workflow definitions, scoped to one asset/domain/community or to the global (no-resource) scope (list_workflow_definitions); inspect start-form requirements and start a new instance, behind a confirm checkpoint (start_workflow). start_workflow WRITES to Collibra.",
 }
 
 // validateExperimental warns (without exiting) when the user enabled an

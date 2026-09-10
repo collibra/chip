@@ -43,6 +43,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/list_context_specifications"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
 	"github.com/collibra/chip/pkg/tools/list_dq_rule_templates"
+	"github.com/collibra/chip/pkg/tools/list_workflow_definitions"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
@@ -55,6 +56,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_dq_jobs"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/tools/start_workflow"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
 	"github.com/collibra/chip/pkg/tools/validate_dq_rule"
 )
@@ -62,6 +64,11 @@ import (
 // ContextSpecificationsFeature is the experimental-feature identifier used to
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
+
+// WorkflowsFeatureName gates the workflow-trigger tools (list_workflow_definitions,
+// start_workflow) behind --experimental. start_workflow WRITES to Collibra (starts a workflow
+// instance), so both stay opt-in until they graduate. Off by default.
+const WorkflowsFeatureName = "workflows"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -123,6 +130,10 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
+	}
+	if toolConfig.IsExperimentalEnabled(WorkflowsFeatureName) {
+		toolRegister(server, toolConfig, list_workflow_definitions.NewTool(client))
+		toolRegister(server, toolConfig, start_workflow.NewTool(client))
 	}
 
 	if toolConfig.EnableDebugTools {
