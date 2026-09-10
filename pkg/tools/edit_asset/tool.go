@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -25,20 +24,6 @@ import (
 // match prevents a class of LLM-typos.
 func normalize(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
-}
-
-// suggestionSuffix renders a short list of valid names to append to a
-// "not valid" error so the calling model can self-correct in one step
-// instead of round-tripping through another tool.
-func suggestionSuffix(label string, names []string, max int) string {
-	if len(names) == 0 {
-		return ""
-	}
-	sort.Strings(names)
-	if len(names) <= max {
-		return fmt.Sprintf(" %s available: %s.", label, strings.Join(names, ", "))
-	}
-	return fmt.Sprintf(" %s available: %s (and %d more).", label, strings.Join(names[:max], ", "), len(names)-max)
 }
 
 // OperationType enumerates the kinds of edits edit_asset can perform. Phases 2+
@@ -95,7 +80,7 @@ type Operation struct {
 
 	// Responsibility ops — set_responsibility and remove_responsibility.
 	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility / remove_responsibility: resource role name (e.g. 'Steward', 'Owner'). The server resolves this to the role UUID. remove_responsibility deletes only a responsibility defined directly on this asset (not one inherited from a parent domain or community)."`
-	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility / remove_responsibility: identifies the user (or user group) the role is assigned to. Accepts a UUID, a username (e.g. 'jane.smith'), or an email address (e.g. 'jane@example.com'). Names are resolved server-side."`
+	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility / remove_responsibility: identifies the user (or user group) the role is assigned to. Accepts a UUID, a username (e.g. 'jane.smith'), an email address (e.g. 'jane@example.com'), or a person's full name (e.g. 'Jane Smith'). Everything but a UUID is resolved to the user's UUID; a full name shared by several users returns an error listing the candidates instead of picking one."`
 }
 
 // OutputStatus summarises the result of the call.
@@ -158,7 +143,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"update_property (whitelisted fields only: 'name' to rename — also updates displayName when it tracks the current name, so the user-facing label stays in sync; 'displayName' to change the display name; or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
 			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes a forward role name like 'is synonym of' plus the target assetId, remove_relation takes the relation instance UUID); " +
 			"add_tag (append a free-text tag without replacing existing tags); " +
-			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be given as a UUID, username, or email); " +
+			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be given as a UUID, a username, an email address, or a person's full name such as 'Jane Smith' — a full name several users share returns a per-operation error listing the candidates rather than picking one, and only enabled accounts are searched by name or username); " +
 			"remove_responsibility (unassign a user or group from a resource role given the same role and user; removes only a responsibility assigned directly on the asset, not one inherited from a parent domain or community). " +
 			"Names (attribute names, relation roles, status names, resource role names, and user identifiers) are resolved server-side and matching is case- and whitespace-insensitive. " +
 			"Each operation is validated against the asset's scoped assignment before any writes; invalid ops return per-operation errors while valid siblings still apply, yielding status=success, partial_success, or error. " +

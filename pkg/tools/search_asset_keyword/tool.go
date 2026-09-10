@@ -20,7 +20,7 @@ type Input struct {
 	DomainTypeFilter    []string `json:"domainTypeFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified domain types. Accepts domain type names or UUIDs; names are resolved automatically."`
 	AssetTypeFilter     []string `json:"assetTypeFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified asset types. Accepts asset type names (e.g. Table, Column) or UUIDs; names are resolved automatically."`
 	StatusFilter        []string `json:"statusFilter,omitempty" jsonschema:"Optional. Filter by resources with the specified statuses. Accepts status names (e.g. Candidate, Accepted, Obsolete) or UUIDs; names are resolved automatically."`
-	CreatedByFilter     []string `json:"createdByFilter,omitempty" jsonschema:"Optional. Filter by resources created by the specified users. Accepts usernames or user UUIDs; usernames are resolved automatically."`
+	CreatedByFilter     []string `json:"createdByFilter,omitempty" jsonschema:"Optional. Filter by resources created by the specified users. Each entry is a user UUID, an email address, a username, or a full name such as 'Jane Smith'; anything but a UUID is resolved automatically. A name several users share returns an error listing the candidates with their UUIDs."`
 }
 
 type Output struct {

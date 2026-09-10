@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/collibra/chip/pkg/tools/testutil"
@@ -477,5 +479,167 @@ func TestGetEffectiveAssignmentForAsset_ExcludesDerivedRelationTypeFromTrait(t *
 	}
 	if findRel(got, explicitRelID) == nil {
 		t.Errorf("explicit relation from trait inheritance should be kept: %+v", got.RelationTypes)
+	}
+}
+
+// userSearchServer serves GET /rest/2.0/users the way the real endpoint does —
+// a partial, case-insensitive match over the nameSearchFields, including both
+// concatenations of first and last name — and records every query it received.
+func userSearchServer(t *testing.T, queries *[]url.Values, users ...EditAssetUser) *http.Client {
+	t.Helper()
+	return userSearchServerWithTotal(t, queries, 0, users...)
+}
+
+// userSearchServerWithTotal is userSearchServer with the reported `total`
+// overridden, so a truncated page (total greater than the results returned)
+// can be simulated. total <= 0 reports the number of matches, as an untruncated
+// page does.
+func userSearchServerWithTotal(t *testing.T, queries *[]url.Values, total int, users ...EditAssetUser) *http.Client {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/users", func(w http.ResponseWriter, r *http.Request) {
+		*queries = append(*queries, r.URL.Query())
+		needle := strings.ToLower(r.URL.Query().Get("name"))
+		var matches []EditAssetUser
+		for _, u := range users {
+			first, last := strings.TrimSpace(u.FirstName), strings.TrimSpace(u.LastName)
+			for _, field := range []string{u.UserName, first, last,
+				strings.TrimSpace(first + " " + last), strings.TrimSpace(last + " " + first)} {
+				if field != "" && strings.Contains(strings.ToLower(field), needle) {
+					matches = append(matches, u)
+					break
+				}
+			}
+		}
+		reported := total
+		if reported <= 0 {
+			reported = len(matches)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"total": reported, "results": matches})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return testutil.NewClient(srv)
+}
+
+// The endpoint's own defaults are sent explicitly, so a change of server-side
+// default cannot silently narrow the search — in particular dropping the two
+// concatenated forms, without which no two-word name would ever match.
+func TestFindUsersByName_SendsSearchFieldsAndExcludesDisabled(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServer(t, &queries,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"})
+
+	search, err := FindUsersByName(t.Context(), client, "Jane Smith")
+	if err != nil {
+		t.Fatalf("FindUsersByName: %v", err)
+	}
+	if len(search.Users) != 1 || search.Users[0].ID != "u-1" {
+		t.Fatalf("expected the concatenated name to match u-1, got %+v", search.Users)
+	}
+	if search.Truncated {
+		t.Fatal("a complete page must not report truncation")
+	}
+	if len(queries) != 1 {
+		t.Fatalf("expected one request, got %d", len(queries))
+	}
+	want := []string{"USERNAME", "FIRSTNAME", "LASTNAME", "FIRSTNAME_LASTNAME", "LASTNAME_FIRSTNAME"}
+	got := queries[0]["nameSearchFields"]
+	if len(got) != len(want) {
+		t.Fatalf("nameSearchFields = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("nameSearchFields = %v, want %v", got, want)
+		}
+	}
+	if v := queries[0].Get("includeDisabled"); v != "false" {
+		t.Fatalf("includeDisabled = %q, want %q", v, "false")
+	}
+}
+
+// FindUsersByName returns every match; reducing them to one is the caller's
+// job, which is what lets an ambiguous name be reported as ambiguous.
+func TestFindUsersByName_ReturnsEveryMatch(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServer(t, &queries,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"},
+		EditAssetUser{ID: "u-2", UserName: "jsmith2", FirstName: "Jane", LastName: "Smith"})
+
+	search, err := FindUsersByName(t.Context(), client, "Jane Smith")
+	if err != nil {
+		t.Fatalf("FindUsersByName: %v", err)
+	}
+	if len(search.Users) != 2 {
+		t.Fatalf("expected both users, got %+v", search.Users)
+	}
+}
+
+// A page the server says is incomplete must say so: display-name matching over
+// a truncated window could otherwise call a name unambiguous while a second
+// holder of it sits outside the page.
+func TestFindUsersByName_ReportsTruncation(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServerWithTotal(t, &queries, 250,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"},
+		EditAssetUser{ID: "u-2", UserName: "jsmith2", FirstName: "Jane", LastName: "Smith"})
+
+	search, err := FindUsersByName(t.Context(), client, "Jane Smith")
+	if err != nil {
+		t.Fatalf("FindUsersByName: %v", err)
+	}
+	if !search.Truncated || search.Total != 250 {
+		t.Fatalf("expected a truncated page with total 250, got %+v", search)
+	}
+}
+
+// Recipient resolution still collapses to the one exact username match, so an
+// unrelated partial hit can never be bound.
+func TestFindRecipientByName_RequiresAnExactUsername(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServer(t, &queries,
+		EditAssetUser{ID: "u-1", UserName: "jane.smithers", FirstName: "Janet", LastName: "Smithers"})
+
+	user, ambiguous, err := findRecipientByName(t.Context(), client, "jane.smith")
+	if err != nil {
+		t.Fatalf("findRecipientByName: %v", err)
+	}
+	if user != nil {
+		t.Fatalf("expected no match on a partial username, got %+v", user)
+	}
+	if ambiguous {
+		t.Fatal("a partial username is a miss, not an ambiguity")
+	}
+}
+
+// An exact username still resolves over a truncated page — usernames are
+// unique, so the window cannot hide a second holder.
+func TestFindRecipientByName_ExactUsernameSurvivesTruncation(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServerWithTotal(t, &queries, 250,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"})
+
+	user, ambiguous, err := findRecipientByName(t.Context(), client, "jane.smith")
+	if err != nil {
+		t.Fatalf("findRecipientByName: %v", err)
+	}
+	if user == nil || user.ID != "u-1" || ambiguous {
+		t.Fatalf("expected u-1 resolved unambiguously, got %+v ambiguous=%v", user, ambiguous)
+	}
+}
+
+// A display name resolved from a truncated page is treated as ambiguous: the
+// page cannot rule out a second holder of the name.
+func TestFindRecipientByName_TruncatedDisplayNameIsAmbiguous(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServerWithTotal(t, &queries, 250,
+		EditAssetUser{ID: "u-1", UserName: "jsmith", FirstName: "Jane", LastName: "Smith"})
+
+	user, ambiguous, err := findRecipientByName(t.Context(), client, "Jane Smith")
+	if err != nil {
+		t.Fatalf("findRecipientByName: %v", err)
+	}
+	if user != nil || !ambiguous {
+		t.Fatalf("expected no match reported as ambiguous, got %+v ambiguous=%v", user, ambiguous)
 	}
 }

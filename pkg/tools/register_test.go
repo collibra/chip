@@ -29,6 +29,16 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+// get_user_id_by_name is deliberately NOT behind an experimental flag: the
+// tools whose user-valued parameters it feeds are themselves ungated, so a
+// flagged resolver would leave them with no way to turn a name into a UUID.
+func TestRegisterAll_UserLookupToolVisibleWithEmptyConfig(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	if !slices.Contains(names, "get_user_id_by_name") {
+		t.Fatalf("expected %q to be registered with an empty config; got tools=%v", "get_user_id_by_name", names)
+	}
+}
+
 func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
 	// Every gate on, so a feature-flagged tool can't skip the annotation check.
 	cfg := &chip.ServerToolConfig{
