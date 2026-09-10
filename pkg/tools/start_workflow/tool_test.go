@@ -478,20 +478,51 @@ func TestStartWorkflow_PermissionDeniedMapsToClearError(t *testing.T) {
 	}
 }
 
+// TestStartWorkflow_ResourcePickerFieldMissing_FlagsInsteadOfGuessing. A picker field with no value
+// must come back as needs_input with the route that actually resolves it — never a guessed id, and
+// never a tool that cannot answer for its resource type.
+//
+// The three rows are the three outcomes. A type search can return names search. A type it cannot
+// names the tool that can, and must NOT name search: that combination is the search-fail-retry loop
+// the guidance exists to prevent. A type nothing here resolves names no tool at all and sends the
+// caller to the user for the UUID — the honest answer, and the one a role needs until a
+// role-resolution tool exists.
 func TestStartWorkflow_ResourcePickerFieldMissing_FlagsInsteadOfGuessing(t *testing.T) {
-	mux, c := newServer(t)
-	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Assign Owner Flow", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
-	handleLegacyForm(mux, workflowID, `{"processId":"p1","formProperties":[{"id":"ownerId","name":"Owner","type":"user","required":true}]}`)
+	for _, tc := range []struct {
+		fieldType string
+		wantIn    []string
+		wantNotIn []string
+	}{
+		{"user", []string{"search_asset_keyword", `resourceTypeFilters: ["User"]`}, nil},
+		{"assetType", []string{"list_asset_types"}, []string{"search_asset_keyword"}},
+		{"role", []string{"ask the user for the UUID"}, []string{"search_asset_keyword", "list_asset_types", "prepare_create_asset"}},
+	} {
+		t.Run(tc.fieldType, func(t *testing.T) {
+			mux, c := newServer(t)
+			handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Assign Owner Flow", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+			handleLegacyForm(mux, workflowID, `{"processId":"p1","formProperties":[{"id":"ownerId","name":"Owner","type":"`+tc.fieldType+`","required":true}]}`)
 
-	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if out.Status != start_workflow.StatusNeedsInput {
-		t.Fatalf("status = %q, want needs_input (%s)", out.Status, out.Message)
-	}
-	if len(out.FormFields) != 1 || !out.FormFields[0].ResourcePicker {
-		t.Fatalf("expected the 'ownerId' field to be flagged resourcePicker: %+v", out.FormFields)
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status != start_workflow.StatusNeedsInput {
+				t.Fatalf("status = %q, want needs_input (%s)", out.Status, out.Message)
+			}
+			if len(out.FormFields) != 1 || !out.FormFields[0].ResourcePicker {
+				t.Fatalf("expected the 'ownerId' field to be flagged resourcePicker: %+v", out.FormFields)
+			}
+			for _, want := range tc.wantIn {
+				if !strings.Contains(out.Message, want) {
+					t.Errorf("message %q does not name %q", out.Message, want)
+				}
+			}
+			for _, unwanted := range tc.wantNotIn {
+				if strings.Contains(out.Message, unwanted) {
+					t.Errorf("message names %q, which cannot resolve a %s: %q", unwanted, tc.fieldType, out.Message)
+				}
+			}
+		})
 	}
 }
 
@@ -986,7 +1017,8 @@ func TestStartWorkflow_LegacyUnsupportedFieldsExplainThemselves(t *testing.T) {
 		wantNotInMessage []string
 	}{
 		{"fileUpload", "fileUpload", []string{"uploaded file"}, []string{"search_asset_keyword"}},
-		{"roleInCommunity", "roleInCommunity", []string{"[roleId, communityId]", `resourceTypeFilters: ["Community"]`}, nil},
+		// The legacy shape, and NOT the JSON model's — see the JSON twin of this test.
+		{"roleInCommunity", "roleInCommunity", []string{"positional [roleId, communityId] pairs", `resourceTypeFilters: ["Community"]`}, []string{`{"role":`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mux, c := newServer(t)
@@ -1010,7 +1042,7 @@ func TestStartWorkflow_LegacyUnsupportedFieldsExplainThemselves(t *testing.T) {
 			}
 			for _, unwanted := range tc.wantNotInMessage {
 				if strings.Contains(out.Message, unwanted) {
-					t.Errorf("message names %q, a lookup that cannot resolve this field: %q", unwanted, out.Message)
+					t.Errorf("message contains %q, which is not true of this field — a lookup that cannot resolve it, or the other form model's value shape: %q", unwanted, out.Message)
 				}
 			}
 		})
@@ -1388,7 +1420,11 @@ func TestStartWorkflow_JSONUnsupportedStencilsExplainThemselves(t *testing.T) {
 		wantNotIn     []string
 	}{
 		{"fileUpload", "collibra-fileUpload", []string{"uploaded file"}, []string{"search_asset_keyword"}},
-		{"roleInCommunity", "collibra-roleInCommunity", []string{"[roleId, communityId]", `resourceTypeFilters: ["Community"]`}, nil},
+		// The JSON model's value is a list of OBJECTS keyed role/community, not the legacy model's
+		// positional array — the two must never be told each other's shape. OOTB
+		// IssueManagementApp is the evidence: its script does `roleInCommunity.containsKey('role')`
+		// over the bound variable, which only a map answers.
+		{"roleInCommunity", "collibra-roleInCommunity", []string{"keyed role/community", `resourceTypeFilters: ["Community"]`}, []string{"positional [roleId, communityId] pairs"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mux, c := newServer(t)
@@ -1409,7 +1445,7 @@ func TestStartWorkflow_JSONUnsupportedStencilsExplainThemselves(t *testing.T) {
 			}
 			for _, unwanted := range tc.wantNotIn {
 				if strings.Contains(out.Message, unwanted) {
-					t.Errorf("message names %q, a lookup that cannot resolve this field: %q", unwanted, out.Message)
+					t.Errorf("message contains %q, which is not true of this field — a lookup that cannot resolve it, or the other form model's value shape: %q", unwanted, out.Message)
 				}
 			}
 		})

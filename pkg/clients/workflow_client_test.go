@@ -682,3 +682,76 @@ func TestToLegacyFormField_RoleInCommunityWithoutProposedPairsStaysUnsupported(t
 		t.Errorf("options = %+v, want none", fields[0].Options)
 	}
 }
+
+// TestToLegacyFormField_ResourcePickerNamesOnlyARouteThatWorks pins the rule the whole Unsupported
+// machinery exists for, applied one level down: a lookup may be named only for something it can
+// actually return. "Resolve it via search_asset_keyword" was told to every picker type, but search
+// takes resourceTypeFilters of Asset/Domain/Community/User/UserGroup only — so for an assetType,
+// domainType, attributeType or relationType it named a tool that cannot answer, and the caller
+// searched, failed and retried. Those four have real routes through other tools; role has none.
+//
+// The last assertion is the invariant rather than a string: any type search cannot return must not
+// mention search at all. That is what stops a future edit from restoring the generic hint.
+func TestToLegacyFormField_ResourcePickerNamesOnlyARouteThatWorks(t *testing.T) {
+	for _, tc := range []struct{ fieldType, wantIn string }{
+		{"user", `search_asset_keyword (resourceTypeFilters: ["User"])`},
+		{"group", `search_asset_keyword (resourceTypeFilters: ["UserGroup"])`},
+		{"community", `search_asset_keyword (resourceTypeFilters: ["Community"])`},
+		{"term", `search_asset_keyword (resourceTypeFilters: ["Asset"])`},
+		{"vocabulary", `search_asset_keyword (resourceTypeFilters: ["Domain"])`},
+		{"assetType", "list_asset_types"},
+		{"domainType", "prepare_create_asset"},
+		{"attributeType", "attributeSchema[].attributeTypeId"},
+		{"relationType", "relationTypes[].relationTypeId"},
+		{"role", ""}, // nothing here turns a role name into its id
+	} {
+		t.Run(tc.fieldType, func(t *testing.T) {
+			fields := legacyFormFieldsFrom(t, `{"formProperties":[{"id":"f","name":"F","type":"`+tc.fieldType+`","required":true}]}`)
+			if len(fields) != 1 {
+				t.Fatalf("expected one field, got %+v", fields)
+			}
+			f := fields[0]
+			if !f.ResourcePicker {
+				t.Fatalf("%s asks for a real resource and must be flagged a picker", tc.fieldType)
+			}
+			if tc.wantIn == "" {
+				if f.ResolveWith != "" {
+					t.Errorf("resolveWith = %q, want empty: naming any route for %s sends the caller after a lookup that does not exist", f.ResolveWith, tc.fieldType)
+				}
+				return
+			}
+			if !strings.Contains(f.ResolveWith, tc.wantIn) {
+				t.Errorf("resolveWith = %q, want it to name %q", f.ResolveWith, tc.wantIn)
+			}
+			if !strings.Contains(tc.wantIn, "resourceTypeFilters") && strings.Contains(f.ResolveWith, "search_asset_keyword") {
+				t.Errorf("resolveWith = %q names search, which cannot return a %s", f.ResolveWith, tc.fieldType)
+			}
+		})
+	}
+}
+
+// TestToJSONFormField_ResourcePickerRouteMatchesTheLegacyOne. The palette stencil is named after
+// the legacy form type it stands in for, so one table answers both models — the alternative is two
+// lists of resolution advice that drift apart silently. An unknown stencil is the case worth
+// pinning: it must yield NO route rather than a guessed one, leaving the caller with the generic
+// "this needs a real resource" it would have had anyway.
+func TestToJSONFormField_ResourcePickerRouteMatchesTheLegacyOne(t *testing.T) {
+	for _, tc := range []struct{ stencil, want string }{
+		{"collibra-user", `resolve it with search_asset_keyword (resourceTypeFilters: ["User"])`},
+		{"collibra-assetType", "resolve it with list_asset_types (id)"},
+		{"collibra-somethingNobodyHasShippedYet", ""},
+	} {
+		t.Run(tc.stencil, func(t *testing.T) {
+			fields := mustJSONFormFields(t, `{"rows":[{"cols":[{"designInfo":{"stencilId":"`+tc.stencil+`"},"id":"f","type":"text","label":"F","value":"{{f}}"}]}]}`)
+			if len(fields) != 1 {
+				t.Fatalf("expected one field, got %+v", fields)
+			}
+			if !fields[0].ResourcePicker {
+				t.Fatalf("every collibra- stencil is a resource picker, including one this client does not know")
+			}
+			if fields[0].ResolveWith != tc.want {
+				t.Errorf("resolveWith = %q, want %q", fields[0].ResolveWith, tc.want)
+			}
+		})
+	}
+}

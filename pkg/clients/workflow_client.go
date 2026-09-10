@@ -433,11 +433,12 @@ type WorkflowFormField struct {
 	// whatever the server itself enforces, e.g. a date format).
 	Options []WorkflowFormFieldOption `json:"options,omitempty"`
 	// ResourcePicker is true when this field asks for a real Collibra resource (a user, group,
-	// role, community, term, or similar) rather than a plain value or a fixed choice — resolving
-	// one correctly means looking it up first (e.g. via search_asset_keyword), which is out of
-	// scope for this client. Only ever set for the legacy model; see
-	// WorkflowFormFieldIsResourcePicker.
+	// role, community, term, or similar) rather than a plain value or a fixed choice. Resolving one
+	// is out of scope for this client — see ResolveWith for who does it.
 	ResourcePicker bool `json:"resourcePicker,omitempty"`
+	// ResolveWith names the route that produces a value for a ResourcePicker field, per resource
+	// type — see legacyResourcePickerFormTypes. Empty means no tool here resolves that type.
+	ResolveWith string `json:"resolveWith,omitempty"`
 	// OptionsExhaustive reports whether Options is the COMPLETE set of legal values. Choice fields
 	// (enum, checkbox, radio) and fixed pickers are exhaustive; a picker whose server-supplied list
 	// is merely "proposed" is not, and there an id outside the list is still accepted.
@@ -488,10 +489,31 @@ type WorkflowFormFieldOption struct {
 // resource rather than a plain value or a fixed choice: the concrete subclasses of the server's
 // AbstractSingleDropdownFormType, which is exactly the set it populates proposedDropdownValues /
 // defaultDropdownValues for.
-var legacyResourcePickerFormTypes = map[string]bool{
-	"term": true, "user": true, "group": true, "role": true,
-	"community": true, "domainType": true, "vocabulary": true, "assetType": true,
-	"attributeType": true, "relationType": true,
+//
+// The value is the route that actually resolves one, and it is per type on purpose. "Resolve it via
+// search_asset_keyword" is true only for the types search can return; for an assetType or a
+// relationType it names a lookup that cannot succeed, and the caller then searches, fails and
+// retries — the loop the Unsupported field exists to prevent, reintroduced by a generic hint.
+//
+// An empty value means NOTHING here resolves that type. That is a different statement from
+// Unsupported: the value is perfectly producible, just not from this server, so the field stays
+// answerable by a caller who knows the id.
+var legacyResourcePickerFormTypes = map[string]string{
+	"term":      `resolve it with search_asset_keyword (resourceTypeFilters: ["Asset"])`,
+	"user":      `resolve it with search_asset_keyword (resourceTypeFilters: ["User"])`,
+	"group":     `resolve it with search_asset_keyword (resourceTypeFilters: ["UserGroup"])`,
+	"community": `resolve it with search_asset_keyword (resourceTypeFilters: ["Community"])`,
+	// A vocabulary IS a domain — the older name for the same resource, which is why search's
+	// Domain filter answers it.
+	"vocabulary":    `resolve it with search_asset_keyword (resourceTypeFilters: ["Domain"])`,
+	"assetType":     "resolve it with list_asset_types (id)",
+	"domainType":    "resolve it with prepare_create_asset (domainTypeId, from a resolved domain)",
+	"attributeType": "resolve it with prepare_create_asset (attributeSchema[].attributeTypeId)",
+	"relationType":  "resolve it with prepare_create_asset (relationTypes[].relationTypeId)",
+	// Deliberately empty: no tool here turns a role name into its id. Same gap as the role half of
+	// unsupportedRoleInCommunity, and it closes the same way — by a role-resolution tool, not by
+	// this package resolving one itself.
+	"role": "",
 }
 
 // legacyFileUploadFormType cannot be filled via a plain form-property value at all.
@@ -509,9 +531,10 @@ const unsupportedSubform = "This is a sub-form: its fields live in a separate fo
 	"workflow from Collibra's UI if any of them are needed."
 
 // legacyRoleInCommunityFormType is deliberately NOT in legacyResourcePickerFormTypes: it is the
-// one legacy multi-dropdown, and its value is not a resource id but a JSON array of
+// one legacy multi-dropdown, and its value is not a resource id but a JSON array of positional
 // [roleId, communityId] PAIRS — anything else is rejected outright. Treating it as an ordinary
 // picker told the caller to "resolve a resource", after which a bare role id came back as a 400.
+// The JSON model's twin stencil wants a different shape again; see unsupportedRoleInCommunityJSON.
 const legacyRoleInCommunityFormType = "roleInCommunity"
 
 // Reasons a legacy field cannot be answered from this client alone. Both are surfaced as
@@ -520,21 +543,34 @@ const legacyRoleInCommunityFormType = "roleInCommunity"
 const (
 	unsupportedFileUpload = "This field takes an uploaded file, which cannot be supplied through this API at all. " +
 		"The workflow has to be started from Collibra's own UI if this field is required."
-	// The two halves of this message are NOT the same kind of statement, and only one of them is
-	// permanent. A community UUID is resolvable today, so the message names the tool that does it —
-	// the same shape ResourcePicker fields use. The role half is a PLACEHOLDER: "you must already
-	// know the UUID" holds only because no tool here resolves a role name yet, not because the
-	// value cannot be produced. The client plumbing exists already (ListRoles).
+	// roleInCommunity is TWO messages, because the value shape differs by form model and telling a
+	// caller the other model's shape is telling it something untrue for the form in front of it.
+	// Legacy takes positional pairs, parsed with element.get(0)/get(1). The JSON model takes
+	// objects keyed role/community — OOTB IssueManagementApp binds the component to `role` and its
+	// script does `roleInCommunity.containsKey('role')` and `.get('community')` over that variable,
+	// which only a map answers.
+	//
+	// The resolution advice is identical either way, so it is stated once in the shared tail. Its
+	// two halves are NOT the same kind of statement, and only one is permanent: a community UUID is
+	// resolvable today, so the tail names the tool that does it, the same shape ResourcePicker
+	// fields use. The role half is a PLACEHOLDER — "you must already know the UUID" holds only
+	// because no tool here resolves a role name yet, not because the value cannot be produced. The
+	// client plumbing exists already (ListRoles).
 	//
 	// When a role-resolution tool is added, REPLACE the role clause with a pointer to it. Do not
 	// instead call ListRoles from start_workflow: resolving a resource is not that tool's job, and
 	// doing it inline would duplicate whatever the new tool does — the reason ResourcePicker fields
 	// delegate rather than resolve.
-	unsupportedRoleInCommunity = "This field takes a JSON array of [roleId, communityId] pairs, e.g. " +
-		`[["<role-uuid>","<community-uuid>"]]` + " — not a single id. A community UUID can be resolved with " +
-		`search_asset_keyword (resourceTypeFilters: ["Community"])` + ", and the community half may be an empty " +
-		"string when the role is not scoped to one. No tool here resolves a role NAME to its id, so the role " +
-		"UUID has to be one you already know; otherwise start the workflow from Collibra's UI."
+	unsupportedRoleInCommunityTail = " A community UUID can be resolved with " +
+		`search_asset_keyword (resourceTypeFilters: ["Community"])` + ", and the community half is optional when " +
+		"the role is not scoped to one. No tool here resolves a role NAME to its id, so the role UUID has to be " +
+		"one you already know; otherwise start the workflow from Collibra's UI."
+	unsupportedRoleInCommunityLegacy = "This field takes a JSON array of positional [roleId, communityId] pairs, " +
+		"e.g. " + `[["<role-uuid>","<community-uuid>"]]` + " — not a single id; pass an empty string for an " +
+		"absent community." + unsupportedRoleInCommunityTail
+	unsupportedRoleInCommunityJSON = "This field takes a JSON array of objects keyed role/community, e.g. " +
+		`[{"role":"<role-uuid>","community":"<community-uuid>"}]` + " — not a single id, and NOT the legacy " +
+		"model's positional array; omit the community key when there is none." + unsupportedRoleInCommunityTail
 	unsupportedFullStorage = "This form stores the WHOLE picked resource for this field, not its id, so the process " +
 		"reads properties off it. Only an id can be produced here, and an id where an object is expected fails the " +
 		"start outright — so start this workflow from Collibra's UI if this field is needed."
@@ -598,6 +634,7 @@ func GetWorkflowStartFormData(ctx context.Context, client *http.Client, workflow
 var legacyButtonFormTypes = map[string]bool{"button": true, "activityButton": true, "taskButton": true}
 
 func toLegacyFormField(p legacyFormPropertyWire) WorkflowFormField {
+	resolveWith, isPicker := legacyResourcePickerFormTypes[p.Type]
 	defaultValue := p.Value
 	if legacyButtonFormTypes[p.Type] {
 		defaultValue = ""
@@ -617,13 +654,14 @@ func toLegacyFormField(p legacyFormPropertyWire) WorkflowFormField {
 		MultiValue:     p.MultiValue,
 		DefaultValue:   defaultValue,
 		ReadOnly:       p.Writable != nil && !*p.Writable,
-		ResourcePicker: legacyResourcePickerFormTypes[p.Type],
+		ResourcePicker: isPicker,
+		ResolveWith:    resolveWith,
 	}
 	switch p.Type {
 	case legacyFileUploadFormType:
 		field.Unsupported = unsupportedFileUpload
 	case legacyRoleInCommunityFormType:
-		field.Unsupported = unsupportedRoleInCommunity
+		field.Unsupported = unsupportedRoleInCommunityLegacy
 	}
 
 	switch {
@@ -1016,6 +1054,7 @@ func toJSONFormField(col map[string]any, key, fieldType string) WorkflowFormFiel
 		DefaultValue:   jsonFormDefaultValue(col),
 		MultiValue:     jsonFormIsMultiValue(col),
 		ResourcePicker: strings.HasPrefix(stencil, jsonFormCollibraStencilPrefix),
+		ResolveWith:    jsonFormResolveWith(stencil),
 		Unsupported:    jsonFormUnsupported(stencil),
 	}
 	if field.Unsupported == "" {
@@ -1111,6 +1150,18 @@ func jsonFormDefaultValue(col map[string]any) string {
 	return ""
 }
 
+// jsonFormResolveWith reuses the legacy routes for the JSON model: a collibra- palette stencil is
+// named after the legacy form type it stands in for ("collibra-user", "collibra-assetType"), so one
+// lookup answers both models and they cannot drift apart. A stencil the map does not know yields no
+// hint rather than a guessed one, which leaves the caller with the generic "this needs a real
+// resource" — no worse off than before any route was named.
+func jsonFormResolveWith(stencil string) string {
+	if !strings.HasPrefix(stencil, jsonFormCollibraStencilPrefix) {
+		return ""
+	}
+	return legacyResourcePickerFormTypes[strings.TrimPrefix(stencil, jsonFormCollibraStencilPrefix)]
+}
+
 // jsonFormUnsupported mirrors the legacy path's honesty for the JSON model: a file upload cannot
 // be produced through this API at all, and a role-in-community needs a paired structure rather
 // than a resource id. Without this the caller is told to "resolve it via search" and loops.
@@ -1119,7 +1170,7 @@ func jsonFormUnsupported(stencil string) string {
 	case jsonFormFileUploadStencil:
 		return unsupportedFileUpload
 	case jsonFormRoleInCommunityStencil:
-		return unsupportedRoleInCommunity
+		return unsupportedRoleInCommunityJSON
 	}
 	return ""
 }

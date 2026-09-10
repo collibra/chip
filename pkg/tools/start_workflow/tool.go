@@ -93,7 +93,10 @@ type FormField struct {
 	Unsupported  string `json:"unsupported,omitempty" jsonschema:"Present when this tool cannot help produce a value for the field, with the reason. Relay it to the user rather than guessing or retrying; if the field is also required, the workflow cannot be started from here at all."`
 	// Detected in both form models: by field type in the legacy one, by the collibra- palette
 	// stencil in the JSON one — see clients.WorkflowFormFieldIsResourcePicker.
-	ResourcePicker bool `json:"resourcePicker,omitempty" jsonschema:"When true, this field needs a real Collibra resource (e.g. a user, group, role, or another asset) as its value, not a plain value or one of a fixed list. Resolve it first (e.g. via search_asset_keyword) if possible — this tool cannot guess a valid id for it."`
+	ResourcePicker bool `json:"resourcePicker,omitempty" jsonschema:"When true, this field needs a real Collibra resource (e.g. a user, group, role, or another asset) as its value, not a plain value or one of a fixed list. See resolveWith for how to obtain one — this tool cannot guess a valid id for it."`
+	// The route is named per resource type rather than generically, because the generic advice is
+	// wrong for most of them — see clients.legacyResourcePickerFormTypes.
+	ResolveWith string `json:"resolveWith,omitempty" jsonschema:"How to obtain a value for this field: the tool to call and where the id sits in its output. When this is absent on a resourcePicker field, no tool here resolves that resource type — ask the user for the UUID instead of searching for it, and do not substitute a different lookup."`
 }
 
 // Output is the typed response.
@@ -519,8 +522,12 @@ func describeMissingField(f clients.WorkflowFormField) string {
 		return fmt.Sprintf("%q is required — pass a JSON array built from the option keys listed for it in formFields, each key being one [roleId, communityId] pair", f.ID)
 	case len(f.Options) > 0:
 		return fmt.Sprintf("%q is required — pick one of the option keys listed for it in formFields", f.ID)
+	case clients.WorkflowFormFieldIsResourcePicker(f) && f.ResolveWith == "":
+		// Naming no route is the point: a generic "search for it" here is the search-fail-retry
+		// loop, because the types that reach this branch are the ones nothing resolves.
+		return fmt.Sprintf("%q needs a real Collibra resource as its value, and no tool here resolves that resource type — ask the user for the UUID, or start the workflow from Collibra's UI", f.ID)
 	case clients.WorkflowFormFieldIsResourcePicker(f):
-		return fmt.Sprintf("%q needs a real Collibra resource as its value — resolve it first (e.g. via search_asset_keyword); this tool cannot guess a valid id for it", f.ID)
+		return fmt.Sprintf("%q needs a real Collibra resource as its value — %s; this tool cannot guess a valid id for it", f.ID, f.ResolveWith)
 	}
 	return fmt.Sprintf("%q is required", f.ID)
 }
@@ -643,6 +650,7 @@ func toFormFields(fields []clients.WorkflowFormField) []FormField {
 			HelpText:          f.HelpText,
 			Unsupported:       f.Unsupported,
 			IDPairs:           f.IDPairs,
+			ResolveWith:       f.ResolveWith,
 		}
 		if len(f.Options) > 0 {
 			tf.Options = make([]FormFieldOption, len(f.Options))
