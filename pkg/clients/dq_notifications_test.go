@@ -2,6 +2,7 @@ package clients
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -93,5 +94,26 @@ func TestResolveNotificationRecipientsAcceptsFullNames(t *testing.T) {
 	// "Bob Jones" is shared by two accounts, "Nobody Here" matches none.
 	if len(res.Unresolved) != 2 || res.Unresolved[0] != "Bob Jones" || res.Unresolved[1] != "Nobody Here" {
 		t.Fatalf("expected [Bob Jones, Nobody Here] unresolved, got %v", res.Unresolved)
+	}
+	// The two cases need different advice, so only the shared name is ambiguous.
+	if len(res.Ambiguous) != 1 || res.Ambiguous[0] != "Bob Jones" {
+		t.Fatalf("expected [Bob Jones] ambiguous, got %v", res.Ambiguous)
+	}
+}
+
+// The two failure modes need different advice, so the message keeps them apart.
+func TestUnresolvedRecipientsMessageSeparatesAmbiguousFromMissing(t *testing.T) {
+	msg := UnresolvedRecipientsMessage(RecipientResolution{
+		Unresolved: []string{"Bob Jones", "Nobody Here"},
+		Ambiguous:  []string{"Bob Jones"},
+	})
+	if !strings.Contains(msg, "no active Collibra account: Nobody Here.") {
+		t.Fatalf("message does not report the missing recipient on its own: %q", msg)
+	}
+	if !strings.Contains(msg, "more than one active account") || !strings.Contains(msg, "Bob Jones") {
+		t.Fatalf("message does not report the shared name as shared: %q", msg)
+	}
+	if got := UnresolvedRecipientsMessage(RecipientResolution{}); got != "" {
+		t.Fatalf("an all-resolved resolution must render an empty message, got %q", got)
 	}
 }

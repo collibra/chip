@@ -178,3 +178,47 @@ func TestEditAssessment_GroupAssigneeMustBeAUUID(t *testing.T) {
 		t.Fatalf("expected no PATCH, got %+v", s.patched)
 	}
 }
+
+// A malformed entry later in the list is reported without spending a user
+// lookup on the entries before it.
+func TestEditAssessment_AssigneeListValidatedBeforeAnyLookup(t *testing.T) {
+	s := &stub{users: directory()}
+	out, err := tool.NewTool(s.client(t)).Handler(t.Context(), tool.Input{
+		Assessment: assessmentID,
+		Operations: []tool.Operation{{Type: tool.OpSetAssignees, Assignees: []tool.AssigneeInput{
+			{ID: "Jane Smith", Type: "USER"},
+			{ID: "Data Stewards", Type: "GROUP"},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != tool.StatusError {
+		t.Fatalf("expected the named group to be rejected, got %q", out.Status)
+	}
+	if s.nameHits != 0 {
+		t.Fatalf("expected no user lookup before the list validated, got %d", s.nameHits)
+	}
+	if s.patched != nil {
+		t.Fatalf("expected no PATCH, got %+v", s.patched)
+	}
+}
+
+// set_owner reports the UUID that will be written, not the caller's input —
+// which also keeps an email the caller supplied out of the result payload.
+func TestEditAssessment_SetOwnerReportsResolvedUUID(t *testing.T) {
+	s := &stub{users: directory()}
+	out, err := tool.NewTool(s.client(t)).Handler(t.Context(), tool.Input{
+		Assessment: assessmentID,
+		Operations: []tool.Operation{{Type: tool.OpSetOwner, UserID: "jane.smith@example.com"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != tool.StatusSuccess {
+		t.Fatalf("expected success, got %q: %+v", out.Status, out.Results)
+	}
+	if out.Results[0].Value != "u-jane" {
+		t.Fatalf("results[0].value = %q, want the resolved UUID %q", out.Results[0].Value, "u-jane")
+	}
+}

@@ -175,3 +175,25 @@ func TestCreateAssessment_GroupAssigneeMustBeAUUID(t *testing.T) {
 		t.Fatalf("expected no assessment to be created, got %+v", s.created)
 	}
 }
+
+// A malformed entry later in the list is reported without spending a user
+// lookup on the entries before it.
+func TestCreateAssessment_AssigneeListValidatedBeforeAnyLookup(t *testing.T) {
+	s := &assessmentsStub{users: directory()}
+	_, err := tool.NewTool(s.client(t)).Handler(t.Context(), tool.Input{
+		Template: "Business Context",
+		Assignees: []tool.InputAssignee{
+			{ID: "Jane Smith", Type: "USER"},
+			{ID: "Data Stewards", Type: "GROUP"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected the named group to be rejected")
+	}
+	if s.nameHits != 0 {
+		t.Fatalf("expected no user lookup before the list validated, got %d", s.nameHits)
+	}
+	if s.created != nil {
+		t.Fatalf("expected no assessment to be created, got %+v", s.created)
+	}
+}

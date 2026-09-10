@@ -23,8 +23,9 @@ type User struct {
 // Hint wording for user resolution. Both are overridable per caller via Hints;
 // these apply when the caller has nothing more specific to say.
 const (
-	userNotFoundHint  = `Accepted forms: the user's UUID, their email address, their username, or their full name as "First Last".`
-	userAmbiguityHint = "do NOT pick one — ask which person is meant, then call again with that user's username or UUID"
+	userNotFoundHint   = `Accepted forms: the user's UUID, their email address, their username, or their full name as "First Last". Only enabled (non-deactivated) accounts are searched by name or username, so a deactivated leaver will not be found under any of them.`
+	userAmbiguityHint  = "do NOT pick one — ask which person is meant, then call again with that user's username or UUID"
+	userCandidateLabel = "Closest matches"
 )
 
 // UserID resolves a user reference to the user's UUID. See UserRef for the
@@ -61,6 +62,13 @@ func UserRef(ctx context.Context, client *http.Client, value string, hints Hints
 // userByEmail resolves an email address through the dedicated exact-match
 // endpoint. The list endpoint has no email filter — it silently ignores an
 // unknown `emailAddress` param and would return an arbitrary user.
+//
+// Unlike the name search, this endpoint takes no includeDisabled parameter, so
+// whether it also returns deactivated accounts is the server's call and is not
+// filtered here (unverified against a live instance from this environment).
+// The two paths can therefore differ for a deactivated user: findable by
+// email, not findable by name. Filtering it out here would be worse — it would
+// turn a lookup that works today into a not-found.
 func userByEmail(ctx context.Context, client *http.Client, email string, hints Hints) (User, error) {
 	user, err := clients.FindUserByEmail(ctx, client, email)
 	if err != nil {
@@ -77,14 +85,26 @@ func userByEmail(ctx context.Context, client *http.Client, email string, hints H
 // PickMatch. The search itself is a partial match, so a candidate list is
 // exactly what PickMatch expects.
 func userByName(ctx context.Context, client *http.Client, name string, hints Hints) (User, error) {
-	users, err := clients.FindUsersByName(ctx, client, name)
+	search, err := clients.FindUsersByName(ctx, client, name)
 	if err != nil {
 		return User{}, fmt.Errorf("looking up user %q: %w", name, err)
 	}
+	users := search.Users
 	for _, u := range users {
 		if strings.EqualFold(u.UserName, name) {
 			return toUser(u), nil
 		}
+	}
+
+	// Beyond the exact username the reduction is by display name, and that
+	// cannot be trusted over a truncated result set: one match inside the
+	// window says nothing about a second holder of the name outside it, and
+	// resolving anyway would be the silent wrong pick this package exists to
+	// prevent. Usernames being unique, the branch above is unaffected.
+	if search.Truncated {
+		return User{}, fmt.Errorf(
+			"%q matched %d users, more than the %d this lookup reads, so it cannot be resolved by name safely; search for the person with search_asset_keyword (resourceTypeFilters: [\"User\"]) and pass their UUID, or pass their exact username or email address",
+			name, search.Total, len(users))
 	}
 
 	byID := make(map[string]clients.EditAssetUser, len(users))
@@ -116,6 +136,9 @@ func userHints(hints Hints) Hints {
 	}
 	if hints.Ambiguity == "" {
 		hints.Ambiguity = userAmbiguityHint
+	}
+	if hints.Candidates == "" {
+		hints.Candidates = userCandidateLabel
 	}
 	return hints
 }

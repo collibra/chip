@@ -23,6 +23,7 @@ const (
 // any) was called.
 type userDir struct {
 	users        []clients.EditAssetUser
+	total        int // reported `total`; 0 means "as many as returned" (a complete page)
 	nameQueries  []url.Values
 	emailLookups []string
 }
@@ -44,7 +45,11 @@ func (d *userDir) client(t *testing.T) *http.Client {
 				matches = append(matches, u)
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"total": len(matches), "results": matches})
+		reported := d.total
+		if reported <= 0 {
+			reported = len(matches)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"total": reported, "results": matches})
 	})
 
 	// GET /rest/2.0/users/email/{email}: the dedicated exact-match endpoint.
@@ -205,6 +210,48 @@ func TestUserRef_NameSearchSendsFieldsAndIncludeDisabled(t *testing.T) {
 	}
 	if got := q.Get("includeDisabled"); got != "false" {
 		t.Fatalf("includeDisabled = %q, want %q", got, "false")
+	}
+}
+
+// A name cannot be called unambiguous over a page the server says is
+// incomplete: a second holder of it may sit outside the window, and resolving
+// anyway would be the silent wrong pick this package exists to prevent.
+func TestUserRef_TruncatedSearchDoesNotResolveByName(t *testing.T) {
+	dir := &userDir{users: []clients.EditAssetUser{jane()}, total: 250}
+	_, err := resolve.UserRef(t.Context(), dir.client(t), "Jane Smith", resolve.Hints{})
+	if err == nil {
+		t.Fatal("expected a truncation error rather than a confident single match")
+	}
+	for _, want := range []string{"250", "Jane Smith", "UUID"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+// An exact username still resolves over a truncated page — usernames are
+// unique, so the window cannot hide a second holder.
+func TestUserRef_ExactUsernameResolvesDespiteTruncation(t *testing.T) {
+	dir := &userDir{users: []clients.EditAssetUser{jane()}, total: 250}
+	id, err := resolve.UserID(t.Context(), dir.client(t), "jane.smith", resolve.Hints{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != janeID {
+		t.Fatalf("id = %q, want %q", id, janeID)
+	}
+}
+
+// The not-found error says only enabled accounts are searched, so a model
+// hunting a deactivated leaver stops trying name variants.
+func TestUserRef_NotFoundMentionsEnabledAccountsOnly(t *testing.T) {
+	dir := &userDir{users: []clients.EditAssetUser{jane()}}
+	_, err := resolve.UserRef(t.Context(), dir.client(t), "Nobody Here", resolve.Hints{})
+	if err == nil {
+		t.Fatal("expected a not-found error")
+	}
+	if !strings.Contains(err.Error(), "enabled") {
+		t.Fatalf("error %q does not mention that only enabled accounts are searched", err)
 	}
 }
 

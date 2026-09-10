@@ -487,6 +487,15 @@ func TestGetEffectiveAssignmentForAsset_ExcludesDerivedRelationTypeFromTrait(t *
 // concatenations of first and last name — and records every query it received.
 func userSearchServer(t *testing.T, queries *[]url.Values, users ...EditAssetUser) *http.Client {
 	t.Helper()
+	return userSearchServerWithTotal(t, queries, 0, users...)
+}
+
+// userSearchServerWithTotal is userSearchServer with the reported `total`
+// overridden, so a truncated page (total greater than the results returned)
+// can be simulated. total <= 0 reports the number of matches, as an untruncated
+// page does.
+func userSearchServerWithTotal(t *testing.T, queries *[]url.Values, total int, users ...EditAssetUser) *http.Client {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /rest/2.0/users", func(w http.ResponseWriter, r *http.Request) {
 		*queries = append(*queries, r.URL.Query())
@@ -502,7 +511,11 @@ func userSearchServer(t *testing.T, queries *[]url.Values, users ...EditAssetUse
 				}
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"total": len(matches), "results": matches})
+		reported := total
+		if reported <= 0 {
+			reported = len(matches)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"total": reported, "results": matches})
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -517,12 +530,15 @@ func TestFindUsersByName_SendsSearchFieldsAndExcludesDisabled(t *testing.T) {
 	client := userSearchServer(t, &queries,
 		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"})
 
-	users, err := FindUsersByName(t.Context(), client, "Jane Smith")
+	search, err := FindUsersByName(t.Context(), client, "Jane Smith")
 	if err != nil {
 		t.Fatalf("FindUsersByName: %v", err)
 	}
-	if len(users) != 1 || users[0].ID != "u-1" {
-		t.Fatalf("expected the concatenated name to match u-1, got %+v", users)
+	if len(search.Users) != 1 || search.Users[0].ID != "u-1" {
+		t.Fatalf("expected the concatenated name to match u-1, got %+v", search.Users)
+	}
+	if search.Truncated {
+		t.Fatal("a complete page must not report truncation")
 	}
 	if len(queries) != 1 {
 		t.Fatalf("expected one request, got %d", len(queries))
@@ -550,12 +566,30 @@ func TestFindUsersByName_ReturnsEveryMatch(t *testing.T) {
 		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"},
 		EditAssetUser{ID: "u-2", UserName: "jsmith2", FirstName: "Jane", LastName: "Smith"})
 
-	users, err := FindUsersByName(t.Context(), client, "Jane Smith")
+	search, err := FindUsersByName(t.Context(), client, "Jane Smith")
 	if err != nil {
 		t.Fatalf("FindUsersByName: %v", err)
 	}
-	if len(users) != 2 {
-		t.Fatalf("expected both users, got %+v", users)
+	if len(search.Users) != 2 {
+		t.Fatalf("expected both users, got %+v", search.Users)
+	}
+}
+
+// A page the server says is incomplete must say so: display-name matching over
+// a truncated window could otherwise call a name unambiguous while a second
+// holder of it sits outside the page.
+func TestFindUsersByName_ReportsTruncation(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServerWithTotal(t, &queries, 250,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"},
+		EditAssetUser{ID: "u-2", UserName: "jsmith2", FirstName: "Jane", LastName: "Smith"})
+
+	search, err := FindUsersByName(t.Context(), client, "Jane Smith")
+	if err != nil {
+		t.Fatalf("FindUsersByName: %v", err)
+	}
+	if !search.Truncated || search.Total != 250 {
+		t.Fatalf("expected a truncated page with total 250, got %+v", search)
 	}
 }
 
@@ -566,11 +600,46 @@ func TestFindRecipientByName_RequiresAnExactUsername(t *testing.T) {
 	client := userSearchServer(t, &queries,
 		EditAssetUser{ID: "u-1", UserName: "jane.smithers", FirstName: "Janet", LastName: "Smithers"})
 
-	user, err := findRecipientByName(t.Context(), client, "jane.smith")
+	user, ambiguous, err := findRecipientByName(t.Context(), client, "jane.smith")
 	if err != nil {
 		t.Fatalf("findRecipientByName: %v", err)
 	}
 	if user != nil {
 		t.Fatalf("expected no match on a partial username, got %+v", user)
+	}
+	if ambiguous {
+		t.Fatal("a partial username is a miss, not an ambiguity")
+	}
+}
+
+// An exact username still resolves over a truncated page — usernames are
+// unique, so the window cannot hide a second holder.
+func TestFindRecipientByName_ExactUsernameSurvivesTruncation(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServerWithTotal(t, &queries, 250,
+		EditAssetUser{ID: "u-1", UserName: "jane.smith", FirstName: "Jane", LastName: "Smith"})
+
+	user, ambiguous, err := findRecipientByName(t.Context(), client, "jane.smith")
+	if err != nil {
+		t.Fatalf("findRecipientByName: %v", err)
+	}
+	if user == nil || user.ID != "u-1" || ambiguous {
+		t.Fatalf("expected u-1 resolved unambiguously, got %+v ambiguous=%v", user, ambiguous)
+	}
+}
+
+// A display name resolved from a truncated page is treated as ambiguous: the
+// page cannot rule out a second holder of the name.
+func TestFindRecipientByName_TruncatedDisplayNameIsAmbiguous(t *testing.T) {
+	var queries []url.Values
+	client := userSearchServerWithTotal(t, &queries, 250,
+		EditAssetUser{ID: "u-1", UserName: "jsmith", FirstName: "Jane", LastName: "Smith"})
+
+	user, ambiguous, err := findRecipientByName(t.Context(), client, "Jane Smith")
+	if err != nil {
+		t.Fatalf("findRecipientByName: %v", err)
+	}
+	if user != nil || !ambiguous {
+		t.Fatalf("expected no match reported as ambiguous, got %+v ambiguous=%v", user, ambiguous)
 	}
 }

@@ -137,6 +137,10 @@ func resolveOwnerID(ctx context.Context, client *http.Client, owner string) (str
 // resolveAssignees validates each assignee's type and resolves USER assignees
 // by UUID, email address, username or full name. GROUP assignees must be given
 // as a UUID: group names are not resolvable through the user lookup.
+//
+// Everything that can be checked locally is checked first, across the whole
+// list, so a bad type or a named group is reported without spending a user
+// lookup on the entries before it (standards 6.1).
 func resolveAssignees(ctx context.Context, client *http.Client, assignees []InputAssignee) ([]clients.Assignee, error) {
 	if len(assignees) == 0 {
 		return nil, nil
@@ -145,11 +149,7 @@ func resolveAssignees(ctx context.Context, client *http.Client, assignees []Inpu
 	for i, a := range assignees {
 		switch strings.ToUpper(strings.TrimSpace(a.Type)) {
 		case "USER":
-			id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
-			if err != nil {
-				return nil, fmt.Errorf("assignees[%d]: %w", i, err)
-			}
-			out[i] = clients.Assignee{ID: id, Type: "USER"}
+			continue // resolved below, once the whole list is known to be well-formed
 		case "GROUP":
 			if err := validation.UUID(fmt.Sprintf("assignees[%d].id", i), a.ID); err != nil {
 				return nil, fmt.Errorf("%w (a GROUP assignee must be given as its UUID)", err)
@@ -158,6 +158,16 @@ func resolveAssignees(ctx context.Context, client *http.Client, assignees []Inpu
 		default:
 			return nil, fmt.Errorf("assignees[%d].type must be USER or GROUP, got %q", i, a.Type)
 		}
+	}
+	for i, a := range assignees {
+		if out[i].Type != "" {
+			continue
+		}
+		id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
+		if err != nil {
+			return nil, fmt.Errorf("assignees[%d]: %w", i, err)
+		}
+		out[i] = clients.Assignee{ID: id, Type: "USER"}
 	}
 	return out, nil
 }

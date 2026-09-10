@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -738,8 +739,22 @@ type editAssetUsersList struct {
 }
 
 // userNameSearchFields are the fields the /rest/2.0/users `name` filter
-// searches. They are the endpoint's own defaults, sent explicitly so a change
-// of server-side default cannot silently narrow the search: FIRSTNAME_LASTNAME
+// searches, and userSearchLimit is the page size the search reads.
+//
+// Contract source: the DGC Core REST API v2 documentation for
+// GET /rest/2.0/users, which documents `nameSearchFields` as a repeatable enum
+// parameter defaulting to exactly these five values and `includeDisabled` as a
+// boolean defaulting to false. Repeated query parameters are how this client
+// already sends that API's array parameters (see the `status` parameter in
+// dgc_dq_client.go). NOT verified against a live instance from this
+// environment: no DGC deployment was reachable, so the values below are read
+// from the API documentation, not from a response. Per
+// docs/TOOL_CONTRIBUTION_STANDARDS.md 8.3 a contract test on the DGC side is
+// owed for this dependency; until then a CHIP-side change of these constants
+// cannot be validated by CI.
+//
+// They are the endpoint's own defaults, sent explicitly so a change of
+// server-side default cannot silently narrow the search: FIRSTNAME_LASTNAME
 // and LASTNAME_FIRSTNAME match the concatenated display name, which is what
 // makes a two-word name like "Jane Smith" resolvable.
 var userNameSearchFields = []string{
@@ -750,6 +765,18 @@ var userNameSearchFields = []string{
 	"LASTNAME_FIRSTNAME",
 }
 
+const userSearchLimit = 100
+
+// UserSearch is one page of user-name search results. Truncated says the
+// server held more matches than the page returned, which matters because a
+// caller reducing candidates by display name cannot tell an unambiguous name
+// from one whose second holder fell outside the window.
+type UserSearch struct {
+	Users     []EditAssetUser
+	Total     int
+	Truncated bool
+}
+
 // FindUsersByName returns EVERY enabled user the /rest/2.0/users `name` filter
 // matches — a loose, case-insensitive partial search over the fields in
 // userNameSearchFields, so "smith" matches the username `jsmith`, the surname
@@ -757,15 +784,27 @@ var userNameSearchFields = []string{
 // to one (see pkg/tools/resolve); returning them all is what lets an ambiguous
 // name be reported as ambiguous instead of collapsing to an arbitrary row.
 // Disabled accounts are excluded.
-func FindUsersByName(ctx context.Context, client *http.Client, name string) ([]EditAssetUser, error) {
+//
+// The page is capped at userSearchLimit, so the result reports whether the
+// server had more: a caller must not treat a single display-name match inside
+// a truncated window as unambiguous.
+func FindUsersByName(ctx context.Context, client *http.Client, name string) (UserSearch, error) {
 	params := url.Values{}
 	params.Set("name", name)
 	for _, f := range userNameSearchFields {
 		params.Add("nameSearchFields", f)
 	}
 	params.Set("includeDisabled", "false")
-	params.Set("limit", "100")
-	return listUsers(ctx, client, params)
+	params.Set("limit", strconv.Itoa(userSearchLimit))
+	page, err := listUsers(ctx, client, params)
+	if err != nil {
+		return UserSearch{}, err
+	}
+	return UserSearch{
+		Users:     page.Results,
+		Total:     page.Total,
+		Truncated: page.Total > len(page.Results),
+	}, nil
 }
 
 // exactUsernameMatch returns the user whose username equals username, ignoring
@@ -822,33 +861,34 @@ func FindUserByEmail(ctx context.Context, client *http.Client, email string) (*E
 }
 
 // listUsers fetches the users matching the given query params from
-// /rest/2.0/users and returns the full result page.
-func listUsers(ctx context.Context, client *http.Client, params url.Values) ([]EditAssetUser, error) {
+// /rest/2.0/users and returns the result page, total included: the caller needs
+// the total to tell a complete result set from a truncated one.
+func listUsers(ctx context.Context, client *http.Client, params url.Values) (editAssetUsersList, error) {
+	var page editAssetUsersList
 	reqURL := "/rest/2.0/users?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("find user: building request: %w", err)
+		return page, fmt.Errorf("find user: building request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("find user: sending request: %w", err)
+		return page, fmt.Errorf("find user: sending request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("find user: reading response: %w", err)
+		return page, fmt.Errorf("find user: reading response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("find user: status %d: %s", resp.StatusCode, string(body))
+		return page, fmt.Errorf("find user: status %d: %s", resp.StatusCode, string(body))
 	}
-	var page editAssetUsersList
 	if err := json.Unmarshal(body, &page); err != nil {
-		return nil, fmt.Errorf("find user: decoding response: %w", err)
+		return editAssetUsersList{}, fmt.Errorf("find user: decoding response: %w", err)
 	}
-	return page.Results, nil
+	return page, nil
 }
 
 // EditAssetCreateResponsibilityRequest is the body for POST /rest/2.0/responsibilities.

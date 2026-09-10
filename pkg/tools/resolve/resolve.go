@@ -37,10 +37,13 @@ type NamedRef struct {
 // should name the input forms the caller accepts. Ambiguity replaces the
 // instruction clause in the ambiguity error — a filter passes "pass the UUID in
 // <param> to disambiguate", a lookup tool with no such parameter says what to
-// do instead.
+// do instead. Candidates labels the "did you mean" list: the default claims the
+// entries are the valid values, which is true of an enumerable set (status,
+// domain type) but overstates a substring search's near misses.
 type Hints struct {
-	NotFound  string
-	Ambiguity string
+	NotFound   string
+	Ambiguity  string
+	Candidates string
 }
 
 // defaultAmbiguityHint is used when a caller supplies no Ambiguity wording.
@@ -86,7 +89,11 @@ func notFoundError(label, query string, candidates []NamedRef, hints Hints) erro
 	for _, c := range candidates {
 		names = append(names, c.Name)
 	}
-	msg := fmt.Sprintf("no %s matching %q found.%s", label, query, SuggestionSuffix("Valid "+label+"s", names, 15))
+	candidateLabel := hints.Candidates
+	if candidateLabel == "" {
+		candidateLabel = "Valid " + label + "s"
+	}
+	msg := fmt.Sprintf("no %s matching %q found.%s", label, query, SuggestionSuffix(candidateLabel, names, 15))
 	if hints.NotFound != "" {
 		msg += " " + hints.NotFound
 	}

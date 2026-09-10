@@ -240,6 +240,9 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 					res.Status, res.Error = "error", oerr.Error()
 					break
 				}
+				// Report the UUID that will actually be written rather than
+				// echoing whatever form the caller used.
+				res.Value = ownerID
 				req.Owner = &clients.AssessmentRef{ID: ownerID}
 
 			case OpSetAssignees:
@@ -301,24 +304,32 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 // name — the shared resolver reports an ambiguous name as an error rather than
 // assigning a guessed person. A GROUP must be given as its UUID: group names
 // are not resolvable through the user lookup.
+// Everything checkable locally is checked first, across the whole list, so a
+// bad type or a named group costs no user lookup (standards 6.1).
 func resolveAssignees(ctx context.Context, client *http.Client, assignees []AssigneeInput) ([]clients.Assignee, error) {
-	out := make([]clients.Assignee, 0, len(assignees))
-	for _, a := range assignees {
+	out := make([]clients.Assignee, len(assignees))
+	for i, a := range assignees {
 		switch strings.ToUpper(strings.TrimSpace(a.Type)) {
 		case "USER":
-			id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, clients.Assignee{ID: id, Type: "USER"})
+			continue // resolved below, once the whole list is known to be well-formed
 		case "GROUP":
 			if err := validation.UUID("assignee id", a.ID); err != nil {
 				return nil, fmt.Errorf("%w (a GROUP assignee must be given as its UUID)", err)
 			}
-			out = append(out, clients.Assignee{ID: a.ID, Type: "GROUP"})
+			out[i] = clients.Assignee{ID: a.ID, Type: "GROUP"}
 		default:
 			return nil, fmt.Errorf("assignee type must be USER or GROUP; got %q", a.Type)
 		}
+	}
+	for i, a := range assignees {
+		if out[i].Type != "" {
+			continue
+		}
+		id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
+		if err != nil {
+			return nil, err
+		}
+		out[i] = clients.Assignee{ID: id, Type: "USER"}
 	}
 	return out, nil
 }

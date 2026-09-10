@@ -16,7 +16,7 @@ import (
 
 // Input is the tool's typed input.
 type Input struct {
-	Name string `json:"name" jsonschema:"Required. How the user was referred to: a person's full name ('Jane Smith'), a username ('jane.smith'), an email address ('jane.smith@example.com'), or a user UUID (returned unchanged). A full name is matched against the directory's first name + last name, case-insensitively."`
+	Name string `json:"name" jsonschema:"Required. How the user was referred to: a person's full name ('Jane Smith'), a username ('jane.smith'), an email address ('jane.smith@example.com'), or a user UUID (returned unchanged). A full name is matched against the directory's first name + last name, case-insensitively, over enabled (non-deactivated) accounts only."`
 }
 
 // Output is the tool's typed output. It deliberately carries no email address:
@@ -38,7 +38,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Resolution order is fixed: a UUID passes through, a value containing '@' is looked up as an exact email address, an exact username wins next, and only then is the value matched against users' full names. " +
 			"Returns the user's UUID together with their full name and username so the right person can be confirmed; it never returns email addresses. " +
 			"If several users share the name, the call FAILS with an error listing every candidate (full name, username, UUID) — do NOT pick one of them yourself: ask which person is meant, then call again with that user's username or UUID. " +
-			"If nothing matches, the error names the accepted input forms. " +
+			"If nothing matches, the error names the accepted input forms. Only enabled (non-deactivated) accounts are searched by name or username, so a deactivated leaver will not be found that way; the email lookup goes to a different endpoint and may still find one. " +
 			"Read-only: it queries the user directory and creates or changes nothing. Any authenticated user can call it. " +
 			"Example questions it answers: 'What's John Doe's user id?'; 'Make Jane Smith the owner of the Customer Data assessment' (call this first to get her UUID); 'Assign the Steward role on this table to jane.smith'; 'Who is bob@example.com in Collibra?'.",
 		Handler:     handler(collibraClient),

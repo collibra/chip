@@ -203,7 +203,9 @@ func resolveUsers(ctx context.Context, client *http.Client, values []string) ([]
 		}
 		id, err := resolve.UserID(ctx, client, v, filterHints("createdByFilter"))
 		if err != nil {
-			return nil, err
+			// Same wrapping the generic resolveFilter applies, so all six
+			// filters of this tool report a failure the same shape.
+			return nil, fmt.Errorf("resolving user %q: %w", v, err)
 		}
 		out = append(out, id)
 	}
