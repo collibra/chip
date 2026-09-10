@@ -971,13 +971,22 @@ func TestStartWorkflow_LegacyProposedFixedIsEnforced(t *testing.T) {
 }
 
 // TestStartWorkflow_LegacyUnsupportedFieldsExplainThemselves covers the two legacy types this tool
-// genuinely cannot answer. Both used to be reported as ordinary resource pickers, sending the
-// caller to search_asset_keyword — which cannot upload a file and cannot resolve a role id, so it
-// would search, fail, and retry indefinitely.
+// cannot fully answer. Both used to be reported as ordinary resource pickers, sending the caller to
+// search_asset_keyword — which cannot upload a file and cannot resolve a role id, so it would
+// search, fail, and retry indefinitely.
+//
+// The rule that came out of that is per type, not blanket: a lookup may be named only for something
+// it can actually resolve. roleInCommunity therefore DOES name it, for the community half alone —
+// an ordinary Community resource — while the role half stays "you must already know the UUID" until
+// a role-resolution tool exists. fileUpload names no lookup at all, because none would help.
 func TestStartWorkflow_LegacyUnsupportedFieldsExplainThemselves(t *testing.T) {
-	for _, tc := range []struct{ name, fieldType, wantInMessage string }{
-		{"fileUpload", "fileUpload", "uploaded file"},
-		{"roleInCommunity", "roleInCommunity", "[roleId, communityId]"},
+	for _, tc := range []struct {
+		name, fieldType  string
+		wantInMessage    []string
+		wantNotInMessage []string
+	}{
+		{"fileUpload", "fileUpload", []string{"uploaded file"}, []string{"search_asset_keyword"}},
+		{"roleInCommunity", "roleInCommunity", []string{"[roleId, communityId]", `resourceTypeFilters: ["Community"]`}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mux, c := newServer(t)
@@ -994,11 +1003,15 @@ func TestStartWorkflow_LegacyUnsupportedFieldsExplainThemselves(t *testing.T) {
 			if out.FormFields[0].Unsupported == "" {
 				t.Fatalf("%s must carry a reason it cannot be answered", tc.fieldType)
 			}
-			if !strings.Contains(out.Message, tc.wantInMessage) {
-				t.Errorf("message %q does not explain the real constraint (%q)", out.Message, tc.wantInMessage)
+			for _, want := range tc.wantInMessage {
+				if !strings.Contains(out.Message, want) {
+					t.Errorf("message %q does not explain the real constraint (missing %q)", out.Message, want)
+				}
 			}
-			if strings.Contains(out.Message, "search_asset_keyword") {
-				t.Errorf("message sends the caller to a lookup that cannot succeed: %q", out.Message)
+			for _, unwanted := range tc.wantNotInMessage {
+				if strings.Contains(out.Message, unwanted) {
+					t.Errorf("message names %q, a lookup that cannot resolve this field: %q", unwanted, out.Message)
+				}
 			}
 		})
 	}
@@ -1360,12 +1373,22 @@ func TestStartWorkflow_BooleanValueIsSentTyped(t *testing.T) {
 }
 
 // TestStartWorkflow_JSONUnsupportedStencilsExplainThemselves mirrors the legacy path: a file upload
-// cannot be produced through this API at all, and role-in-community needs a paired structure.
-// Without this the JSON model sent the caller to search_asset_keyword, which can do neither.
+// cannot be produced through this API at all, and role-in-community needs a paired structure. The
+// defect behind it was pointing the caller at search_asset_keyword for both, which resolves neither
+// a file nor a role.
+//
+// So the rule is per stencil, not blanket: a lookup may be named only for something it can actually
+// resolve. That is why roleInCommunity now DOES name it — for the community half alone, which is an
+// ordinary Community resource — while the role half stays "you must already know the UUID" until a
+// role-resolution tool exists. Naming a tool for the role would recreate the original defect.
 func TestStartWorkflow_JSONUnsupportedStencilsExplainThemselves(t *testing.T) {
-	for _, tc := range []struct{ name, stencil, wantIn string }{
-		{"fileUpload", "collibra-fileUpload", "uploaded file"},
-		{"roleInCommunity", "collibra-roleInCommunity", "[roleId, communityId]"},
+	for _, tc := range []struct {
+		name, stencil string
+		wantIn        []string
+		wantNotIn     []string
+	}{
+		{"fileUpload", "collibra-fileUpload", []string{"uploaded file"}, []string{"search_asset_keyword"}},
+		{"roleInCommunity", "collibra-roleInCommunity", []string{"[roleId, communityId]", `resourceTypeFilters: ["Community"]`}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mux, c := newServer(t)
@@ -1379,11 +1402,15 @@ func TestStartWorkflow_JSONUnsupportedStencilsExplainThemselves(t *testing.T) {
 			if out.FormFields[0].Unsupported == "" {
 				t.Fatalf("%s must carry a reason it cannot be answered here", tc.stencil)
 			}
-			if !strings.Contains(out.Message, tc.wantIn) {
-				t.Errorf("message %q does not explain the real constraint", out.Message)
+			for _, want := range tc.wantIn {
+				if !strings.Contains(out.Message, want) {
+					t.Errorf("message %q does not explain the real constraint (missing %q)", out.Message, want)
+				}
 			}
-			if strings.Contains(out.Message, "search_asset_keyword") {
-				t.Errorf("message still sends the caller to a lookup that cannot succeed: %q", out.Message)
+			for _, unwanted := range tc.wantNotIn {
+				if strings.Contains(out.Message, unwanted) {
+					t.Errorf("message names %q, a lookup that cannot resolve this field: %q", unwanted, out.Message)
+				}
 			}
 		})
 	}

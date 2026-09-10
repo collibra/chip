@@ -520,9 +520,21 @@ const legacyRoleInCommunityFormType = "roleInCommunity"
 const (
 	unsupportedFileUpload = "This field takes an uploaded file, which cannot be supplied through this API at all. " +
 		"The workflow has to be started from Collibra's own UI if this field is required."
+	// The two halves of this message are NOT the same kind of statement, and only one of them is
+	// permanent. A community UUID is resolvable today, so the message names the tool that does it —
+	// the same shape ResourcePicker fields use. The role half is a PLACEHOLDER: "you must already
+	// know the UUID" holds only because no tool here resolves a role name yet, not because the
+	// value cannot be produced. The client plumbing exists already (ListRoles).
+	//
+	// When a role-resolution tool is added, REPLACE the role clause with a pointer to it. Do not
+	// instead call ListRoles from start_workflow: resolving a resource is not that tool's job, and
+	// doing it inline would duplicate whatever the new tool does — the reason ResourcePicker fields
+	// delegate rather than resolve.
 	unsupportedRoleInCommunity = "This field takes a JSON array of [roleId, communityId] pairs, e.g. " +
-		`[["<role-uuid>","<community-uuid>"]]` + " — not a single id. There is no tool here that resolves role ids, " +
-		"so supply one only if you already know both UUIDs; otherwise start the workflow from Collibra's UI."
+		`[["<role-uuid>","<community-uuid>"]]` + " — not a single id. A community UUID can be resolved with " +
+		`search_asset_keyword (resourceTypeFilters: ["Community"])` + ", and the community half may be an empty " +
+		"string when the role is not scoped to one. No tool here resolves a role NAME to its id, so the role " +
+		"UUID has to be one you already know; otherwise start the workflow from Collibra's UI."
 	unsupportedFullStorage = "This form stores the WHOLE picked resource for this field, not its id, so the process " +
 		"reads properties off it. Only an id can be produced here, and an id where an object is expected fails the " +
 		"start outright — so start this workflow from Collibra's UI if this field is needed."
