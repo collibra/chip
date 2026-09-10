@@ -12,6 +12,7 @@ package start_workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -80,13 +81,16 @@ type FormField struct {
 	Required bool              `json:"required" jsonschema:"Whether this field must be supplied before the workflow can start."`
 	Options  []FormFieldOption `json:"options,omitempty" jsonschema:"The values this field accepts. Pass a key, never a label, and never invent one that is not listed. Whether the list is closed depends on optionsExhaustive."`
 	// OptionsExhaustive distinguishes a closed choice list from a server-supplied shortlist.
-	OptionsExhaustive bool   `json:"optionsExhaustive,omitempty" jsonschema:"True when options is the complete set of legal values, so anything else is rejected. False (with options present) means the list is a shortlist Collibra offered and another valid id would also be accepted."`
-	MultiValue        bool   `json:"multiValue,omitempty" jsonschema:"True when this field takes SEVERAL values at once. Give them as ONE comma-separated string (e.g. 'a,b') whether you have one value or many — this tool converts that to whatever the workflow expects. A field without this flag rejects a comma-separated list."`
-	DefaultValue      string `json:"defaultValue,omitempty" jsonschema:"What the form pre-fills for this field. Leave it out of formProperties to accept that — the value is applied either way, by this tool or by Collibra itself, matching what the product does. Pass a value only to OVERRIDE it, and never for a readOnly field: that is refused before anything is started."`
-	HelpText          string `json:"helpText,omitempty" jsonschema:"The hint Collibra's own UI shows beside this field — worth relaying to the user when asking them for a value."`
-	VisibleWhen       string `json:"visibleWhen,omitempty" jsonschema:"Present when the form only shows this field under a condition, quoted verbatim. The condition cannot be evaluated here, so the field is still reported with its declared required flag: supply a value if the condition plausibly holds, and say so to the user rather than assuming the field does not apply."`
-	ReadOnly          bool   `json:"readOnly,omitempty" jsonschema:"True when the form disables this field. Do not supply a value — the server rejects a change to one."`
-	Unsupported       string `json:"unsupported,omitempty" jsonschema:"Present when this tool cannot help produce a value for the field, with the reason. Relay it to the user rather than guessing or retrying; if the field is also required, the workflow cannot be started from here at all."`
+	OptionsExhaustive bool `json:"optionsExhaustive,omitempty" jsonschema:"True when options is the complete set of legal values, so anything else is rejected. False (with options present) means the list is a shortlist Collibra offered and another valid id would also be accepted."`
+	MultiValue        bool `json:"multiValue,omitempty" jsonschema:"True when this field takes SEVERAL values at once. Give them as ONE comma-separated string (e.g. 'a,b') whether you have one value or many — this tool converts that to whatever the workflow expects. A field without this flag rejects a comma-separated list. Ignore this convention when idPairs is set and follow that field's shape instead; multiValue then only tells you whether more than one pair is allowed."`
+	// IDPairs carries its own composition rule because the caller, not this tool, assembles the
+	// value — the same reason the multi-value convention is spelled out on MultiValue.
+	IDPairs      bool   `json:"idPairs,omitempty" jsonschema:"True when this field's value is a JSON ARRAY of the option keys shown for it, each key already being one [roleId, communityId] pair. Put the keys you want inside one array and pass that as the value: [[\"role-uuid\",\"community-uuid\"]] for a single pair, [[\"role-uuid\",\"community-uuid\"],[\"other-role\",\"\"]] for two. The community half may be an empty string when the role is not scoped to one. Pass the keys verbatim — a role id cannot be resolved from a name here."`
+	DefaultValue string `json:"defaultValue,omitempty" jsonschema:"What the form pre-fills for this field. Leave it out of formProperties to accept that — the value is applied either way, by this tool or by Collibra itself, matching what the product does. Pass a value only to OVERRIDE it, and never for a readOnly field: that is refused before anything is started."`
+	HelpText     string `json:"helpText,omitempty" jsonschema:"The hint Collibra's own UI shows beside this field — worth relaying to the user when asking them for a value."`
+	VisibleWhen  string `json:"visibleWhen,omitempty" jsonschema:"Present when the form only shows this field under a condition, quoted verbatim. The condition cannot be evaluated here, so the field is still reported with its declared required flag: supply a value if the condition plausibly holds, and say so to the user rather than assuming the field does not apply."`
+	ReadOnly     bool   `json:"readOnly,omitempty" jsonschema:"True when the form disables this field. Do not supply a value — the server rejects a change to one."`
+	Unsupported  string `json:"unsupported,omitempty" jsonschema:"Present when this tool cannot help produce a value for the field, with the reason. Relay it to the user rather than guessing or retrying; if the field is also required, the workflow cannot be started from here at all."`
 	// Detected in both form models: by field type in the legacy one, by the collibra- palette
 	// stencil in the JSON one — see clients.WorkflowFormFieldIsResourcePicker.
 	ResourcePicker bool `json:"resourcePicker,omitempty" jsonschema:"When true, this field needs a real Collibra resource (e.g. a user, group, role, or another asset) as its value, not a plain value or one of a fixed list. Resolve it first (e.g. via search_asset_keyword) if possible — this tool cannot guess a valid id for it."`
@@ -511,6 +515,8 @@ func describeMissingField(f clients.WorkflowFormField) string {
 		return fmt.Sprintf("%q is required but cannot be filled in from here: %s", f.ID, f.Unsupported)
 	case f.VisibleWhen != "":
 		return fmt.Sprintf("%q is required, but the form only shows it when %s — supply a value if that holds, and tell the user you did; the server does not enforce requiredness for a hidden field, so leaving it out just starts the workflow with it unset", f.ID, f.VisibleWhen)
+	case f.IDPairs:
+		return fmt.Sprintf("%q is required — pass a JSON array built from the option keys listed for it in formFields, each key being one [roleId, communityId] pair", f.ID)
 	case len(f.Options) > 0:
 		return fmt.Sprintf("%q is required — pick one of the option keys listed for it in formFields", f.ID)
 	case clients.WorkflowFormFieldIsResourcePicker(f):
@@ -534,6 +540,9 @@ func describeMissingField(f clients.WorkflowFormField) string {
 func checkValue(f clients.WorkflowFormField, value string) []string {
 	if problem := checkFiniteNumber(f, value); problem != "" {
 		return []string{problem}
+	}
+	if f.IDPairs {
+		return checkIDPairValue(f, value)
 	}
 	if len(f.Options) == 0 || !f.OptionsExhaustive {
 		return nil
@@ -572,6 +581,45 @@ func checkFiniteNumber(f clients.WorkflowFormField, value string) string {
 	return fmt.Sprintf("%q's value %q is not a finite number — supply an ordinary numeric value", f.ID, value)
 }
 
+// checkIDPairValue validates the JSON-array-of-pairs shape before the write. Every way of getting
+// it wrong fails INSIDE the transactional start: the engine reads the value with an ObjectMapper
+// and answers anything it cannot parse with a blanket JSON_INPUT_UNEXPECTED_FORMAT that names
+// neither the field nor what was wrong — arriving after the user approved the preview.
+//
+// The role-expression shape is passed through untouched. That is what the engine renders a declared
+// value as, so it is what formFields reports as defaultValue: refusing it here would reject the
+// form's own value handed straight back, which is the obvious thing for a caller to do.
+func checkIDPairValue(f clients.WorkflowFormField, value string) []string {
+	if strings.Contains(value, clients.LegacyRoleExpressionPrefix) {
+		return nil
+	}
+	var pairs [][]string
+	if err := json.Unmarshal([]byte(value), &pairs); err != nil {
+		return []string{fmt.Sprintf("%q's value %q is not the shape this field takes — pass a JSON array of the option keys listed for it in formFields, e.g. [[\"<roleId>\",\"<communityId>\"]]", f.ID, value)}
+	}
+	// A second pair on a single-value field is its own server-side rejection
+	// (FORM_NO_MULTIPLE_VALUES_ALLOWED), so it is worth naming here rather than after the confirm.
+	if !f.MultiValue && len(pairs) > 1 {
+		return []string{fmt.Sprintf("%q accepts only ONE pair but %d were given — this field is not multi-value", f.ID, len(pairs))}
+	}
+	var problems []string
+	for _, pair := range pairs {
+		// Exactly two, not "at least two": the engine reads element 0 and 1 and ignores the rest,
+		// so a longer element would silently drop whatever the caller put after the community.
+		if len(pair) != 2 || pair[0] == "" {
+			problems = append(problems, fmt.Sprintf("%q takes [roleId, communityId] pairs and %v is not one — the role id is required, the community id may be an empty string", f.ID, pair))
+			continue
+		}
+		if !f.OptionsExhaustive {
+			continue
+		}
+		if key := clients.WorkflowFormFieldIDPairKey(pair); !hasOptionKey(f.Options, key) {
+			problems = append(problems, fmt.Sprintf("%q's pair %s is not one of the pairs this form proposes — pass one of the option keys shown for it in formFields", f.ID, key))
+		}
+	}
+	return problems
+}
+
 func hasOptionKey(options []clients.WorkflowFormFieldOption, key string) bool {
 	for _, o := range options {
 		if o.Key == key {
@@ -594,6 +642,7 @@ func toFormFields(fields []clients.WorkflowFormField) []FormField {
 			ReadOnly:          f.ReadOnly,
 			HelpText:          f.HelpText,
 			Unsupported:       f.Unsupported,
+			IDPairs:           f.IDPairs,
 		}
 		if len(f.Options) > 0 {
 			tf.Options = make([]FormFieldOption, len(f.Options))
@@ -655,7 +704,9 @@ func startInstance(ctx context.Context, collibraClient *http.Client, def *client
 func effectiveFormProperties(def *clients.WorkflowDefinition, fields []clients.WorkflowFormField, supplied map[string]string) map[string]string {
 	multi := make(map[string]bool, len(fields))
 	for _, f := range fields {
-		multi[f.ID] = f.MultiValue
+		// An IDPairs field is excluded on purpose, even when it is multi-value: its commas are JSON
+		// structure, so splitting and rejoining one would be editing the payload, not normalising it.
+		multi[f.ID] = f.MultiValue && !f.IDPairs
 	}
 	canonical := func(key, value string) string {
 		if !multi[key] {

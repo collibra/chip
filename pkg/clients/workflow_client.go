@@ -388,10 +388,26 @@ type legacyFormPropertyWire struct {
 	RadioButtons           []legacyFormFieldCheckOptionWire `json:"radioButtons,omitempty"`
 	ProposedDropdownValues []legacyFormFieldOptionWire      `json:"proposedDropdownValues,omitempty"`
 	DefaultDropdownValues  []legacyFormFieldOptionWire      `json:"defaultDropdownValues,omitempty"`
+	// MultiProposedDropdownValues is the roleInCommunity shape, and it is a MAP rather than the
+	// flat array the single-dropdown types use: keyed by the server's ResourceType enum name, one
+	// list of roles and one of their communities. A null entry decodes to a zero struct, which is
+	// how "this role has no community" arrives — see toRolePairOptions.
+	//
+	// multiDefaultDropdownValues is deliberately not read: the DECLARED value already arrives in
+	// Value, rendered as the `role(Name,Community)` expression the engine accepts straight back
+	// (LegacyRoleExpressionPrefix), so reading the map would only add a second spelling of it.
+	MultiProposedDropdownValues map[string][]legacyFormFieldOptionWire `json:"multiProposedDropdownValues,omitempty"`
 	// ProposedFixed says whether the proposed values are the ONLY permitted ones. When false they
 	// are suggestions and the server will accept an id outside the list.
 	ProposedFixed bool `json:"proposedFixed"`
 }
+
+// The ResourceType enum names multiProposedDropdownValues is keyed by, spelled as the server
+// serializes them (com.collibra.dgc.core.model.ResourceType: RL a role, CO a community).
+const (
+	legacyMultiDropdownRoleKey      = "RL"
+	legacyMultiDropdownCommunityKey = "CO"
+)
 
 type legacyStartFormDataWire struct {
 	ProcessID      string                   `json:"processId"`
@@ -445,6 +461,17 @@ type WorkflowFormField struct {
 	// have sent the default, so dropping it silently changes the outcome (e.g. an issue created
 	// with no priority where the form says "Normal").
 	DefaultValue string `json:"defaultValue,omitempty"`
+	// IDPairs marks a field whose value is a JSON array of [id, id] PAIRS rather than a plain
+	// value. Legacy-model only, and currently only roleInCommunity, where each element is
+	// [roleId, communityId] and the community half may be an empty string. Options[].Key are
+	// exactly those elements, so the caller composes the value by putting the keys it wants inside
+	// one array.
+	//
+	// It deliberately does NOT follow the comma-separated convention MultiValue describes: the
+	// engine reads this field with an ObjectMapper, so the commas are structure and splitting on
+	// them would edit the payload. MultiValue still applies in its own right — it says whether more
+	// than one pair is allowed, and the engine rejects a second pair when it is false.
+	IDPairs bool `json:"idPairs,omitempty"`
 	// Unsupported, when non-empty, explains why this client cannot help produce a value for the
 	// field. It does not block submission — a caller that already knows a valid value may still
 	// supply one — but it stops the tool from suggesting a resolution route that cannot work.
@@ -602,8 +629,73 @@ func toLegacyFormField(p legacyFormPropertyWire) WorkflowFormField {
 		// list closed; otherwise these are suggestions and an id outside them is still valid.
 		field.Options = toDropdownOptions(append(append([]legacyFormFieldOptionWire{}, p.ProposedDropdownValues...), p.DefaultDropdownValues...))
 		field.OptionsExhaustive = p.ProposedFixed
+	case len(p.MultiProposedDropdownValues) > 0:
+		// The pairs the form itself proposes. Clearing Unsupported is the point of the branch: the
+		// field stays unanswerable only while nothing here can produce a value for it, and once the
+		// server has handed over the legal pairs that is no longer true.
+		if options := toRolePairOptions(p.MultiProposedDropdownValues); len(options) > 0 {
+			field.Options, field.OptionsExhaustive = options, p.ProposedFixed
+			field.IDPairs = true
+			field.Unsupported = ""
+		}
 	}
 	return field
+}
+
+// LegacyRoleExpressionPrefix marks the OTHER shape a roleInCommunity value may take: a
+// `role(Name,Community)` expression. That is what the engine renders a DECLARED value as, so it is
+// what arrives in WorkflowFormField.DefaultValue — and the engine accepts it back untouched
+// (RoleInCommunityFormType#convertFormValueToModelValue returns early on it). Anything validating
+// such a value has to allow both shapes, or it rejects the form's own value handed straight back.
+const LegacyRoleExpressionPrefix = "role("
+
+// WorkflowFormFieldIDPairKey renders one [id, id] pair the way the engine parses it back: compact
+// JSON, escaped by the encoder rather than by hand. Options[].Key for an IDPairs field are built
+// with it, and a caller's value is normalized through it before being compared against them — so
+// spacing the caller happened to write cannot make a legal pair look unlisted.
+func WorkflowFormFieldIDPairKey(pair []string) string {
+	encoded, _ := json.Marshal(pair)
+	return string(encoded)
+}
+
+// toRolePairOptions pairs the role list with the community list BY INDEX. That is how the server
+// builds them — RoleInCommunityFormType#getDropdownValues appends one entry to each list per
+// declared expression, and appends a null community for a role that has none — so index i of "CO"
+// belongs to index i of "RL" and may be absent.
+//
+// Reading this map is what makes the field answerable at all. Without it the caller was told to
+// resolve a role id, which no tool here can do, while the legal pairs sat unread in this very
+// response — the same dead end proposedDropdownValues used to produce.
+func toRolePairOptions(multi map[string][]legacyFormFieldOptionWire) []WorkflowFormFieldOption {
+	roles := multi[legacyMultiDropdownRoleKey]
+	communities := multi[legacyMultiDropdownCommunityKey]
+	out := make([]WorkflowFormFieldOption, 0, len(roles))
+	seen := make(map[string]bool, len(roles))
+	for i, role := range roles {
+		if role.IDAsString == "" {
+			continue // a null role carries nothing that could be submitted
+		}
+		var community legacyFormFieldOptionWire
+		if i < len(communities) {
+			community = communities[i]
+		}
+		key := WorkflowFormFieldIDPairKey([]string{role.IDAsString, community.IDAsString})
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, WorkflowFormFieldOption{Key: key, Label: rolePairLabel(role.Text, community.Text)})
+	}
+	return out
+}
+
+// rolePairLabel names the pair the way a person would read it out. The community half is optional,
+// and a trailing " in " with nothing after it would read as a truncated label.
+func rolePairLabel(roleName, communityName string) string {
+	if communityName == "" {
+		return roleName
+	}
+	return roleName + " in " + communityName
 }
 
 func toDropdownOptions(opts []legacyFormFieldOptionWire) []WorkflowFormFieldOption {

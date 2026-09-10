@@ -2586,3 +2586,159 @@ func TestStartWorkflow_InputSchemaStatesTheMultiValueConvention(t *testing.T) {
 		t.Errorf("formProperties values must stay string-typed in the schema, got %+v", props.AdditionalProperties)
 	}
 }
+
+// roleInCommunityForm is the legacy wire shape for a roleInCommunity field that proposes its legal
+// pairs: two index-aligned lists, the second one short a community for "Owner".
+const roleInCommunityForm = `{"formProperties":[{"id":"stakeholders","name":"Stakeholders","type":"roleInCommunity","required":true,"writable":true,"proposedFixed":true,%s
+  "multiProposedDropdownValues":{
+    "RL":[{"idAsString":"role-1","text":"Steward"},{"idAsString":"role-2","text":"Owner"}],
+    "CO":[{"idAsString":"comm-1","text":"Marketing"},null]}}]}`
+
+func roleInCommunityServer(t *testing.T, extraProps string) (*http.ServeMux, *http.Client) {
+	t.Helper()
+	mux, c := newServer(t)
+	handleDefinition(mux, wireDefinition{ID: workflowID, Name: "Stakeholders", Enabled: true, FormRequired: true, BusinessItemResourceType: "GLOBAL"})
+	handleLegacyForm(mux, workflowID, fmt.Sprintf(roleInCommunityForm, extraProps))
+	return mux, c
+}
+
+// TestStartWorkflow_RoleInCommunityPairIsSubmittedVerbatim. The value of an idPairs field is JSON,
+// so it must reach the engine byte-for-byte as the caller wrote it. The multi-value machinery would
+// otherwise split it on commas and rejoin the parts trimmed — which for `[["r", "c"]]` rewrites the
+// payload the user approved, and for anything less regular corrupts it outright.
+func TestStartWorkflow_RoleInCommunityPairIsSubmittedVerbatim(t *testing.T) {
+	const supplied = `[["role-1", "comm-1"]]`
+	mux, c := roleInCommunityServer(t, "")
+	var captured clients.StartWorkflowInstanceRequest
+	started := false
+	handleStart(t, mux, &captured, &started, http.StatusCreated)
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+		WorkflowDefinitionID: workflowID,
+		FormProperties:       map[string]string{"stakeholders": supplied},
+		Confirm:              true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusSuccess {
+		t.Fatalf("status = %q (%s), want success", out.Status, out.Message)
+	}
+	if !started {
+		t.Fatal("the start was never called")
+	}
+	if got := captured.FormProperties["stakeholders"]; got != supplied {
+		t.Errorf("stakeholders = %q, want %q verbatim — the commas here are JSON structure, not separators", got, supplied)
+	}
+	if got := out.FormProperties["stakeholders"]; got != supplied {
+		t.Errorf("the preview echoed %q but %q was sent — approved and submitted must be the same bytes", got, supplied)
+	}
+}
+
+// TestStartWorkflow_RoleInCommunityPairsSurfaceAsComposableOptions: the caller assembles this value
+// itself, so it can only do so from what formFields shows. Both halves are asserted — the flag that
+// tells it the shape, and the keys that are the pairs.
+func TestStartWorkflow_RoleInCommunityPairsSurfaceAsComposableOptions(t *testing.T) {
+	_, c := roleInCommunityServer(t, "")
+
+	out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{WorkflowDefinitionID: workflowID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != start_workflow.StatusNeedsInput {
+		t.Fatalf("status = %q, want needs_input for an unsupplied required field", out.Status)
+	}
+	if len(out.FormFields) != 1 {
+		t.Fatalf("formFields = %+v, want one", out.FormFields)
+	}
+	f := out.FormFields[0]
+	if !f.IDPairs {
+		t.Error("idPairs must be set, or the caller applies the comma-separated convention to a JSON value")
+	}
+	if f.Unsupported != "" {
+		t.Errorf("unsupported = %q, want empty now that the pairs are listed", f.Unsupported)
+	}
+	if len(f.Options) != 2 || f.Options[0].Key != `["role-1","comm-1"]` || f.Options[1].Key != `["role-2",""]` {
+		t.Errorf("options = %+v, want the two proposed pairs as keys", f.Options)
+	}
+	if !strings.Contains(out.Message, "JSON array") {
+		t.Errorf("the message must say how to compose the value, got %q", out.Message)
+	}
+}
+
+// TestStartWorkflow_MalformedRoleInCommunityValueIsRefusedBeforeTheWrite. Every one of these fails
+// inside the transactional start otherwise, and the engine answers all of them with the same
+// blanket JSON_INPUT_UNEXPECTED_FORMAT — naming neither the field nor what was wrong, after the
+// user approved the preview.
+func TestStartWorkflow_MalformedRoleInCommunityValueIsRefusedBeforeTheWrite(t *testing.T) {
+	for _, tc := range []struct{ name, value string }{
+		{"a bare role id", "role-1"},
+		{"a flat array instead of pairs", `["role-1","comm-1"]`},
+		{"a pair missing its community", `[["role-1"]]`},
+		{"a pair with a third element the engine would drop", `[["role-1","comm-1","extra"]]`},
+		{"an empty role id", `[["","comm-1"]]`},
+		{"a pair the form does not propose", `[["role-9","comm-9"]]`},
+		{"two pairs on a single-value field", `[["role-1","comm-1"],["role-2",""]]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := roleInCommunityServer(t, "")
+			started := false
+			handleStart(t, mux, nil, &started, http.StatusCreated)
+
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				FormProperties:       map[string]string{"stakeholders": tc.value},
+				Confirm:              true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status != start_workflow.StatusNeedsInput {
+				t.Fatalf("status = %q (%s), want needs_input", out.Status, out.Message)
+			}
+			if started {
+				t.Error("nothing may be started on a value the engine will refuse")
+			}
+		})
+	}
+}
+
+// TestStartWorkflow_RoleInCommunityAcceptsTheShapesTheEngineAccepts guards the other direction: a
+// value the engine takes must not be refused here.
+//
+// The role-expression form matters most. It is what the engine renders a DECLARED value as, so it
+// is exactly what formFields reports as defaultValue — and handing a shown value straight back is
+// the obvious thing for a caller to do. Validating only the JSON shape would reject the form's own
+// value. A second pair is legal too, once the form says the field is multi-value.
+func TestStartWorkflow_RoleInCommunityAcceptsTheShapesTheEngineAccepts(t *testing.T) {
+	for _, tc := range []struct{ name, extraProps, value string }{
+		{"the rendered role expression", `"value":"role(Steward,Marketing)",`, "role(Steward,Marketing)"},
+		{"two pairs when multi-value", `"multiValue":true,`, `[["role-1","comm-1"],["role-2",""]]`},
+		{"an empty community half", "", `[["role-2",""]]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mux, c := roleInCommunityServer(t, tc.extraProps)
+			var captured clients.StartWorkflowInstanceRequest
+			started := false
+			handleStart(t, mux, &captured, &started, http.StatusCreated)
+
+			out, err := start_workflow.NewTool(c).Handler(t.Context(), start_workflow.Input{
+				WorkflowDefinitionID: workflowID,
+				FormProperties:       map[string]string{"stakeholders": tc.value},
+				Confirm:              true,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Status != start_workflow.StatusSuccess {
+				t.Fatalf("status = %q (%s), want success — the engine accepts this value", out.Status, out.Message)
+			}
+			if !started {
+				t.Fatal("the start was never called")
+			}
+			if got := captured.FormProperties["stakeholders"]; got != tc.value {
+				t.Errorf("stakeholders = %q, want %q verbatim", got, tc.value)
+			}
+		})
+	}
+}

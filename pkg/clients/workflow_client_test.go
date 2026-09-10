@@ -603,3 +603,82 @@ func TestJSONFormStorageDoesNotMaskAMoreSpecificReason(t *testing.T) {
 		t.Errorf("the file-upload reason must win over the generic storage one, got %q", fields[0].Unsupported)
 	}
 }
+
+// legacyFormFieldsFrom fetches the start form from a server that answers with the given raw JSON,
+// so a test can pin an exact wire shape rather than one this package also builds.
+func legacyFormFieldsFrom(t *testing.T, rawJSON string) []WorkflowFormField {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/workflowDefinitions/workflowDefinition/"+wfID+"/startFormData",
+		func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, rawJSON)
+		})
+	fields, _, err := GetWorkflowStartFormData(context.Background(), wfServer(t, mux), wfID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return fields
+}
+
+// TestToLegacyFormField_RoleInCommunityProposedPairsBecomeAnswerable. roleInCommunity is the one
+// legacy multi-dropdown, and its proposed values arrive in a MAP keyed by resource type instead of
+// the flat array every other picker uses. Ignoring that map left the field reported unanswerable
+// while the legal pairs sat unread in the same response — the caller was told to resolve a role id,
+// which nothing here can do from a name.
+//
+// The pairing is by INDEX, and the community half is optional: the server appends one entry to each
+// list per declared expression and appends a null community for a role that has none.
+func TestToLegacyFormField_RoleInCommunityProposedPairsBecomeAnswerable(t *testing.T) {
+	fields := legacyFormFieldsFrom(t, `{"formProperties":[{"id":"stakeholders","name":"Stakeholders","type":"roleInCommunity","required":true,"proposedFixed":true,
+	  "multiProposedDropdownValues":{
+	    "RL":[{"idAsString":"role-1","text":"Steward"},{"idAsString":"role-2","text":"Owner"}],
+	    "CO":[{"idAsString":"comm-1","text":"Marketing"},null]}}]}`)
+
+	if len(fields) != 1 {
+		t.Fatalf("expected one field, got %+v", fields)
+	}
+	f := fields[0]
+	if !f.IDPairs {
+		t.Error("the field must be marked IDPairs, or the caller is given the comma-separated convention for a JSON value")
+	}
+	if f.Unsupported != "" {
+		t.Errorf("unsupported = %q, want empty: the server just supplied the legal pairs, so the field is answerable", f.Unsupported)
+	}
+	if !f.OptionsExhaustive {
+		t.Error("proposedFixed says the list is closed, so it must be reported exhaustive")
+	}
+	want := []WorkflowFormFieldOption{
+		{Key: `["role-1","comm-1"]`, Label: "Steward in Marketing"},
+		{Key: `["role-2",""]`, Label: "Owner"},
+	}
+	if len(f.Options) != len(want) {
+		t.Fatalf("options = %+v, want %+v", f.Options, want)
+	}
+	for i, w := range want {
+		if f.Options[i] != w {
+			t.Errorf("options[%d] = %+v, want %+v — the key must be the exact JSON element the engine parses back", i, f.Options[i], w)
+		}
+	}
+}
+
+// TestToLegacyFormField_RoleInCommunityWithoutProposedPairsStaysUnsupported. Nothing changes for a
+// form that proposes no values: a role id still cannot be produced from a name here, so saying so
+// remains the only honest answer. Clearing Unsupported on the strength of the type alone would
+// send the caller looking for a lookup that does not exist.
+func TestToLegacyFormField_RoleInCommunityWithoutProposedPairsStaysUnsupported(t *testing.T) {
+	fields := legacyFormFieldsFrom(t, `{"formProperties":[{"id":"stakeholders","name":"Stakeholders","type":"roleInCommunity","required":true}]}`)
+
+	if len(fields) != 1 {
+		t.Fatalf("expected one field, got %+v", fields)
+	}
+	if fields[0].Unsupported == "" {
+		t.Error("with no proposed pairs the field cannot be answered from here and must say so")
+	}
+	if fields[0].IDPairs {
+		t.Error("IDPairs advertises option keys to compose from; there are none, so it must stay false")
+	}
+	if len(fields[0].Options) != 0 {
+		t.Errorf("options = %+v, want none", fields[0].Options)
+	}
+}
