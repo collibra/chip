@@ -46,8 +46,9 @@ writing the code — do not assume review will catch it.
 
 ## 3. Rollout gating
 
-New tools are off by default. There are two separate axes for that, and picking the wrong one is a
-review finding:
+Most new tools ship gated. Decide first whether the tool set needs a gate at all (3.1); a tool set
+that is generally available, read-only and settled may ship ungated (`search_catalog_columns` did).
+If it does need one, these are the two axes, and picking the wrong one is a review finding:
 
 - **Experimental feature** (`--experimental=<name>`) — an opt-in *name* with no stability promise.
   Use it while a tool set is in preview: it may change shape or be removed without a deprecation
@@ -56,7 +57,12 @@ review finding:
   that an operator switches on as a whole, typically because it writes to (or deletes from)
   Collibra. The tool contract is stable; what is optional is whether the deployment exposes it.
 
-A domain uses **one** of the two, not both. Do not add a flag per PR or per tool.
+A domain's registration block is gated by **one** of the two, never both. (A single preview tool
+inside a generally available domain is the one exception — see the nested shape in 3.2.) A domain
+has at most two gates ever: its domain gate, and one shared preview feature name used by every
+preview tool in it. That holds **across PRs and teams**: reuse the names that exist rather than
+adding a flag per PR or per tool, and opening a second gate for a domain is a review finding
+whoever opens it.
 
 ### 3.1 Preview tool sets go behind an experimental feature flag
 
@@ -66,7 +72,11 @@ admin/write tools (create / edit / delete) that are not yet generally available.
 
 Once a tool set is generally available, it does not stay behind `--experimental`: either it needs
 no gate at all, or — if it writes to Collibra and an operator should choose to expose it — it gets
-a capability flag (3.2).
+a capability flag (3.2). Migrating off `--experimental` also means deleting the feature name's
+entry in `knownExperimentalFeatures` once nothing gates on it (3.3).
+
+**"Generally available" means the tool's shape is settled** — its name, input and output schema and
+behaviour are ones we are willing to keep. It is a property of the tool, not of its age.
 
 ### 3.2 One gate per domain, wrapping the registrations as a block
 
@@ -85,8 +95,7 @@ if toolConfig.IsExperimentalEnabled(YourDomainFeatureName) {
 ```
 
 A generally available domain, gated on a capability flag — a `bool` field on
-`chip.ServerToolConfig` wired to a flag, an env var and a YAML field in `cmd/chip/config.go`
-(follow `EnableDebugTools` and `DataQuality`):
+`chip.ServerToolConfig`:
 
 ```go
 if toolConfig.DataQuality {
@@ -95,9 +104,34 @@ if toolConfig.DataQuality {
 }
 ```
 
+Wire that flag **end to end, exactly as `DataQuality` is wired**. Five touch points, none of which
+the compiler checks:
+
+1. `cmd/chip/config.go`, `initConfigOptions` — `pflag.Bool`, `viper.BindEnv`, `viper.BindPFlag`,
+   `viper.SetDefault`.
+2. `cmd/chip/config.go`, `printUsage` — the hand-maintained `ENVIRONMENT VARIABLES` and
+   `CONFIGURATION FILE EXAMPLE` blocks.
+3. `cmd/chip/config.go`, `McpConfig` — the `mapstructure` field.
+4. `cmd/chip/main.go` — the assignment from `config.Mcp` into `chip.ServerToolConfig`.
+5. `pkg/chip/server.go` — the `ServerToolConfig` field, its name constant (e.g.
+   `DataQualityCapabilityName`) and its entry in `capabilityFields` (3.5).
+
+Forgetting step 4 is the dangerous one: the flag parses, appears in `--help`, and silently turns
+nothing on, because the struct field just stays `false` with no compile error. A test like
+`cmd/chip/config_test.go`'s precedence test, plus the registration tests in 3.4, catches it.
+
+Name the triple after the domain: `--<domain>`, `COLLIBRA_MCP_<DOMAIN>`, `mcp.<domain>` — e.g.
+`--data-quality` / `COLLIBRA_MCP_DATA_QUALITY` / `mcp.data-quality`. (`--enable-debug-tools`
+predates this and is not the model for the name, only for the wiring.)
+
 Only put tools of the domain inside the block. A tool that merely sits next to them in the file
 does not belong in the gate (`search_catalog_columns` is a Knowledge Graph search over catalog
 Column assets, not a data quality tool, and stays ungated).
+
+**Adding a tool to a domain that is already gated:** put the registration inside the existing
+block and add no flag. A new tool inherits the domain's status; it does not need a preview gate
+because it is new, and not because it writes. Add a nested preview check only when that tool's own
+shape is unsettled.
 
 **A preview tool inside a generally available domain nests its own experimental check *inside* the
 domain block**, so it needs both flags:
@@ -105,14 +139,17 @@ domain block**, so it needs both flags:
 ```go
 if toolConfig.DataQuality {
     // ... the generally available tools ...
-    if toolConfig.IsExperimentalEnabled(YourPreviewFeatureName) {
+    if toolConfig.IsExperimentalEnabled(YourDomainPreviewFeature) {
         toolRegister(server, toolConfig, your_preview_tool.NewTool(client))
     }
 }
 ```
 
-Graduating that tool then means deleting the inner check and nothing else. Do not add the nested
-block, or a preview feature name, before there is a preview tool to put in it.
+That preview name is **one per domain**, shared by every preview tool in it — not one per tool and
+not one per PR. Graduating a tool means deleting its inner check; if it was the last tool gated on
+that preview name, delete the `knownExperimentalFeatures` entry with it (3.3), or the map is left
+advertising a name nothing gates on. Do not add the nested block, or a preview feature name, before
+there is a preview tool to put in it.
 
 ### 3.3 Register an experimental feature in `knownExperimentalFeatures`
 
@@ -123,6 +160,9 @@ This is for experimental feature names only. A capability flag is **not** an exp
 and must not be added to that map — the two axes are independent, and a name in that map that
 nothing gates on is worse than no flag at all.
 
+For the same reason the entry is deleted when the last registration gated on that name goes away,
+whether the tool graduated (3.2) or the tool set moved to a capability flag (3.1).
+
 ### 3.4 Add gating tests
 
 `pkg/tools/register_test.go` must assert both directions **by tool name**: every tool of the domain
@@ -130,17 +170,37 @@ absent with an empty config, every one present with the gate enabled, and the su
 surface identical in both states so the wrapper cannot have swallowed a neighbour. Follow the
 existing pattern.
 
+Assert **every combination of the gates the tools (or their skills) depend on**, not just one flag
+off and on. With a nested preview check that is domain-off, domain-on/preview-off and
+domain-on/preview-on; with a second capability flag the interesting cases are the mixed ones. Where
+an existing test loops over the states of one flag, extend the loop rather than copying it.
+
 ### 3.5 A skill for a gated domain declares its own gate
 
 A skill that instructs the agent to call gated tools must not be served when those tools are not
 registered. Declare the capability in the skill's frontmatter — `requires: data-quality` — rather
 than hardcoding skill names in Go; the catalog filters on it at load, external skills from
-`--skills-dir` gate themselves the same way, and a rename cannot silently un-gate a skill. An
-unrecognized `requires:` value fails catalog load.
+`--skills-dir` gate themselves the same way, and a rename cannot silently un-gate a skill.
+
+A capability name only becomes usable in `requires:` once Go knows it: declare the name as a
+constant beside its `ServerToolConfig` field (see `chip.DataQualityCapabilityName`) and add it to
+`capabilityFields` in `pkg/chip/server.go`, which `chip.ServerToolConfig.CapabilityEnabled`
+resolves against. Without that entry no skill can require the capability.
+
+An unrecognized `requires:` value **fails catalog load, and so aborts startup** — deliberately,
+because a skill whose gate chip does not understand would otherwise be served unconditionally.
+Note the asymmetry with `--experimental`, where an unknown name only warns so that stale configs
+survive: renaming or retiring a capability name is therefore a breaking change for anyone whose
+`--skills-dir` skills declare it, and needs the same treatment as 3.7. Say so in `docs/CONFIG.md`
+when you add a capability.
 
 Filtering the catalog does not rewrite markdown, so remove the skill from `collibra/index` (and
 from any other served skill's body or `related:` header) when its domain is gated: the navigator
-must never route to a skill the configuration filtered out.
+must never route to a skill the configuration filtered out. The same applies to **a gated tool's
+name in a served skill's body** — a guide that tells the agent to call `dq_delete_job` is just as
+broken when that tool is not registered, even if no skill name is involved.
+`TestServedSkillsOnlyNameRegisteredTools` in `pkg/tools/register_test.go` enforces this for every
+gate state.
 
 ### 3.6 `enabled-tools` is a filter, not an escape hatch
 
@@ -148,6 +208,16 @@ Because a gate skips registration, `--enabled-tools` cannot re-open it — a too
 gate never reaches `toolRegister` and therefore never reaches `IsToolEnabled`. The allow-list
 selects among the tools of the enabled capabilities. Document that for your domain; do not work
 around it.
+
+### 3.7 Gating a domain that already shipped ungated
+
+Section 3 is otherwise about new tools. Putting a gate around tools that already ship removes them
+from the default surface of every existing deployment, which is a breaking change: signal it per
+[`CONTRIBUTING.md`](../CONTRIBUTING.md) (a `!` after the type and/or a `BREAKING CHANGE:` footer at
+the very bottom of the commit) and say in the README how an operator gets the tools back — the flag
+name, its env var and its YAML field. `--data-quality` is the worked example: 18 generally
+available tools left the default surface, so the change carried a `BREAKING CHANGE:` footer and a
+README section naming the flag.
 
 ---
 

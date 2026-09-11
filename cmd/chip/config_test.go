@@ -16,12 +16,19 @@ import (
 //
 // The phases run in one test function on purpose: initConfigOptions registers
 // its flags on the process-global pflag.CommandLine, so it can only be called
-// once per test binary.
+// once per test binary. For the same reason both globals are restored on
+// cleanup — the flag value would otherwise persist into any later test.
+//
+// The viper wiring below (config name, type, search path, env prefix,
+// AutomaticEnv) mirrors Init(); keep it in step with Init() when that
+// changes, since this test binds the same global viper rather than calling
+// Init(), which parses os.Args and can os.Exit.
 func TestDataQualityConfigPrecedence(t *testing.T) {
 	dir := t.TempDir()
 
 	viper.Reset()
 	t.Cleanup(viper.Reset)
+	t.Cleanup(func() { _ = pflag.CommandLine.Set("data-quality", "false") })
 	viper.SetConfigName("mcp")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(dir)

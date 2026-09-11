@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/collibra/chip/pkg/chip"
@@ -131,6 +132,50 @@ func TestRegisterAll_DataQualityAsExperimentalFeatureRegistersNothing(t *testing
 		if slices.Contains(names, name) {
 			t.Errorf("expected %q to be absent when %q is passed as an experimental feature",
 				name, chip.DataQualityCapabilityName)
+		}
+	}
+}
+
+// TestServedSkillsOnlyNameRegisteredTools is the tool-name counterpart of
+// pkg/skills' cross-reference test: a served skill must not tell the agent to
+// call a tool that the same configuration leaves unregistered. Skill names are
+// covered in pkg/skills (which cannot import pkg/tools); tool names have to be
+// checked here, where both the catalog and the registered surface are visible.
+func TestServedSkillsOnlyNameRegisteredTools(t *testing.T) {
+	everyTool := listToolNames(t, &chip.ServerToolConfig{
+		EnableDebugTools: true,
+		DataQuality:      true,
+		Experimental:     []string{tools.ContextSpecificationsFeature, skills.FeatureName},
+	})
+
+	// context-specifications is enabled in both configurations so the data
+	// quality gate is the only one varying. collibra/context names
+	// list_context_specifications and get_context_specification in its body
+	// while being served whenever skills are on, so it has the same hazard
+	// against its own experimental gate — pre-existing, and gating skills
+	// other than the two data quality ones is out of scope here. Whoever
+	// gives that skill a gate should drop this from the config and watch this
+	// test go green on its own.
+	for _, dataQuality := range []bool{false, true} {
+		cfg := &chip.ServerToolConfig{
+			DataQuality:  dataQuality,
+			Experimental: []string{skills.FeatureName, tools.ContextSpecificationsFeature},
+		}
+		registered := listToolNames(t, cfg)
+		catalog, err := skills.LoadWith("", cfg)
+		if err != nil {
+			t.Fatalf("load skills (DataQuality=%v): %v", dataQuality, err)
+		}
+		for _, skill := range catalog.List() {
+			for _, name := range everyTool {
+				if !strings.Contains(skill.Body, name) {
+					continue
+				}
+				if !slices.Contains(registered, name) {
+					t.Errorf("DataQuality=%v: served skill %q names tool %q, which is not registered",
+						dataQuality, skill.Name, name)
+				}
+			}
 		}
 	}
 }

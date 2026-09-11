@@ -8,7 +8,9 @@ import (
 
 // requirementsMet reports whether every capability named in a skill's
 // `requires:` frontmatter is enabled on the running server. A skill with no
-// `requires:` is always served.
+// `requires:` is always served. Resolving a name to a config field is
+// chip.ServerToolConfig.CapabilityEnabled's job; this is the frontmatter
+// loop around it.
 //
 // The gate is declared in the skill rather than by a list of skill names in
 // Go for two reasons: a skill supplied through --skills-dir can gate itself,
@@ -16,31 +18,20 @@ import (
 //
 // An unrecognized capability name is an error, not a warning: a skill
 // requiring something chip does not know about would otherwise be served
-// unconditionally, which is the opposite of what its author asked for.
+// unconditionally, which is the opposite of what its author asked for. The
+// error fails catalog load and so aborts startup — unlike an unknown
+// --experimental name, which only warns. That asymmetry is deliberate and is
+// documented for operators in docs/CONFIG.md and for contributors in
+// docs/TOOL_CONTRIBUTION_STANDARDS.md 3.5.
 func requirementsMet(requires []string, toolConfig *chip.ServerToolConfig) (bool, error) {
 	for _, name := range requires {
-		enabled, err := capabilityEnabled(name, toolConfig)
+		enabled, err := toolConfig.CapabilityEnabled(name)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("requires: %w", err)
 		}
 		if !enabled {
 			return false, nil
 		}
 	}
 	return true, nil
-}
-
-// capabilityEnabled resolves one `requires:` value against the server
-// configuration. data-quality is the only capability a skill can require
-// today; add a case here when a second capability flag appears.
-func capabilityEnabled(name string, toolConfig *chip.ServerToolConfig) (bool, error) {
-	switch name {
-	case chip.DataQualityCapabilityName:
-		return toolConfig.DataQuality, nil
-	default:
-		return false, fmt.Errorf(
-			"unknown requires value %q in skill frontmatter (known capabilities: %s)",
-			name, chip.DataQualityCapabilityName,
-		)
-	}
 }

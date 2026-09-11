@@ -120,7 +120,14 @@ func TestLoadWith_externalUnknownRequiresValueFailsLoad(t *testing.T) {
 	}
 }
 
-var skillRefPattern = regexp.MustCompile(`collibra/[a-z0-9]+(?:-[a-z0-9]+)*`)
+// skillRefPattern matches a skill name written as a code span —
+// `collibra/lineage` — which is how every skill body references another
+// skill. Requiring the backticks keeps a repository path quoted in prose
+// (pkg/skills/files/collibra/dq-rules/SKILL.md) from reading as a routing
+// reference. A code span naming a gated skill still fails the test, which is
+// the intent: a served body must not send the agent to a filtered skill,
+// however it phrases it.
+var skillRefPattern = regexp.MustCompile("`(collibra/[a-z0-9]+(?:-[a-z0-9]+)*)`")
 
 // TestEmbeddedCatalog_crossReferencesResolveInEveryState is what catches a
 // served skill — collibra/index above all — advertising a skill that the
@@ -135,7 +142,9 @@ func TestEmbeddedCatalog_crossReferencesResolveInEveryState(t *testing.T) {
 		}
 		for _, skill := range cat.List() {
 			refs := append([]string{}, skill.Related...)
-			refs = append(refs, skillRefPattern.FindAllString(skill.Body, -1)...)
+			for _, m := range skillRefPattern.FindAllStringSubmatch(skill.Body, -1) {
+				refs = append(refs, m[1])
+			}
 			for _, ref := range refs {
 				if ref == skill.Name {
 					continue

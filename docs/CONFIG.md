@@ -28,7 +28,7 @@ The server can be configured using the following environment variables:
 - `COLLIBRA_MCP_ENABLE_DEBUG_TOOLS` - Register debug tools (e.g. `get_debug_mcp_init_request`) that are hidden by default. Set to `true` to enable. Off by default.
 - `COLLIBRA_MCP_DATA_QUALITY` - Register the data quality tools (data quality jobs, rules and rule templates), which are not registered by default. Set to `true` to enable. Off by default. Not an experimental feature: see [the README](../README.md#data-quality-tools)
 - `COLLIBRA_MCP_EXPERIMENTAL` - Comma-separated list of opt-in experimental features to enable. Off by default; unknown names log a warning but do not fail startup. Currently known: `context-specifications` and `skills` (see [SKILLS.md](../SKILLS.md))
-- `COLLIBRA_MCP_SKILLS_DIR` - Optional path to an external skills directory. When set, its skills are merged on top of the embedded catalog and same-named skills (e.g. `collibra/lineage`) fully replace the embedded entry. Requires the `skills` experimental feature. `~` and `~user` are expanded.
+- `COLLIBRA_MCP_SKILLS_DIR` - Optional path to an external skills directory. When set, its skills are merged on top of the embedded catalog and same-named skills (e.g. `collibra/lineage`) fully replace the embedded entry. Requires the `skills` experimental feature. `~` and `~user` are expanded. A skill may declare `requires: <capability>` in its frontmatter to be served only when that capability is on (`data-quality` is the only one today); an unrecognized value fails catalog load and the server does not start, so a capability rename is a breaking change for such a skill.
 
 ## Configuration File
 
@@ -92,7 +92,7 @@ The configuration is organized into two main sections:
 - `enable-debug-tools` - optional boolean. When `true`, registers debug tools that are hidden by default (e.g. `get_debug_mcp_init_request`). Defaults to `false`.
 - `data-quality` - optional boolean. When `true`, registers the data quality tools (data quality jobs, rules and rule templates), which are otherwise not registered at all. Defaults to `false`. A capability flag, not an experimental feature; `enabled-tools` cannot re-open the gate, and the data quality skills are only served when it is on. See [the README](../README.md#data-quality-tools).
 - `experimental` - optional list of opt-in experimental features to enable. Off by default; unknown names log a warning but do not fail startup. Currently known: `context-specifications` and `skills` (see [SKILLS.md](../SKILLS.md))
-- `skills-dir` - optional path to an external skills directory whose contents merge on top of the embedded catalog. Same-named skills fully replace the embedded entry. Requires the `skills` experimental feature. `~` and `~user` are expanded.
+- `skills-dir` - optional path to an external skills directory whose contents merge on top of the embedded catalog. Same-named skills fully replace the embedded entry. Requires the `skills` experimental feature. `~` and `~user` are expanded. A skill's `requires: <capability>` frontmatter gates it on a capability flag; an unrecognized value fails catalog load and the server does not start.
 
 ## Authentication Approaches
 
