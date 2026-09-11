@@ -1,6 +1,7 @@
 ---
 description: Author and validate custom data quality rules (monitors) on an existing DQ job, inspect them, and read their per-run results, using the validate/create/get/results DQ tools.
 related: collibra/discovery, collibra/dq-rule-workbench
+requires: data-quality
 ---
 
 # Data quality rules

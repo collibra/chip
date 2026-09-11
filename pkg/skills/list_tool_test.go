@@ -19,7 +19,7 @@ body`)},
 		"files/collibra/lineage/references/notes.md": &fstest.MapFile{Data: []byte("notes")},
 		"files/collibra/discovery/SKILL.md":          &fstest.MapFile{Data: []byte("---\ndescription: Find assets.\n---\n\nbody")},
 	}
-	cat, err := loadFromFS(fsys, "files")
+	cat, err := loadFromFS(fsys, "files", testConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
