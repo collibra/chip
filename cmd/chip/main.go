@@ -34,8 +34,9 @@ func main() {
 		EnabledTools:     config.Mcp.EnabledTools,
 		DisabledTools:    config.Mcp.DisabledTools,
 		EnableDebugTools: config.Mcp.EnableDebugTools,
-		Experimental:  config.Mcp.Experimental,
-		SkillsDir:     config.Mcp.SkillsDir,
+		DataQuality:      config.Mcp.DataQuality,
+		Experimental:     config.Mcp.Experimental,
+		SkillsDir:        config.Mcp.SkillsDir,
 	}
 
 	serverOpts := []chip.ServerOption{
@@ -47,6 +48,9 @@ func main() {
 	}
 	if toolConfig.IsExperimentalEnabled(tools.ContextSpecificationsFeature) {
 		slog.Info("Experimental feature enabled: context-specifications")
+	}
+	if toolConfig.DataQuality {
+		slog.Info("Data quality tools enabled")
 	}
 	server := chip.NewServer(serverOpts...)
 

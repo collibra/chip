@@ -118,13 +118,27 @@ type ToolMetadata struct {
 	Permissions []string
 }
 
+// DataQualityCapabilityName is the name of the data quality capability as it
+// is spelled outside Go: the --data-quality flag, the
+// COLLIBRA_MCP_DATA_QUALITY env var, the mcp.data-quality YAML field, and a
+// skill's `requires:` frontmatter. It is deliberately NOT an experimental
+// feature name — see ServerToolConfig.DataQuality.
+const DataQualityCapabilityName = "data-quality"
+
 // ServerToolConfig is used to configure which tools are enabled/disabled at the server level
 type ServerToolConfig struct {
 	EnabledTools  []string
 	DisabledTools []string
 	// EnableDebugTools, when true, registers debug tools that are otherwise hidden.
 	EnableDebugTools bool
-	Experimental     []string
+	// DataQuality, when true, registers the data quality tools, which are
+	// otherwise not registered at all. It is a capability flag, not an
+	// experimental feature: the tools it gates are generally available, they
+	// write to (and two of them irreversibly delete from) Collibra, so an
+	// operator opts into the capability as a whole. Experimental is the other
+	// axis — a list of opt-in feature names with no stability promise.
+	DataQuality  bool
+	Experimental []string
 	// SkillsDir is the optional path to an external skills directory whose
 	// contents are merged on top of the embedded catalog. Empty means the
 	// embedded catalog alone is served. Only consulted when the "skills"

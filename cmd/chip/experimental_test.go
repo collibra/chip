@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/skills"
 )
 
@@ -23,5 +24,18 @@ func TestFormatExperimentalForHelp_includesAllKnown(t *testing.T) {
 		if !strings.Contains(help, desc) {
 			t.Errorf("help text missing description for %q", name)
 		}
+	}
+}
+
+// data-quality is a capability flag (--data-quality), not an experimental
+// feature: it must not be accepted as an --experimental name, or a stale
+// config would appear to enable the data quality tools without doing so.
+func TestDataQualityIsNotAnExperimentalFeature(t *testing.T) {
+	if _, ok := knownExperimentalFeatures[chip.DataQualityCapabilityName]; ok {
+		t.Errorf("%q must not be a known experimental feature", chip.DataQualityCapabilityName)
+	}
+	if strings.Contains(knownExperimentalFeaturesList(), chip.DataQualityCapabilityName) {
+		t.Errorf("known features list should not mention %q: %s",
+			chip.DataQualityCapabilityName, knownExperimentalFeaturesList())
 	}
 }

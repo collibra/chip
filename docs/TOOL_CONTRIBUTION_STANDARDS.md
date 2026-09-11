@@ -46,15 +46,34 @@ writing the code — do not assume review will catch it.
 
 ## 3. Rollout gating
 
-### 3.1 New tools go behind an experimental feature flag, off by default
+New tools are off by default. There are two separate axes for that, and picking the wrong one is a
+review finding:
 
-Mandatory for admin/write tools (create / edit / delete), and the default expectation for
-everything else until the tool set graduates.
+- **Experimental feature** (`--experimental=<name>`) — an opt-in *name* with no stability promise.
+  Use it while a tool set is in preview: it may change shape or be removed without a deprecation
+  cycle.
+- **Capability flag** (a top-level boolean, e.g. `--data-quality`) — a generally available domain
+  that an operator switches on as a whole, typically because it writes to (or deletes from)
+  Collibra. The tool contract is stable; what is optional is whether the deployment exposes it.
 
-### 3.2 One shared feature name per domain
+A domain uses **one** of the two, not both. Do not add a flag per PR or per tool.
 
-All of a domain's tools share a single feature name, across PRs and teams. Do not add a flag per PR
-or per tool. Gate the registrations as a block in `pkg/tools/register.go`:
+### 3.1 Preview tool sets go behind an experimental feature flag
+
+A new tool set whose shape is not yet settled ships behind an experimental feature name, off by
+default. That is the default expectation while the domain is in preview, and it is mandatory for
+admin/write tools (create / edit / delete) that are not yet generally available.
+
+Once a tool set is generally available, it does not stay behind `--experimental`: either it needs
+no gate at all, or — if it writes to Collibra and an operator should choose to expose it — it gets
+a capability flag (3.2).
+
+### 3.2 One gate per domain, wrapping the registrations as a block
+
+Gate all of a domain's registrations as a single block in `pkg/tools/register.go`, in one of these
+two shapes.
+
+A preview domain, gated on an experimental feature name:
 
 ```go
 const YourDomainFeatureName = "your-domain"   // existing: "context-specifications"
@@ -65,15 +84,70 @@ if toolConfig.IsExperimentalEnabled(YourDomainFeatureName) {
 }
 ```
 
-### 3.3 Register the flag in `knownExperimentalFeatures`
+A generally available domain, gated on a capability flag — a `bool` field on
+`chip.ServerToolConfig` wired to a flag, an env var and a YAML field in `cmd/chip/config.go`
+(follow `EnableDebugTools` and `DataQuality`):
+
+```go
+if toolConfig.DataQuality {
+    toolRegister(server, toolConfig, create_dq_job.NewTool(client))
+    // ...
+}
+```
+
+Only put tools of the domain inside the block. A tool that merely sits next to them in the file
+does not belong in the gate (`search_catalog_columns` is a Knowledge Graph search over catalog
+Column assets, not a data quality tool, and stays ungated).
+
+**A preview tool inside a generally available domain nests its own experimental check *inside* the
+domain block**, so it needs both flags:
+
+```go
+if toolConfig.DataQuality {
+    // ... the generally available tools ...
+    if toolConfig.IsExperimentalEnabled(YourPreviewFeatureName) {
+        toolRegister(server, toolConfig, your_preview_tool.NewTool(client))
+    }
+}
+```
+
+Graduating that tool then means deleting the inner check and nothing else. Do not add the nested
+block, or a preview feature name, before there is a preview tool to put in it.
+
+### 3.3 Register an experimental feature in `knownExperimentalFeatures`
 
 Add an entry in `cmd/chip/experimental.go` so `--experimental`, `--help` and the YAML config
-recognize it. Help text and validation read from that map, so nothing else needs to change.
+recognize the name. Help text and validation read from that map, so nothing else needs to change.
+
+This is for experimental feature names only. A capability flag is **not** an experimental feature
+and must not be added to that map — the two axes are independent, and a name in that map that
+nothing gates on is worse than no flag at all.
 
 ### 3.4 Add gating tests
 
-`pkg/tools/register_test.go` must assert both directions: hidden with an empty config, visible with
-the feature enabled. Follow the existing pattern.
+`pkg/tools/register_test.go` must assert both directions **by tool name**: every tool of the domain
+absent with an empty config, every one present with the gate enabled, and the surrounding tool
+surface identical in both states so the wrapper cannot have swallowed a neighbour. Follow the
+existing pattern.
+
+### 3.5 A skill for a gated domain declares its own gate
+
+A skill that instructs the agent to call gated tools must not be served when those tools are not
+registered. Declare the capability in the skill's frontmatter — `requires: data-quality` — rather
+than hardcoding skill names in Go; the catalog filters on it at load, external skills from
+`--skills-dir` gate themselves the same way, and a rename cannot silently un-gate a skill. An
+unrecognized `requires:` value fails catalog load.
+
+Filtering the catalog does not rewrite markdown, so remove the skill from `collibra/index` (and
+from any other served skill's body or `related:` header) when its domain is gated: the navigator
+must never route to a skill the configuration filtered out.
+
+### 3.6 `enabled-tools` is a filter, not an escape hatch
+
+Because a gate skips registration, `--enabled-tools` cannot re-open it — a tool inside a closed
+gate never reaches `toolRegister` and therefore never reaches `IsToolEnabled`. The allow-list
+selects among the tools of the enabled capabilities. Document that for your domain; do not work
+around it.
 
 ---
 
@@ -286,7 +360,9 @@ lineage entity ID bridge), `collibra/asset-create` (RICH_TEXT Markdown handling,
 
 ### 10.2 Register the skill in `collibra/index`
 
-Otherwise the navigator cannot route to it.
+Otherwise the navigator cannot route to it. The exception is a skill gated by a capability flag
+(3.5): the index is served in every configuration, so it must not name a skill that may be
+filtered out.
 
 ### 10.3 Skills must not contradict each other or the tools
 

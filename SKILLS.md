@@ -18,8 +18,29 @@ those tools. Skill content lives in [`pkg/skills/files/collibra/`](pkg/skills/fi
 | `collibra/asset-create` | `create_asset` workflow; RICH_TEXT Markdown handling; duplicate gating |
 | `collibra/asset-edit` | `edit_asset` operation types |
 
-Each skill is one `SKILL.md` per directory, with frontmatter (`description`, `related`) and an
-optional `references/` directory for bundled reference documents.
+Each skill is one `SKILL.md` per directory, with frontmatter (`description`, `related`, `shared`,
+`requires`) and an optional `references/` directory for bundled reference documents.
+
+## Capability-gated skills
+
+A skill whose workflow depends on tools that are only registered behind a capability flag declares
+that with `requires:` in its frontmatter:
+
+```yaml
+---
+description: …
+related: collibra/discovery
+requires: data-quality
+---
+```
+
+Such a skill is left out of the catalog unless the capability is on, so the agent is never handed a
+guide for tools it cannot call. `data-quality` (the `--data-quality` flag) is the only capability a
+skill can require today; any other value fails catalog load. This applies to external skills loaded
+from `--skills-dir` as well, so your own skills can gate themselves.
+
+Because filtering the catalog does not rewrite markdown, `collibra/index` does not name the
+capability-gated skills — they are discoverable through `list_collibra_skills` when served.
 
 ## Adding or updating a skill
 
