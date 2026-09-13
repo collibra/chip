@@ -191,3 +191,70 @@ func DeployDQRuleTemplate(ctx context.Context, client *http.Client, ruleTemplate
 	}
 	return &result, nil
 }
+
+// DQTemplateDeploymentUser is the creator reference on a deployment
+// (UserReference in dq-v1-public-oas-spec.yaml).
+type DQTemplateDeploymentUser struct {
+	UserID   string `json:"userId,omitempty"`
+	UserName string `json:"userName,omitempty"`
+}
+
+// DQTemplateDeployment is one rule currently deployed from a template
+// (RuleTemplateDeployment in dq-v1-public-oas-spec.yaml). A deployment has no
+// id of its own: jobName + deployedRuleName is its identity, which is also how
+// the detach endpoint addresses it.
+type DQTemplateDeployment struct {
+	JobName          string                    `json:"jobName"`
+	DeployedRuleName string                    `json:"deployedRuleName"`
+	ColumnName       string                    `json:"columnName,omitempty"`
+	ConnectionID     string                    `json:"connectionId,omitempty"`
+	EdgeSiteID       string                    `json:"edgeSiteId,omitempty"`
+	LastRun          *string                   `json:"lastRun,omitempty"`
+	LastRunStatus    *string                   `json:"lastRunStatus,omitempty"`
+	Creator          *DQTemplateDeploymentUser `json:"creator,omitempty"`
+	RelatedAssetIDs  []string                  `json:"relatedAssetIds,omitempty"`
+}
+
+// DQTemplateDeploymentList is the deployments envelope returned by the DQ API
+// (RuleTemplateDeploymentPaginated). The endpoint takes no paging parameters,
+// so a single response carries every deployment and total equals len(Results);
+// offset/limit are echoed for shape compatibility with the other list responses.
+type DQTemplateDeploymentList struct {
+	Results []DQTemplateDeployment `json:"results"`
+	Total   int64                  `json:"total"`
+	Offset  int64                  `json:"offset"`
+	Limit   int64                  `json:"limit"`
+}
+
+// ListDQRuleTemplateDeployments reads the rules currently deployed from a
+// template — GET /rest/dq/1.0/ruleTemplates/{ruleTemplateName}/deployments.
+//
+// The endpoint declares no query parameters (see listRuleTemplateDeployments in
+// RuleTemplatesControllerPublic, which takes only the template name), so it
+// always returns the full set. Callers that need a bounded page must slice the
+// result themselves.
+//
+// Note the permission asymmetry: reading deployments requires
+// DATA_QUALITY_DEPLOY_TEMPLATES, not merely template-read access.
+func ListDQRuleTemplateDeployments(ctx context.Context, client *http.Client, ruleTemplateName string) (*DQTemplateDeploymentList, error) {
+	path := "/rest/dq/1.0/ruleTemplates/" + url.PathEscape(ruleTemplateName) + "/deployments"
+	respBody, status, err := dqDo(ctx, client, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listing dq rule template deployments: %w", err)
+	}
+	if status != http.StatusOK {
+		switch status {
+		case http.StatusForbidden:
+			return nil, fmt.Errorf("listing dq rule template deployments: missing permission to view template deployments: %s", string(respBody))
+		case http.StatusNotFound:
+			return nil, fmt.Errorf("listing dq rule template deployments: %w: %q: %s", ErrDQRuleTemplateNotFound, ruleTemplateName, string(respBody))
+		default:
+			return nil, fmt.Errorf("listing dq rule template deployments: unexpected status %d: %s", status, string(respBody))
+		}
+	}
+	var list DQTemplateDeploymentList
+	if err := json.Unmarshal(respBody, &list); err != nil {
+		return nil, fmt.Errorf("listing dq rule template deployments: decoding response: %w", err)
+	}
+	return &list, nil
+}
