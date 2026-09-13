@@ -245,7 +245,7 @@ Some functionality ships behind an opt-in `experimental` flag. These features ar
 
 - `context-specifications` — Context specification tools: `list_context_specifications`, `get_context_specification`, and the `contextSpecificationId` parameter on `get_asset_details`. These tools generate structured YAML context for assets using the Semantic Blueprint API.
 
-- `data-quality` — Data quality job-run inspection tools: `get_data_quality_job_run_profile` (per-column profiling statistics for a run) and `get_data_quality_job_run_monitors` (per-monitor results for a run). Both are read-only and take a `run_id` from `dq_search_job_runs`.
+- `data-quality` — Data quality job-run inspection and rule-template authoring. Read-only: `get_data_quality_job_run_profile` (per-column profiling statistics for a run) and `get_data_quality_job_run_monitors` (per-monitor results for a run), both taking a `run_id` from `dq_search_job_runs`. Write: `create_data_quality_rule_template`, `update_data_quality_rule_template` and `delete_data_quality_rule_template`, which manage reusable parameterized rule patterns in the template library.
 
 - `skills` — Embedded skill catalog served via two additional tools, `list_collibra_skills` and `load_collibra_skill`. Skills are short Markdown guides that document multi-step Collibra workflows (discovery, lineage, asset create/edit, …) for the connecting LLM. See [SKILLS.md](SKILLS.md) for the catalog.
 
