@@ -187,6 +187,7 @@ func TestMonitorsLookupErrorMapping(t *testing.T) {
 		{"unauthorized", http.StatusUnauthorized, "401"},
 		{"forbidden", http.StatusForbidden, "403"},
 		{"bad request", http.StatusBadRequest, "400"},
+		{"unprocessable", http.StatusUnprocessableEntity, "422"},
 		{"server error", http.StatusInternalServerError, "500"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -205,6 +206,67 @@ func TestMonitorsLookupErrorMapping(t *testing.T) {
 				t.Error("guidance is empty, want actionable next steps")
 			}
 		})
+	}
+}
+
+func TestMonitors422DoesNotTellTheAgentToRetry(t *testing.T) {
+	// §6.6: 422 is a typed status; the default arm's "retry shortly" is wrong for it.
+	srv := newServer(t, jsonHandler(http.StatusUnprocessableEntity, map[string]any{"message": "no monitor results"}))
+	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: runID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.Message, "422") {
+		t.Errorf("message = %q, want it to report HTTP 422", out.Message)
+	}
+	if strings.Contains(out.Guidance, "Retry shortly") {
+		t.Errorf("guidance = %q, want it not to advise retrying an unprocessable request", out.Guidance)
+	}
+}
+
+func TestMonitorsTruncatesEngineException(t *testing.T) {
+	// §2: DQ engine and JDBC failures echo the offending cell value back in the
+	// exception text, so an unbounded pass-through leaks customer data.
+	leak := strings.Repeat("invalid input syntax for integer: secret-row ", 20)
+	payload := map[string]any{
+		"adaptiveMonitors": []map[string]any{},
+		"customMonitors": []map[string]any{
+			{"monitorName": "boom", "monitorType": "SQLG", "state": "EXCEPTION", "exception": leak},
+		},
+	}
+	srv := newServer(t, jsonHandler(http.StatusOK, payload))
+	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: runID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.Monitors.CustomMonitors) != 1 {
+		t.Fatalf("customRules = %d, want 1", len(out.Monitors.CustomMonitors))
+	}
+	got := out.Monitors.CustomMonitors[0].Exception
+	if len(got) >= len(leak) {
+		t.Errorf("exception length = %d, want it truncated below %d", len(got), len(leak))
+	}
+	if !strings.Contains(got, "truncated") {
+		t.Errorf("exception = %q, want it to mark the truncation", got)
+	}
+}
+
+func TestMonitorsHealthyMonitorHasNoException(t *testing.T) {
+	// truncateMessage must leave an absent exception absent - a passing monitor
+	// must not gain one.
+	payload := map[string]any{
+		"adaptiveMonitors": []map[string]any{},
+		"customMonitors": []map[string]any{
+			{"monitorName": "fine", "monitorType": "SQLG", "state": "PASSING"},
+		},
+	}
+	srv := newServer(t, jsonHandler(http.StatusOK, payload))
+	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: runID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := out.Monitors.CustomMonitors[0].Exception; got != "" {
+		t.Errorf("exception = %q, want empty for a passing monitor", got)
 	}
 }
 

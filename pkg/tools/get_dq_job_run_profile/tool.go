@@ -66,20 +66,20 @@ type ColumnProfile struct {
 	EmptyCount   int64         `json:"emptyCount" jsonschema:"Number of empty values (e.g. empty strings) observed."`
 	EmptyPercent float64       `json:"emptyPercent" jsonschema:"Empty values as a percentage of all rows observed in the column."`
 	UniqueCount  int64         `json:"uniqueCount" jsonschema:"Number of distinct values observed (exact or approximate depending on the engine)."`
-	Min          string        `json:"min,omitempty" jsonschema:"Minimum value observed. Absent when no values were observed."`
-	Max          string        `json:"max,omitempty" jsonschema:"Maximum value observed. Absent when no values were observed."`
-	Mean         string        `json:"mean,omitempty" jsonschema:"Arithmetic mean. Numeric columns only."`
-	Median       string        `json:"median,omitempty" jsonschema:"Median (50th percentile). Numeric columns only."`
-	Q1           string        `json:"q1,omitempty" jsonschema:"First quartile (25th percentile). Numeric columns only."`
-	Q3           string        `json:"q3,omitempty" jsonschema:"Third quartile (75th percentile). Numeric columns only."`
+	Min          string        `json:"min,omitempty" jsonschema:"Smallest value observed, as a decimal string. Numeric columns only - omitted for text, date and mixed-type columns, where the smallest value would be a verbatim cell value rather than a statistic. Absent when no values were observed."`
+	Max          string        `json:"max,omitempty" jsonschema:"Largest value observed, as a decimal string. Numeric columns only - omitted for text, date and mixed-type columns, where the largest value would be a verbatim cell value rather than a statistic. Absent when no values were observed."`
+	Mean         string        `json:"mean,omitempty" jsonschema:"Arithmetic mean, as a decimal string rather than a number. Numeric columns only."`
+	Median       string        `json:"median,omitempty" jsonschema:"Median (50th percentile), as a decimal string rather than a number. Numeric columns only."`
+	Q1           string        `json:"q1,omitempty" jsonschema:"First quartile (25th percentile), as a decimal string rather than a number. Numeric columns only."`
+	Q3           string        `json:"q3,omitempty" jsonschema:"Third quartile (75th percentile), as a decimal string rather than a number. Numeric columns only."`
 	TopShapes    []ColumnShape `json:"topShapes,omitempty" jsonschema:"Top observed value shapes, ordered by descending frequency. Absent when shape analysis did not run for the column."`
 }
 
 // ProfileDetail is the page of profiling results returned on success.
 type ProfileDetail struct {
 	JobRunID   string          `json:"jobRunId"`
-	JobName    string          `json:"jobName,omitempty"`
-	RunDate    string          `json:"runDate,omitempty"`
+	JobName    string          `json:"jobName,omitempty" jsonschema:"Name of the data-quality job this run belongs to."`
+	RunDate    string          `json:"runDate,omitempty" jsonschema:"The run's business date, as reported by the service. Usually ISO-8601 UTC (e.g. 2024-10-22T00:00:00Z), but a date-only job reports a plain calendar date (2024-10-22) — parse defensively rather than assuming a time component. This is the date the run covers, not necessarily when it executed."`
 	Offset     int64           `json:"offset" jsonschema:"Index of the first column profile in this page."`
 	Limit      int64           `json:"limit" jsonschema:"Maximum number of column profiles in this page."`
 	Total      *int64          `json:"total,omitempty" jsonschema:"Total number of profiled columns for this run, across all pages."`
@@ -102,15 +102,28 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:  "get_data_quality_job_run_profile",
 		Title: "Get Data Quality Job Run Profile",
 		Description: "Reads the column-level profiling statistics produced by a single Collibra data-quality job run, " +
-			"by its run_id (jobRunId). Per column: the type declared by the source schema and the type actually inferred from the " +
-			"values, counts of values/nulls/empties/distinct values (with null and empty also as percentages), min/max/mean, " +
-			"quartiles for numeric columns, and the top observed value shapes.\n\n" +
-			"Use this to understand a run's data distribution, type inconsistencies (inferredType listing more than one type) and " +
-			"format anomalies. Profiling results exist only for runs that produced them, so a run that never completed — or a job " +
-			"with profiling switched off — returns an error saying so.\n\n" +
+			"by its run_id. A data-quality \"job\" (Collibra also calls it a \"dataset\") is a saved set of checks over ONE " +
+			"database table; a \"job run\" is one execution of that job, and profiling is the pass it makes over the table to " +
+			"describe each column.\n\n" +
+			"Per column it returns: the type declared by the source schema and the type actually inferred from the values, " +
+			"counts of values/nulls/empties/distinct values (nulls and empties also as percentages), mean/median/quartiles for " +
+			"numeric columns, and the top observed value shapes (masked patterns such as ###-##-####, never real values). " +
+			"Smallest/largest values are returned for numeric columns only.\n\n" +
+			"Use this to understand a run's data distribution, type inconsistencies (inferredType listing more than one type) " +
+			"and format anomalies. Profiling results exist only for runs that produced them, so a run that never completed — " +
+			"or a job with profiling switched off — returns an error saying so.\n\n" +
+			"Prerequisite: run_id comes from dq_search_job_runs, which lists a job's runs with their ids and status. " +
+			"You cannot derive it from a job name.\n\n" +
+			"Not to be confused with two tools that take the same run_id: dq_get_job_run returns the run's lifecycle status, " +
+			"score and per-monitor breakdown — the run's verdict — while this tool describes the data the run saw. " +
+			"get_data_quality_job_run_monitors returns only the per-monitor results. Reach for this one when the question is " +
+			"about the shape of the data rather than pass/fail.\n\n" +
+			"Read-only: it never changes a job, a run or any data. Requires the Data Quality Job > View permission on the job " +
+			"the run belongs to; without it the call returns a permission error.\n\n" +
 			"Paginated: 100 columns per page by default (max 500); page through a wide table with offset.\n\n" +
 			"Example user requests: \"Show me the profile for DQ run <id>\"; \"Which columns in run <id> have nulls?\"; " +
-			"\"What formats do the values in run <id> take?\"",
+			"\"What formats do the values in run <id> take?\"; \"Is there anything odd about the data in this run?\"; " +
+			"\"Did anything look wrong with that last quality run?\"",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
@@ -196,6 +209,48 @@ func profileDetail(page *clients.DqJobRunProfileResults, runID string, requested
 	return detail
 }
 
+// numericInferredTypes are the value types the profiler reports for numeric columns.
+// Compared case-insensitively against each member of a possibly comma-separated
+// inferredType such as "Long" or "String, Int".
+var numericInferredTypes = map[string]bool{
+	"int": true, "integer": true, "long": true, "short": true, "byte": true,
+	"float": true, "double": true, "decimal": true, "bigdecimal": true,
+	"number": true, "numeric": true,
+}
+
+// numericDefinedTypePrefixes are source-schema type names that denote a numeric
+// column. Matched as a prefix so parameterized forms like DECIMAL(10,2) qualify.
+var numericDefinedTypePrefixes = []string{
+	"bigint", "int", "integer", "smallint", "tinyint", "decimal",
+	"numeric", "number", "float", "double", "real",
+}
+
+// isNumericColumn reports whether min/max for this column are statistics rather
+// than a verbatim cell value. inferredType is preferred because it is derived
+// from the values actually observed; definedType is the fallback when the
+// profiler did not infer one. A mixed inferredType ("String, Int") is treated as
+// non-numeric: one of its members is text, so the extremes may be text.
+func isNumericColumn(inferredType, definedType string) bool {
+	if trimmed := strings.TrimSpace(inferredType); trimmed != "" {
+		for _, part := range strings.Split(trimmed, ",") {
+			if !numericInferredTypes[strings.ToLower(strings.TrimSpace(part))] {
+				return false
+			}
+		}
+		return true
+	}
+	defined := strings.ToLower(strings.TrimSpace(definedType))
+	if defined == "" {
+		return false
+	}
+	for _, prefix := range numericDefinedTypePrefixes {
+		if strings.HasPrefix(defined, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func columnProfile(column clients.DqColumnProfile) ColumnProfile {
 	observed := column.ValueCount + column.NullCount + column.EmptyCount
 	profile := ColumnProfile{
@@ -208,12 +263,18 @@ func columnProfile(column clients.DqColumnProfile) ColumnProfile {
 		EmptyCount:   column.EmptyCount,
 		EmptyPercent: percentOf(column.EmptyCount, observed),
 		UniqueCount:  column.UniqueCount,
-		Min:          column.Min,
-		Max:          column.Max,
 		Mean:         column.Mean,
 		Median:       column.Median,
 		Q1:           column.Q1,
 		Q3:           column.Q3,
+	}
+	// Min/Max are the actual smallest and largest values in the column, not derived
+	// statistics: on a text column they are one customer's cell value verbatim
+	// (an email, a name, an account number). Restrict them to numeric columns, which
+	// is how the engine already scopes Mean/Median/Q1/Q3 on the same struct.
+	if isNumericColumn(column.InferredType, column.DefinedType) {
+		profile.Min = column.Min
+		profile.Max = column.Max
 	}
 	for _, shape := range column.TopShapes {
 		profile.TopShapes = append(profile.TopShapes, ColumnShape{
@@ -274,16 +335,47 @@ func lookupError(code int, err error, runID string) Output {
 		out.Message = fmt.Sprintf("You do not have permission to view the profile for run %q (HTTP 403).", runID)
 		out.Guidance = "You need the Data Quality Job > View permission on the job. Ask an administrator for the Data Quality Editor/Manager role, then retry."
 	case http.StatusBadRequest:
-		out.Message = fmt.Sprintf("The data-quality API rejected the profile lookup for run %q (HTTP 400): %v", runID, err)
+		out.Message = fmt.Sprintf("The data-quality API rejected the profile lookup for run %q (HTTP 400): %s", runID, safeErr(err))
 		out.Guidance = fmt.Sprintf("Check that run_id is correct and well-formed and that limit is within 1-%d, then retry.", maxLimit)
+	case http.StatusUnprocessableEntity:
+		out.Message = fmt.Sprintf("The data-quality API could not process the profile lookup for run %q (HTTP 422): %s", runID, safeErr(err))
+		out.Guidance = "The request was well-formed but rejected as invalid — most often a run that exists but produced no profile, or a limit/offset outside the accepted range. Correct the inputs; retrying unchanged will fail identically."
+	case http.StatusOK:
+		// The client returns code 200 with an error when the body fails to parse.
+		// Printing "(HTTP 200)" tells the agent nothing it can act on.
+		out.Message = fmt.Sprintf("The data-quality API returned a profile for run %q that could not be read: %s", runID, safeErr(err))
+		out.Guidance = "The response was not in the expected format. This is a service-side problem — retrying is unlikely to help; contact your Collibra administrator if it persists."
 	case 0:
-		out.Message = fmt.Sprintf("Failed to read the profile for run %q: %v", runID, err)
+		out.Message = fmt.Sprintf("Failed to read the profile for run %q: %s", runID, safeErr(err))
 		out.Guidance = "A network/transport error occurred contacting the data-quality API. Retry."
 	default:
-		out.Message = fmt.Sprintf("Failed to read the profile for run %q (HTTP %d): %v", runID, code, err)
+		out.Message = fmt.Sprintf("Failed to read the profile for run %q (HTTP %d): %s", runID, code, safeErr(err))
 		out.Guidance = "This is likely a server-side error. Retry shortly; if it persists, contact your Collibra administrator."
 	}
 	return out
+}
+
+// maxErrMessage caps how much of a downstream error is forwarded to the model.
+const maxErrMessage = 200
+
+// safeErr renders a downstream error for the model with a length cap. The DQ
+// client wraps the entire non-2xx response body into the error, and engine and
+// JDBC failures routinely echo the offending cell value back in that body
+// ("invalid input syntax for integer: ..."), which would otherwise make this an
+// unbounded channel for customer data. Truncating bounds the exposure while
+// keeping the leading text, which is where the error class lives.
+func safeErr(err error) string {
+	if err == nil {
+		return "no additional detail"
+	}
+	msg := strings.TrimSpace(err.Error())
+	if msg == "" {
+		return "no additional detail"
+	}
+	if len(msg) > maxErrMessage {
+		return msg[:maxErrMessage] + "… (truncated)"
+	}
+	return msg
 }
 
 func percentOf(count, total int64) float64 {

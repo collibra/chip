@@ -90,6 +90,71 @@ func amountColumn() map[string]any {
 	}
 }
 
+func emailColumn() map[string]any {
+	return map[string]any{
+		"columnName":   "customer_email",
+		"definedType":  "VARCHAR(255)",
+		"inferredType": "String",
+		"valueCount":   150000,
+		"nullCount":    0,
+		"emptyCount":   0,
+		"uniqueCount":  149997,
+		// The engine reports these for text columns too; they are real customer
+		// cell values, which is exactly what must not reach the model.
+		"min": "aaron.fletcher@example.com",
+		"max": "zoe.wu@example.com",
+	}
+}
+
+func TestProfileOmitsMinMaxForTextColumn(t *testing.T) {
+	// TOOL_CONTRIBUTION_STANDARDS.md §2: no tool may return live customer data.
+	// min/max on a text column are one customer's cell value verbatim.
+	srv, _ := newServer(t, jsonHandler(http.StatusOK, profilePage(1, emailColumn())))
+	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: runID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.Profile.Columns) != 1 {
+		t.Fatalf("columns = %d, want 1", len(out.Profile.Columns))
+	}
+	col := out.Profile.Columns[0]
+	if col.Min != "" || col.Max != "" {
+		t.Errorf("min/max = %q/%q, want both empty for a text column", col.Min, col.Max)
+	}
+	if col.UniqueCount != 149997 {
+		t.Errorf("uniqueCount = %d, want the metadata to survive", col.UniqueCount)
+	}
+}
+
+func TestProfileOmitsMinMaxForMixedInferredType(t *testing.T) {
+	// "String, Double" means at least one value is text, so the extremes may be too.
+	srv, _ := newServer(t, jsonHandler(http.StatusOK, profilePage(1, amountColumn())))
+	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: runID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	col := out.Profile.Columns[0]
+	if col.Min != "" || col.Max != "" {
+		t.Errorf("min/max = %q/%q, want both empty for a mixed-type column", col.Min, col.Max)
+	}
+	if col.Median != "47.5" {
+		t.Errorf("median = %q, want derived statistics to survive", col.Median)
+	}
+}
+
+func TestProfileKeepsMinMaxForNumericColumn(t *testing.T) {
+	// order_id is BIGINT with no inferred type: min/max are statistics, not cells.
+	srv, _ := newServer(t, jsonHandler(http.StatusOK, profilePage(1, orderIDColumn())))
+	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: runID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	col := out.Profile.Columns[0]
+	if col.Min != "1000" || col.Max != "999999" {
+		t.Errorf("min/max = %q/%q, want 1000/999999 for a numeric column", col.Min, col.Max)
+	}
+}
+
 func TestMissingRunIDNeedsInput(t *testing.T) {
 	srv, _ := newServer(t, nil)
 	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: "  "})
@@ -240,6 +305,7 @@ func TestProfileLookupErrorMapping(t *testing.T) {
 		{"unauthorized", http.StatusUnauthorized, "401"},
 		{"forbidden", http.StatusForbidden, "403"},
 		{"bad request", http.StatusBadRequest, "400"},
+		{"unprocessable", http.StatusUnprocessableEntity, "422"},
 		{"server error", http.StatusInternalServerError, "500"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -258,6 +324,39 @@ func TestProfileLookupErrorMapping(t *testing.T) {
 				t.Error("guidance is empty, want actionable next steps")
 			}
 		})
+	}
+}
+
+func TestProfile422DoesNotTellTheAgentToRetry(t *testing.T) {
+	// §6.6: 422 is a typed status. The default arm's "retry shortly" is wrong for an
+	// unprocessable entity - the same request will fail identically every time.
+	srv, _ := newServer(t, jsonHandler(http.StatusUnprocessableEntity, map[string]any{"message": "no profile for run"}))
+	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: runID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.Message, "422") {
+		t.Errorf("message = %q, want it to report HTTP 422", out.Message)
+	}
+	if strings.Contains(out.Guidance, "Retry shortly") {
+		t.Errorf("guidance = %q, want it not to advise retrying an unprocessable request", out.Guidance)
+	}
+}
+
+func TestProfileTruncatesLongDownstreamError(t *testing.T) {
+	// §2: the client wraps the whole non-2xx body into the error, and engine errors
+	// echo the offending value. Bound what reaches the model.
+	leak := strings.Repeat("customer-row-data ", 60)
+	srv, _ := newServer(t, jsonHandler(http.StatusBadRequest, map[string]any{"message": leak}))
+	out, err := tools.NewTool(testutil.NewClient(srv)).Handler(t.Context(), tools.Input{RunID: runID})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.Message) > 400 {
+		t.Errorf("message length = %d, want the downstream body truncated", len(out.Message))
+	}
+	if !strings.Contains(out.Message, "truncated") {
+		t.Errorf("message = %q, want it to mark the truncation", out.Message)
 	}
 }
 
