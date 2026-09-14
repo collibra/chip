@@ -59,6 +59,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{}, err
 		}
 
+		if _, err := clients.RequireAsset(ctx, collibraClient, "measure", input.MeasureID); err != nil {
+			return Output{}, err
+		}
+
 		dataAttributes, err := clients.FindConnectedAssets(ctx, collibraClient, input.MeasureID, clients.MeasureIsCalculatedUsingDataElementRelID)
 		if err != nil {
 			return Output{}, err
