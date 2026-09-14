@@ -3,6 +3,9 @@ package chip
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -48,6 +51,18 @@ func TestMCPApps_DisabledRegistersNoResources(t *testing.T) {
 	}
 }
 
+// The flag-off path preserves logging by returning nil from uiCapabilities and
+// letting the SDK's own default stand. Returning an empty ServerCapabilities
+// instead reads as equivalent and is not: it replaces the default, and logging
+// silently disappears from the DEFAULT server. Guarded here for that reason.
+func TestMCPApps_DisabledPreservesLoggingCapability(t *testing.T) {
+	session := uiSession(t, newUITool())
+
+	if !advertisesLogging(t, session) {
+		t.Error("expected the SDK's default logging capability with the flag off")
+	}
+}
+
 func TestMCPApps_EnabledAdvertisesUIExtension(t *testing.T) {
 	session := uiSession(t, newUITool(), WithMCPApps())
 
@@ -67,15 +82,8 @@ func TestMCPApps_EnabledAdvertisesUIExtension(t *testing.T) {
 func TestMCPApps_EnabledPreservesLoggingCapability(t *testing.T) {
 	session := uiSession(t, newUITool(), WithMCPApps())
 
-	// Asserted on the wire form rather than the (deprecated) typed field: what
-	// matters is the JSON the client is handed on initialize.
-	encoded := mustJSON(t, session.InitializeResult().Capabilities)
-	advertised := map[string]json.RawMessage{}
-	if err := json.Unmarshal([]byte(encoded), &advertised); err != nil {
-		t.Fatalf("decoding advertised capabilities: %v", err)
-	}
-	if _, ok := advertised["logging"]; !ok {
-		t.Errorf("expected logging to survive setting Capabilities, advertised %s", encoded)
+	if !advertisesLogging(t, session) {
+		t.Error("expected logging to survive setting Capabilities")
 	}
 }
 
@@ -145,6 +153,93 @@ func TestMCPApps_EnabledIgnoresToolWithoutUIResourceURI(t *testing.T) {
 	if uris := listResourceURIs(t, session); len(uris) != 0 {
 		t.Errorf("expected no resources for a tool that declares no UI, got %v", uris)
 	}
+}
+
+func TestMCPApps_HalfDeclaredCardIsRejected(t *testing.T) {
+	cases := []struct {
+		name        string
+		resourceURI string
+		cardHTML    string
+		wantErr     string
+	}{
+		{name: "neither", wantErr: ""},
+		{name: "both", resourceURI: testCardURI, cardHTML: testCardHTML, wantErr: ""},
+		{name: "uri without card", resourceURI: testCardURI, wantErr: "no UICardHTML"},
+		{name: "card without uri", cardHTML: testCardHTML, wantErr: "no UIResourceURI"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkUIDeclaration("the_tool", tc.resourceURI, tc.cardHTML)
+			switch {
+			case tc.wantErr == "" && err != nil:
+				t.Fatalf("expected no error, got %v", err)
+			case tc.wantErr != "" && err == nil:
+				t.Fatalf("expected an error mentioning %q, got nil", tc.wantErr)
+			case tc.wantErr != "" && !strings.Contains(err.Error(), tc.wantErr):
+				t.Fatalf("error = %v, want it to mention %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// checkUIDeclaration is only worth anything if RegisterTool actually acts on
+// it, and log.Fatal cannot be observed in-process — so this re-runs itself as a
+// subprocess and asserts the registration dies there, before any resource with
+// an empty body can be registered.
+func TestMCPApps_HalfDeclaredCardIsFatalAtRegistration(t *testing.T) {
+	if mode := os.Getenv(halfDeclaredCaseEnv); mode != "" {
+		registerHalfDeclaredTool(mode)
+		return
+	}
+	cases := []struct{ name, mode, want string }{
+		{"uri without card", "uri-only", "no UICardHTML"},
+		{"card without uri", "card-only", "no UIResourceURI"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], "-test.run=TestMCPApps_HalfDeclaredCardIsFatalAtRegistration")
+			cmd.Env = append(os.Environ(), halfDeclaredCaseEnv+"="+tc.mode)
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected registration to exit non-zero, it succeeded: %s", out)
+			}
+			if !strings.Contains(string(out), tc.want) {
+				t.Errorf("expected the failure to mention %q, got: %s", tc.want, out)
+			}
+		})
+	}
+}
+
+const halfDeclaredCaseEnv = "CHIP_TEST_HALF_DECLARED_CARD"
+
+// registerHalfDeclaredTool runs in the subprocess spawned above and is expected
+// to terminate it.
+func registerHalfDeclaredTool(mode string) {
+	tool := newTool()
+	switch mode {
+	case "uri-only":
+		tool.UIResourceURI = testCardURI
+	case "card-only":
+		tool.UICardHTML = testCardHTML
+	}
+	RegisterTool(NewServer(WithMCPApps()), tool)
+}
+
+// advertisesLogging reports whether the initialize response carries a logging
+// capability. Read off the wire form rather than the (deprecated) typed field:
+// what matters is the JSON the client is handed.
+func advertisesLogging(t *testing.T, session *mcp.ClientSession) bool {
+	t.Helper()
+	encoded := mustJSON(t, session.InitializeResult().Capabilities)
+	advertised := map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(encoded), &advertised); err != nil {
+		t.Fatalf("decoding advertised capabilities: %v", err)
+	}
+	if _, ok := advertised["logging"]; ok {
+		return true
+	}
+	t.Logf("advertised capabilities: %s", encoded)
+	return false
 }
 
 func uiSession(t *testing.T, tool *Tool[toolInput, toolOutput], opts ...ServerOption) *mcp.ClientSession {
