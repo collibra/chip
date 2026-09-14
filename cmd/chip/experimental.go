@@ -19,7 +19,7 @@ import (
 var knownExperimentalFeatures = map[string]string{
 	skills.FeatureName:                 "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
 	tools.ContextSpecificationsFeature: "Context specification tools: list_context_specifications, get_context_specification, and contextSpecificationId parameter on get_asset_details.",
-	tools.DataQualityFeature:           "Data quality job-run inspection (get_data_quality_job_run_profile, get_data_quality_job_run_monitors) and rule-template authoring (create/update/delete_data_quality_rule_template, list_data_quality_rule_template_deployments).",
+	tools.DataQualityFeature:           "Data quality job-run inspection (get_data_quality_job_run_profile, get_data_quality_job_run_monitors) and rule-template authoring (create/update/delete_data_quality_rule_template, list_data_quality_rule_template_deployments, detach_data_quality_rule_from_template).",
 }
 
 // validateExperimental warns (without exiting) when the user enabled an

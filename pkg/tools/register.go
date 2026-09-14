@@ -17,6 +17,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/delete_dq_job_run"
 	"github.com/collibra/chip/pkg/tools/delete_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
+	"github.com/collibra/chip/pkg/tools/detach_dq_rule_from_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_assessment"
@@ -140,6 +141,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, update_dq_rule_template.NewTool(client))
 		toolRegister(server, toolConfig, delete_dq_rule_template.NewTool(client))
 		toolRegister(server, toolConfig, list_dq_rule_template_deployments.NewTool(client))
+		toolRegister(server, toolConfig, detach_dq_rule_from_template.NewTool(client))
 		toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
 		toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
 	}
