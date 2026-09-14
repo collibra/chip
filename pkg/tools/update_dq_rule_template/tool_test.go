@@ -227,3 +227,41 @@ func TestUpdateSurfacesAPIValidationFailure(t *testing.T) {
 		t.Errorf("message = %q, want it to carry the API's validation detail", out.Message)
 	}
 }
+
+func TestUpdate422DoesNotTellTheAgentToRetryUnchanged(t *testing.T) {
+	// §6.6: 422 is a typed status; the catch-all arm advises retrying, which is
+	// wrong for an unprocessable entity.
+	client, _ := newServer(t, http.StatusOK, storedTemplate(), http.StatusUnprocessableEntity, nil)
+	out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, SQL: "select 2", Confirm: true})
+	if out.Status != tools.StatusError {
+		t.Fatalf("status = %q, want error", out.Status)
+	}
+	if !strings.Contains(out.Message, "422") {
+		t.Errorf("message = %q, want it to report HTTP 422", out.Message)
+	}
+	if !strings.Contains(out.Guidance, "fail identically") {
+		t.Errorf("guidance = %q, want it to say retrying unchanged will not help", out.Guidance)
+	}
+}
+
+func TestUpdateTruncatesPathologicalErrorBody(t *testing.T) {
+	// §2: the client wraps the whole non-2xx body into its error, so bound it.
+	leak := strings.Repeat("customer-row-data ", 200)
+	client, _ := newServer(t, http.StatusOK, storedTemplate(), http.StatusInternalServerError,
+		map[string]any{"message": leak})
+	out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, SQL: "select 2", Confirm: true})
+	if len(out.Message) > 800 {
+		t.Errorf("message length = %d, want the body truncated", len(out.Message))
+	}
+}
+
+func TestUpdateKeepsActionableValidationDetail(t *testing.T) {
+	// §6.3: the cap must not swallow the detail the agent needs to self-correct.
+	// The client prefixes ~180 characters of its own prose before the body.
+	client, _ := newServer(t, http.StatusOK, storedTemplate(), http.StatusBadRequest,
+		map[string]any{"message": "cannot translate sql for dialect snowflake"})
+	out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, SQL: "select 2", Confirm: true})
+	if !strings.Contains(out.Message, "cannot translate sql for dialect snowflake") {
+		t.Errorf("message = %q, want the validation detail to survive truncation", out.Message)
+	}
+}

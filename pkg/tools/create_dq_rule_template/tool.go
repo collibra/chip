@@ -119,7 +119,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if err != nil {
 			return Output{
 				Status:   StatusError,
-				Message:  fmt.Sprintf("Could not resolve the businessRuleLinks: %v", err),
+				Message:  fmt.Sprintf("Could not resolve the businessRuleLinks: %s", safeErr(err)),
 				Guidance: "The Business Rule asset lookup failed. Retry, or pass asset UUIDs instead of names to skip the lookup.",
 			}, nil
 		}
@@ -250,13 +250,50 @@ func createError(err error, name string) Output {
 	if errors.Is(err, clients.ErrDQRuleTemplateNameTaken) {
 		return Output{
 			Status:   StatusError,
-			Message:  fmt.Sprintf("A rule template named %q already exists, so it was not created: %v", name, err),
+			Message:  fmt.Sprintf("A rule template named %q already exists, so it was not created: %s", name, safeErr(err)),
 			Guidance: "Choose a different name, or change the existing template with update_data_quality_rule_template. Inspect it first with get_data_quality_rule_template.",
+		}
+	}
+	if strings.Contains(err.Error(), "status 422") {
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("The data quality service could not process the creation of rule template %q (HTTP 422): %s", name, safeErr(err)),
+			Guidance: "The request was well-formed but rejected as invalid - most often SQL that cannot be translated to the declared dialect. Correct the definition; retrying it unchanged will fail identically. Nothing was created.",
 		}
 	}
 	return Output{
 		Status:   StatusError,
-		Message:  fmt.Sprintf("Could not create rule template %q: %v", name, err),
+		Message:  fmt.Sprintf("Could not create rule template %q: %s", name, safeErr(err)),
 		Guidance: "Check the SQL, dialect and businessRuleLinks against the message above, then retry. Nothing was created.",
 	}
+}
+
+// maxErrMessage caps how much of a downstream error is forwarded to the model.
+//
+// Deliberately more generous than the 200 used by the job-run read tools. Those
+// surface engine and JDBC failures from SQL executed against customer rows, so a
+// tight cap is the point. These endpoints only validate author-supplied SQL and
+// asset ids without running it, so the body is the author's own content, and
+// §6.3 wants the error actionable enough for the agent to self-correct - a
+// "cannot translate sql for dialect X" has to survive. The client wraps its own
+// ~180 characters of prose ahead of the body, so a 200 cap would discard the
+// detail entirely and leave only the wrapper.
+const maxErrMessage = 600
+
+// safeErr renders a downstream error for the model with a length cap. The DQ
+// client wraps the entire non-2xx response body into its error, so without a
+// bound a pathological response body would reach the model verbatim. Truncating
+// keeps the leading text, where the error class and the actionable detail live.
+func safeErr(err error) string {
+	if err == nil {
+		return "no additional detail"
+	}
+	msg := strings.TrimSpace(err.Error())
+	if msg == "" {
+		return "no additional detail"
+	}
+	if len(msg) > maxErrMessage {
+		return msg[:maxErrMessage] + "… (truncated)"
+	}
+	return msg
 }

@@ -232,3 +232,36 @@ func TestCreateSurfacesValidationFailureFromAPI(t *testing.T) {
 		t.Errorf("message = %q, want it to carry the API's validation detail", out.Message)
 	}
 }
+
+func TestCreate422DoesNotTellTheAgentToRetryUnchanged(t *testing.T) {
+	// §6.6: 422 is a typed status. The catch-all arm advises retrying, which is
+	// wrong for an unprocessable entity - the same request fails identically.
+	client, _ := newServer(t, http.StatusUnprocessableEntity, map[string]any{"message": "bad dialect"}, nil)
+	input := validInput()
+	input.Confirm = true
+	out, _ := tools.NewTool(client).Handler(t.Context(), input)
+	if out.Status != tools.StatusError {
+		t.Fatalf("status = %q, want error", out.Status)
+	}
+	if !strings.Contains(out.Message, "422") {
+		t.Errorf("message = %q, want it to report HTTP 422", out.Message)
+	}
+	if !strings.Contains(out.Guidance, "fail identically") {
+		t.Errorf("guidance = %q, want it to say retrying unchanged will not help", out.Guidance)
+	}
+}
+
+func TestCreateTruncatesPathologicalErrorBody(t *testing.T) {
+	// §2: the client wraps the whole non-2xx body into its error, so bound it.
+	leak := strings.Repeat("customer-row-data ", 200)
+	client, _ := newServer(t, http.StatusBadRequest, map[string]any{"message": leak}, nil)
+	input := validInput()
+	input.Confirm = true
+	out, _ := tools.NewTool(client).Handler(t.Context(), input)
+	if len(out.Message) > 800 {
+		t.Errorf("message length = %d, want the body truncated", len(out.Message))
+	}
+	if !strings.Contains(out.Message, "truncated") {
+		t.Errorf("message = %q, want the truncation marked", out.Message)
+	}
+}

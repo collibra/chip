@@ -173,3 +173,32 @@ func TestDeleteSurfacesAPIRejection(t *testing.T) {
 		t.Error("guidance is empty, want actionable next steps")
 	}
 }
+
+func TestDelete422DoesNotTellTheAgentToRetryUnchanged(t *testing.T) {
+	// §6.6: 422 is a typed status; the catch-all arm advises retrying, which is
+	// wrong for an unprocessable entity.
+	client, _ := newServer(t, http.StatusOK, storedTemplate(0, false), http.StatusUnprocessableEntity)
+	out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, Confirm: true})
+	if out.Status != tools.StatusError {
+		t.Fatalf("status = %q, want error", out.Status)
+	}
+	if !strings.Contains(out.Message, "422") {
+		t.Errorf("message = %q, want it to report HTTP 422", out.Message)
+	}
+	if !strings.Contains(out.Guidance, "fail identically") {
+		t.Errorf("guidance = %q, want it to say retrying unchanged will not help", out.Guidance)
+	}
+}
+
+func TestDeleteTruncatesPathologicalErrorBody(t *testing.T) {
+	// §2: the client wraps the whole non-2xx body into its error, so bound it.
+	leak := strings.Repeat("customer-row-data ", 200)
+	client, _ := newServer(t, http.StatusInternalServerError, map[string]any{"message": leak}, http.StatusOK)
+	out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, Confirm: true})
+	if len(out.Message) > 800 {
+		t.Errorf("message length = %d, want the body truncated", len(out.Message))
+	}
+	if !strings.Contains(out.Message, "truncated") {
+		t.Errorf("message = %q, want the truncation marked", out.Message)
+	}
+}

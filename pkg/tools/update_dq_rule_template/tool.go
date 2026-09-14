@@ -273,7 +273,7 @@ func merge(ctx context.Context, collibraClient *http.Client, input Input, stored
 		if err != nil {
 			return nil, nil, &Output{
 				Status:   StatusError,
-				Message:  fmt.Sprintf("Could not resolve the businessRuleLinks: %v", err),
+				Message:  fmt.Sprintf("Could not resolve the businessRuleLinks: %s", safeErr(err)),
 				Guidance: "The Business Rule asset lookup failed. Retry, or pass asset UUIDs instead of names to skip the lookup. Nothing was changed.",
 			}
 		}
@@ -387,21 +387,58 @@ func lookupError(err error, name string) Output {
 	if errors.Is(err, clients.ErrDQRuleTemplateNotFound) {
 		return Output{
 			Status:   StatusError,
-			Message:  fmt.Sprintf("No rule template named %q exists, so nothing was updated: %v", name, err),
+			Message:  fmt.Sprintf("No rule template named %q exists, so nothing was updated: %s", name, safeErr(err)),
 			Guidance: "Check the name with list_data_quality_rule_templates — the name is case-sensitive and must match exactly.",
 		}
 	}
 	return Output{
 		Status:   StatusError,
-		Message:  fmt.Sprintf("Could not read rule template %q before updating it: %v", name, err),
+		Message:  fmt.Sprintf("Could not read rule template %q before updating it: %s", name, safeErr(err)),
 		Guidance: "The template must be readable before it can be updated. Retry, or check your permission to view rule templates. Nothing was changed.",
 	}
 }
 
 func updateError(err error, name string) Output {
+	if strings.Contains(err.Error(), "status 422") {
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("The data quality service could not process the update to rule template %q (HTTP 422): %s", name, safeErr(err)),
+			Guidance: "The request was well-formed but rejected as invalid - most often SQL that cannot be translated to the dialect of a deployed job. Correct the definition; retrying it unchanged will fail identically.",
+		}
+	}
 	return Output{
 		Status:   StatusError,
-		Message:  fmt.Sprintf("Could not update rule template %q: %v", name, err),
+		Message:  fmt.Sprintf("Could not update rule template %q: %s", name, safeErr(err)),
 		Guidance: "Check the SQL, dialect and businessRuleLinks against the message above, then retry. The template was not changed.",
 	}
+}
+
+// maxErrMessage caps how much of a downstream error is forwarded to the model.
+//
+// Deliberately more generous than the 200 used by the job-run read tools. Those
+// surface engine and JDBC failures from SQL executed against customer rows, so a
+// tight cap is the point. These endpoints only validate author-supplied SQL and
+// asset ids without running it, so the body is the author's own content, and
+// §6.3 wants the error actionable enough for the agent to self-correct - a
+// "cannot translate sql for dialect X" has to survive. The client wraps its own
+// ~180 characters of prose ahead of the body, so a 200 cap would discard the
+// detail entirely and leave only the wrapper.
+const maxErrMessage = 600
+
+// safeErr renders a downstream error for the model with a length cap. The DQ
+// client wraps the entire non-2xx response body into its error, so without a
+// bound a pathological response body would reach the model verbatim. Truncating
+// keeps the leading text, where the error class and the actionable detail live.
+func safeErr(err error) string {
+	if err == nil {
+		return "no additional detail"
+	}
+	msg := strings.TrimSpace(err.Error())
+	if msg == "" {
+		return "no additional detail"
+	}
+	if len(msg) > maxErrMessage {
+		return msg[:maxErrMessage] + "… (truncated)"
+	}
+	return msg
 }
