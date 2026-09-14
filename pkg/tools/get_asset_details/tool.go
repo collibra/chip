@@ -2,6 +2,7 @@ package get_asset_details
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// UIResourceURI is where an MCP Apps host fetches this tool's card from. It is
+// only served when the mcp-apps experimental feature is on; see
+// chip.MCPAppsFeature.
+const UIResourceURI = "ui://collibra/get-asset-details/card"
+
+// cardHTML is a read-only card rendering the tool's structured output: type,
+// name, domain, status, owners, and a link back into Collibra. It is purely
+// additive — the model-visible output is unchanged whether or not a host
+// renders it.
+//
+//go:embed card.html
+var cardHTML string
 
 type Input struct {
 	AssetID                 string `json:"assetId" jsonschema:"the UUID of the asset to retrieve details for"`
@@ -59,6 +73,9 @@ func NewTool(collibraClient *http.Client, contextSpecsEnabled bool) *chip.Tool[I
 		Handler:     handler(collibraClient, contextSpecsEnabled),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},
+
+		UIResourceURI: UIResourceURI,
+		UICardHTML:    cardHTML,
 	}
 }
 
