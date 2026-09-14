@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -59,6 +60,18 @@ func initConfigOptions() {
 	pflag.String("api-password", "", "Collibra API password (env: COLLIBRA_MCP_API_PWD)")
 	_ = viper.BindEnv("api.password", "COLLIBRA_MCP_API_PWD")
 	_ = viper.BindPFlag("api.password", pflag.Lookup("api-password"))
+
+	pflag.String("api-oauth-client-id", "", "OAuth 2.0 client ID for client credentials authentication (env: COLLIBRA_MCP_API_OAUTH_CLIENT_ID)")
+	_ = viper.BindEnv("api.oauth.client-id", "COLLIBRA_MCP_API_OAUTH_CLIENT_ID")
+	_ = viper.BindPFlag("api.oauth.client-id", pflag.Lookup("api-oauth-client-id"))
+
+	pflag.String("api-oauth-client-secret", "", "OAuth 2.0 client secret for client credentials authentication (env: COLLIBRA_MCP_API_OAUTH_CLIENT_SECRET)")
+	_ = viper.BindEnv("api.oauth.client-secret", "COLLIBRA_MCP_API_OAUTH_CLIENT_SECRET")
+	_ = viper.BindPFlag("api.oauth.client-secret", pflag.Lookup("api-oauth-client-secret"))
+
+	pflag.String("api-oauth-token-url", "", "OAuth 2.0 token endpoint; defaults to <api-url>/rest/oauth/v2/token (env: COLLIBRA_MCP_API_OAUTH_TOKEN_URL)")
+	_ = viper.BindEnv("api.oauth.token-url", "COLLIBRA_MCP_API_OAUTH_TOKEN_URL")
+	_ = viper.BindPFlag("api.oauth.token-url", pflag.Lookup("api-oauth-token-url"))
 
 	pflag.Bool("skip-tls-verify", false, "Skip TLS certificate verification (env: COLLIBRA_MCP_API_SKIP_TLS_VERIFY)")
 	_ = viper.BindEnv("api.skip-tls-verify", "COLLIBRA_MCP_API_SKIP_TLS_VERIFY")
@@ -119,6 +132,9 @@ ENVIRONMENT VARIABLES:
   COLLIBRA_MCP_API_URL          Collibra API URL
   COLLIBRA_MCP_API_USR          Collibra API username
   COLLIBRA_MCP_API_PWD          Collibra API password
+  COLLIBRA_MCP_API_OAUTH_CLIENT_ID      OAuth 2.0 client ID (client credentials grant)
+  COLLIBRA_MCP_API_OAUTH_CLIENT_SECRET  OAuth 2.0 client secret (client credentials grant)
+  COLLIBRA_MCP_API_OAUTH_TOKEN_URL      OAuth 2.0 token endpoint (default: <api-url>/rest/oauth/v2/token)
   COLLIBRA_MCP_API_SKIP_TLS_VERIFY  Skip TLS certificate verification (default: false)
   COLLIBRA_MCP_API_PROXY        HTTP proxy URL for API requests
   HTTP_PROXY                    HTTP proxy URL (alternative to COLLIBRA_MCP_API_PROXY)
@@ -149,6 +165,10 @@ CONFIGURATION FILE EXAMPLE:
     url: "https://your-collibra-instance.com"
     username: "your-username"
     password: "your-password"
+    # oauth:  # Alternative to username/password: OAuth 2.0 client credentials
+    #   client-id: "your-client-id"
+    #   client-secret: "your-client-secret"
+    #   token-url: ""  # Optional, defaults to <url>/rest/oauth/v2/token
     skip-tls-verify: false
     proxy: "http://proxy.example.com:8080"
   mcp:
@@ -179,7 +199,30 @@ func validateConfigFile(config Config) {
 		os.Exit(1)
 	}
 
+	if err := validateOAuthConfig(config.Api); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+
 	validateExperimental(config.Mcp.Experimental)
+}
+
+func validateOAuthConfig(api CollibraApiConfig) error {
+	hasClientID := api.OAuth.ClientID != ""
+	hasClientSecret := api.OAuth.ClientSecret != ""
+	if hasClientID != hasClientSecret {
+		return fmt.Errorf("both api.oauth.client-id and api.oauth.client-secret are required for OAuth client credentials authentication")
+	}
+	if hasClientID && (api.Username != "" || api.Password != "") {
+		return fmt.Errorf("cannot use both OAuth client credentials and basic authentication, remove either api.oauth.client-id/client-secret or api.username/password")
+	}
+	if api.OAuth.TokenURL != "" {
+		tokenURL, err := url.Parse(api.OAuth.TokenURL)
+		if err != nil || !tokenURL.IsAbs() || tokenURL.Host == "" {
+			return fmt.Errorf("invalid OAuth token URL: %q (must be an absolute URL)", api.OAuth.TokenURL)
+		}
+	}
+	return nil
 }
 
 func readConfigFile() Config {
@@ -209,23 +252,32 @@ type Config struct {
 
 // CollibraConfig holds Collibra-specific configuration
 type CollibraApiConfig struct {
-	Url           string `mapstructure:"url"`
-	Username      string `mapstructure:"username"`
-	Password      string `mapstructure:"password"`
-	SkipTLSVerify bool   `mapstructure:"skip-tls-verify"`
-	Proxy         string `mapstructure:"proxy"`
+	Url           string              `mapstructure:"url"`
+	Username      string              `mapstructure:"username"`
+	Password      string              `mapstructure:"password"`
+	OAuth         CollibraOAuthConfig `mapstructure:"oauth"`
+	SkipTLSVerify bool                `mapstructure:"skip-tls-verify"`
+	Proxy         string              `mapstructure:"proxy"`
+}
+
+// CollibraOAuthConfig holds the OAuth 2.0 client credentials used to obtain
+// Bearer tokens from the Collibra token endpoint.
+type CollibraOAuthConfig struct {
+	ClientID     string `mapstructure:"client-id"`
+	ClientSecret string `mapstructure:"client-secret"`
+	TokenURL     string `mapstructure:"token-url"`
 }
 
 // ServerConfig holds server configuration
 type McpConfig struct {
-	Mode          string      `mapstructure:"mode"` // "stdio", "http", "http-sse", or "http-streamable"
-	Http          HttpConfig  `mapstructure:"http"`
-	Stdio         StdioConfig `mapstructure:"stdio"`
-	EnabledTools  []string    `mapstructure:"enabled-tools"`
-	DisabledTools []string    `mapstructure:"disabled-tools"`
-	EnableDebugTools bool     `mapstructure:"enable-debug-tools"`
-	Experimental  []string    `mapstructure:"experimental"`
-	SkillsDir     string      `mapstructure:"skills-dir"`
+	Mode             string      `mapstructure:"mode"` // "stdio", "http", "http-sse", or "http-streamable"
+	Http             HttpConfig  `mapstructure:"http"`
+	Stdio            StdioConfig `mapstructure:"stdio"`
+	EnabledTools     []string    `mapstructure:"enabled-tools"`
+	DisabledTools    []string    `mapstructure:"disabled-tools"`
+	EnableDebugTools bool        `mapstructure:"enable-debug-tools"`
+	Experimental     []string    `mapstructure:"experimental"`
+	SkillsDir        string      `mapstructure:"skills-dir"`
 }
 
 type HttpConfig struct {
