@@ -29,11 +29,12 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 - [`get_lineage_upstream`](pkg/tools/get_lineage_upstream/) - Get upstream technical lineage (sources) for a data entity
 - [`get_measure_data`](pkg/tools/get_measure_data/) - Trace a measure back to its underlying physical columns and tables
 - [`get_table_semantics`](pkg/tools/get_table_semantics/) - Retrieve the semantic layer for a table: columns, data attributes, and connected measures
+- [`get_user_id_by_name`](pkg/tools/get_user_id_by_name/) - Resolve how a person was referred to — a full name (`Jane Smith`), a username, an email address, or a UUID (returned unchanged) — into that user's UUID, for the tool parameters that identify users. Returns the UUID with the user's full name and username (never an email address); a name shared by several users is an error listing every candidate with its UUID rather than a silent pick
 - [`list_asset_types`](pkg/tools/list_asset_types/) - List available asset types, with optional `name` (server-side), `publicId`, and `product` (both client-side; e.g. `HELPDESK`, `GLOSSARY`) filters, all case-insensitive substring matches; a `publicId`/`product`-filtered call scans a bounded window of the catalog, so check `resultsTruncated` before treating the result as complete
 - [`list_data_contract`](pkg/tools/list_data_contracts/) - List data contracts with pagination
 - [`prepare_create_asset`](pkg/tools/prepare_create_asset/) - Read-only companion to `create_asset`: enumerate available asset types and domains, resolve a UUID/publicId/displayName for either, and hydrate the scoped attribute and relation schema for a chosen pair
 - [`pull_data_contract_manifest`](pkg/tools/pull_data_contract_manifest/) - Download manifest for a data contract
-- [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets; filters (status, community, domain, domain type, asset type, created-by) accept names or UUIDs
+- [`search_asset_keyword`](pkg/tools/search_asset_keyword/) - Wildcard keyword search for assets; filters (status, community, domain, domain type, asset type, created-by) accept names or UUIDs; created-by additionally accepts an email address or a person's full name
 - [`search_catalog_columns`](pkg/tools/search_catalog_columns/) - Find catalog Column assets by metadata that keyword search can't filter on — Description/Data Type (attribute values), a Data Steward role, or relations to a Business Term/Business Rule/Data Element/Data Attribute (by name); AND-combined. Uses the DGC Knowledge Graph GraphQL API (must be enabled on the instance). Classification-tag filtering is not supported
 - [`search_data_class`](pkg/tools/search_data_classes/) - Search for data classes with filters. **Requires:** `dgc.data-classes-read`
 - [`search_data_classification_match`](pkg/tools/search_data_classification_matches/) - Search for associations between data classes and assets. **Requires:** `dgc.classify`, `dgc.catalog`
@@ -43,7 +44,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 ### Write Tools
 
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
-- [`create_assessment`](pkg/tools/create_assessment/) - Conduct a new assessment from a template (given by name or UUID) in the Assessments application. Returns the template's (unanswered) questions to fill in afterward with `edit_assessment` — no separate prepare step needed
+- [`create_assessment`](pkg/tools/create_assessment/) - Conduct a new assessment from a template (given by name or UUID) in the Assessments application. Returns the template's (unanswered) questions to fill in afterward with `edit_assessment` — no separate prepare step needed. The owner and USER assignees accept a UUID, email, username, or full name
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
 - [`create_data_quality_rule`](pkg/tools/create_dq_rule/) - Create a data quality rule (monitor) on an existing DQ job. `monitorType` is `FREEFORM_SQL` (full SQL query) or `SIMPLE_SQL` (single-column check); defaults to active and not suppressed. Confirm checkpoint: `confirm=false` (default) returns a preview of the rule + SQL without creating; `confirm=true` creates. Uses the DQ monitoring API and requires permission to create rules on the target job. **Experimental** (`data-quality` feature flag)
 - [`deploy_data_quality_rule_template`](pkg/tools/deploy_dq_rule_template/) - Instantiate a rule template as concrete rules across one or more job/column targets (bulk). The DQ service resolves dialect-specific SQL and names each rule `{templateName}_{columnName}`. Confirm checkpoint: `confirm=false` (default) previews the template + targets without deploying; `confirm=true` deploys. Requires permission to deploy templates and create rules on the target jobs. **Experimental** (`data-quality` feature flag)
@@ -59,15 +60,15 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
     - `set_answer` - set a question's answer by `questionId`: TEXT/HTML/EXPRESSION/NUMBER/BOOLEAN/DATE via `value`, or ITEMS (choice) via `items`; supply `answerType` for a not-yet-answered question (an already-answered question's type is inferred). ASSETS/USERORGROUPS/ATTACHMENTS answer types are not yet supported
     - `set_status` - move status (`DRAFT`, `SUBMITTED`, `OBSOLETE`)
     - `set_name` - rename the assessment
-    - `set_owner` - set the owner by user UUID
-    - `set_assignees` - replace the assignee list with the given users/groups
+    - `set_owner` - set the owner by user UUID, email, username, or full name
+    - `set_assignees` - replace the assignee list with the given users (UUID, email, username, or full name) and groups (UUID)
     - `set_visibility` - set whether the assessment is visible to everyone
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `set_attribute`, `add_attribute`, `remove_attribute` - set an attribute value (creates if empty, updates if present), append an extra value to a multi-valued attribute, or clear one (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
     - `add_relation`, `remove_relation` - link or unlink the asset to another asset by relation role (e.g. `is synonym of`)
     - `add_tag` - append a free-text tag without replacing existing tags
-    - `set_responsibility` - assign a user or group to a resource role (e.g. `Steward`, `Owner`) by username, email, or UUID
+    - `set_responsibility` - assign a user or group to a resource role (e.g. `Steward`, `Owner`) by username, email, full name (`Jane Smith`), or UUID
     - `remove_responsibility` - unassign a user or group from a resource role (only directly-assigned responsibilities, not inherited ones)
 - [`init_data_contract`](pkg/tools/init_data_contract/) - Initialize a new data contract asset governing a Data Product Port, with an optional initial manifest. **Requires:** `dgc.data-contract`
 - [`push_data_contract_manifest`](pkg/tools/push_data_contract_manifest/) - Upload manifest for a data contract. **Requires:** `dgc.data-contract`

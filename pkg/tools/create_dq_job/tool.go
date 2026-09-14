@@ -127,7 +127,7 @@ type Input struct {
 	NotifyRunsWithoutData          int      `json:"notifyRunsWithoutData,omitempty" jsonschema:"Threshold for runsWithoutData — alert when runs without data >= this. Default 1."`
 	NotifyDaysWithoutData          int      `json:"notifyDaysWithoutData,omitempty" jsonschema:"Threshold for daysWithoutData — alert when days without data >= this. Default 1."`
 	NotifyMessage                  string   `json:"notifyMessage,omitempty" jsonschema:"Optional global message applied to the enabled notifications."`
-	NotifyRecipients               []string `json:"notifyRecipients,omitempty" jsonschema:"Additional recipients by username or email (the invoking user is always included). Each is validated against active Collibra accounts; unresolved ones are reported."`
+	NotifyRecipients               []string `json:"notifyRecipients,omitempty" jsonschema:"Additional recipients, each given as a username, an email address, or a person's full name such as 'Jane Smith' (the invoking user is always included). Each is resolved against active (non-deactivated) Collibra accounts; a value matching no account — or a name several accounts share, which is never guessed at — is reported back as unresolved instead of being notified."`
 	NotifyProceedWithoutUnresolved bool     `json:"notifyProceedWithoutUnresolved,omitempty" jsonschema:"If some notifyRecipients can't be resolved to an active account, set true to create anyway with the resolvable recipients. Default false: the tool returns needs_input listing the unresolved ones so you can fix or confirm."`
 
 	// --- Per-notification message overrides. Keyed by notification key (see prepare's notifications);
@@ -352,13 +352,13 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 			res, err := clients.ResolveNotificationRecipients(ctx, collibraClient, input.NotifyRecipients)
 			if err != nil {
-				return Output{Status: StatusError, Message: fmt.Sprintf("Failed to resolve notification recipients: %v", err), Guidance: "Check the recipient usernames/emails and retry."}, nil
+				return Output{Status: StatusError, Message: fmt.Sprintf("Failed to resolve notification recipients: %v", err), Guidance: "Check the recipient usernames/emails/names and retry."}, nil
 			}
 			if len(res.Unresolved) > 0 && !input.NotifyProceedWithoutUnresolved {
 				return Output{
 					Status:   StatusNeedsInput,
-					Message:  fmt.Sprintf("These notification recipients have no active Collibra account: %s.", strings.Join(res.Unresolved, ", ")),
-					Guidance: "Fix the username/email, or set notifyProceedWithoutUnresolved=true to create anyway with the valid recipients (the unresolved ones are dropped).",
+					Message:  clients.UnresolvedRecipientsMessage(res),
+					Guidance: "Fix the username/email/full name, or set notifyProceedWithoutUnresolved=true to create anyway with the valid recipients (the unresolved ones are dropped).",
 				}, nil
 			}
 			for _, username := range res.Usernames {

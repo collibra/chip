@@ -124,16 +124,24 @@ func BuildNotificationOptions(enabledKeys []string, quantities map[string]int, m
 // RecipientResolution is the outcome of resolving notification recipients to active users. UserIDs and
 // Usernames are positionally aligned (same resolved user); Usernames feed the public notification
 // channels (which take usernames), UserIDs are kept for callers that need the UUID.
+//
+// Unresolved holds every recipient that could not be bound, as the caller wrote it. Ambiguous is the
+// subset of those that could not be pinned to ONE account — a name several accounts share, or a
+// search too broad to be sure of — rather than one that matched nobody. The two need different
+// advice ("use a username" vs "that name matches nobody"), so the caller can say which happened
+// instead of reporting a typo either way.
 type RecipientResolution struct {
 	UserIDs    []string
 	Usernames  []string
 	Unresolved []string
+	Ambiguous  []string
 }
 
-// ResolveNotificationRecipients resolves each username/email to an active user's UUID. An entry
-// containing '@' is looked up by email, otherwise by username. Not-found or disabled accounts land
-// in Unresolved (the list endpoint excludes disabled users and the email lookup 404s), so the
-// caller can warn and decide whether to proceed without them. Duplicates are de-duped.
+// ResolveNotificationRecipients resolves each username/email/display name to an active user's
+// UUID. An entry containing '@' is looked up by email, otherwise by username and then by display
+// name ("First Last"). Not-found, ambiguous or disabled accounts land in Unresolved (the list
+// endpoint excludes disabled users and the email lookup 404s), so the caller can warn and decide
+// whether to proceed without them. Duplicates are de-duped.
 func ResolveNotificationRecipients(ctx context.Context, client *http.Client, recipients []string) (RecipientResolution, error) {
 	var res RecipientResolution
 	seen := map[string]bool{}
@@ -146,16 +154,20 @@ func ResolveNotificationRecipients(ctx context.Context, client *http.Client, rec
 			u   *EditAssetUser
 			err error
 		)
+		ambiguous := false
 		if strings.Contains(r, "@") {
 			u, err = FindUserByEmail(ctx, client, r)
 		} else {
-			u, err = FindUserByUsername(ctx, client, r)
+			u, ambiguous, err = findRecipientByName(ctx, client, r)
 		}
 		if err != nil {
 			return res, err
 		}
 		if u == nil || u.ID == "" {
 			res.Unresolved = append(res.Unresolved, r)
+			if ambiguous {
+				res.Ambiguous = append(res.Ambiguous, r)
+			}
 			continue
 		}
 		if !seen[u.ID] {
@@ -169,6 +181,72 @@ func ResolveNotificationRecipients(ctx context.Context, client *http.Client, rec
 		}
 	}
 	return res, nil
+}
+
+// UnresolvedRecipientsMessage renders the caller-facing message for the recipients that could not
+// be bound, keeping the two reasons apart: a name several active accounts share was not guessed at,
+// which is a different fix from a name (or username, or email) that matches nobody. Returns "" when
+// everything resolved.
+func UnresolvedRecipientsMessage(res RecipientResolution) string {
+	ambiguous := make(map[string]bool, len(res.Ambiguous))
+	for _, a := range res.Ambiguous {
+		ambiguous[a] = true
+	}
+	var missing, shared []string
+	for _, r := range res.Unresolved {
+		if ambiguous[r] {
+			shared = append(shared, r)
+		} else {
+			missing = append(missing, r)
+		}
+	}
+	var parts []string
+	if len(missing) > 0 {
+		parts = append(parts, fmt.Sprintf("These notification recipients have no active Collibra account: %s.", strings.Join(missing, ", ")))
+	}
+	if len(shared) > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"These matched more than one active account, or too many to be sure, and were not bound to anyone: %s — give the intended person's username or email address instead of their name.",
+			strings.Join(shared, ", ")))
+	}
+	return strings.Join(parts, " ")
+}
+
+// findRecipientByName resolves a recipient given as a username or as a display name
+// ("First Last"), in that order of precedence: an exact username wins, otherwise a display name
+// matching exactly one enabled user resolves. No match, or a name several users share, returns nil
+// so the caller lists it as unresolved — a notification must never go to a guessed person. The
+// second return says the name matched several accounts, which the caller reports differently from
+// a name that matched none.
+//
+// A truncated search window counts as ambiguous for ALL display-name matching, whatever happens to
+// be inside the window: a match inside it says nothing about a second holder of the name outside
+// it, and NO match inside it says nothing about the accounts that were never returned — reporting
+// that as "no active account" would be a false statement and would send the caller after a typo
+// that does not exist. Same rule as pkg/tools/resolve applies to the write paths. An exact username
+// is unaffected, usernames being unique.
+func findRecipientByName(ctx context.Context, client *http.Client, name string) (*EditAssetUser, bool, error) {
+	search, err := FindUsersByName(ctx, client, name)
+	if err != nil {
+		return nil, false, err
+	}
+	if u := exactUsernameMatch(search.Users, name); u != nil {
+		return u, false, nil
+	}
+	if search.Truncated {
+		return nil, true, nil
+	}
+	var match *EditAssetUser
+	for i := range search.Users {
+		if !strings.EqualFold(search.Users[i].FullName(), strings.TrimSpace(name)) {
+			continue
+		}
+		if match != nil {
+			return nil, true, nil
+		}
+		match = &search.Users[i]
+	}
+	return match, false, nil
 }
 
 // GetCurrentUser returns the invoking user (GET /rest/2.0/users/current) — the default notification

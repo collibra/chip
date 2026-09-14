@@ -337,18 +337,19 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		})
 	})
 
-	// The real /rest/2.0/users endpoint only supports a loose `name` filter
-	// (partial match over username/first/last) and silently ignores unknown
-	// params such as `emailAddress`. The mock mirrors that so the resolver's
-	// client-side validation is actually exercised.
+	// The real /rest/2.0/users endpoint only supports a loose `name` filter: a
+	// partial, case-insensitive match over the fields named by
+	// `nameSearchFields`, whose defaults — sent explicitly by the client — are
+	// USERNAME, FIRSTNAME, LASTNAME, FIRSTNAME_LASTNAME and LASTNAME_FIRSTNAME.
+	// The last two match the concatenated display name, which is what makes a
+	// two-word name resolvable at all. It silently ignores unknown params such
+	// as `emailAddress`. The mock mirrors both so the resolver's own precedence
+	// and its client-side validation are actually exercised.
 	mux.HandleFunc("GET /rest/2.0/users", func(w http.ResponseWriter, r *http.Request) {
 		name := strings.ToLower(r.URL.Query().Get("name"))
 		var matches []clients.EditAssetUser
 		for _, u := range s.users {
-			if name == "" ||
-				strings.Contains(strings.ToLower(u.UserName), name) ||
-				strings.Contains(strings.ToLower(u.FirstName), name) ||
-				strings.Contains(strings.ToLower(u.LastName), name) {
+			if name == "" || matchesUserNameSearch(u, name) {
 				matches = append(matches, u)
 			}
 		}
@@ -1280,7 +1281,7 @@ func TestEditAsset_SetResponsibility_UnknownUserName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user found") {
+	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user matching") {
 		t.Fatalf("expected no-user-found error, got %+v", out)
 	}
 }
@@ -1307,7 +1308,7 @@ func TestEditAsset_SetResponsibility_NoMatchDoesNotBindWrongUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%s] unexpected error: %v", identifier, err)
 		}
-		if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user found") {
+		if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user matching") {
 			t.Fatalf("[%s] expected no-user-found error, got %+v", identifier, out)
 		}
 		if len(s.createdResponsibilities) != 0 {
@@ -1424,6 +1425,61 @@ func TestEditAsset_SetResponsibility_ResolvesByEmail(t *testing.T) {
 	}
 	if s.createdResponsibilities[0].OwnerID != testUserID {
 		t.Fatalf("expected email to resolve to %s, got %s", testUserID, s.createdResponsibilities[0].OwnerID)
+	}
+}
+
+// A person's full name resolves like a username or an email address does — the
+// display name is what a user actually says out loud.
+func TestEditAsset_SetResponsibility_ResolvesByFullName(t *testing.T) {
+	s := newStub()
+	s.users[0].FirstName, s.users[0].LastName = "Jane", "Smith"
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetResponsibility, Role: "Steward", UserID: "Jane Smith",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if s.createdResponsibilities[0].OwnerID != testUserID {
+		t.Fatalf("expected full name to resolve to %s, got %s", testUserID, s.createdResponsibilities[0].OwnerID)
+	}
+}
+
+// A full name two people share must come back as the candidate list and bind
+// nobody — picking one would assign the role to the wrong person.
+func TestEditAsset_SetResponsibility_AmbiguousFullNameWritesNothing(t *testing.T) {
+	s := newStub()
+	s.users[0].FirstName, s.users[0].LastName = "Jane", "Smith"
+	s.users = append(s.users, clients.EditAssetUser{
+		ID:        "5e000000-0000-0000-0000-000000000003",
+		UserName:  "jsmith2",
+		FirstName: "Jane",
+		LastName:  "Smith",
+	})
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetResponsibility, Role: "Steward", UserID: "Jane Smith",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected an ambiguity error, got %q, results=%+v", out.Status, out.Results)
+	}
+	for _, want := range []string{"ambiguous", testUserID, "5e000000-0000-0000-0000-000000000003", "jsmith2"} {
+		if !strings.Contains(out.Results[0].Error, want) {
+			t.Fatalf("error %q does not mention %q", out.Results[0].Error, want)
+		}
+	}
+	if len(s.createdResponsibilities) != 0 {
+		t.Fatalf("expected no responsibility created, got %+v", s.createdResponsibilities)
 	}
 }
 
@@ -1788,4 +1844,21 @@ func TestEditAsset_MultipleValidOperations(t *testing.T) {
 		t.Fatalf("unexpected call distribution: patched=%d created=%d deleted=%d patchedAsset=%d",
 			len(s.patchedAttrs), len(s.createdAttrs), len(s.deletedAttrIDs), len(s.patchedAssets))
 	}
+}
+
+// matchesUserNameSearch mirrors the /rest/2.0/users nameSearchFields semantics:
+// a substring match over USERNAME, FIRSTNAME, LASTNAME and both concatenations
+// of first and last name (FIRSTNAME_LASTNAME, LASTNAME_FIRSTNAME).
+func matchesUserNameSearch(u clients.EditAssetUser, needle string) bool {
+	first, last := strings.TrimSpace(u.FirstName), strings.TrimSpace(u.LastName)
+	for _, field := range []string{
+		u.UserName, first, last,
+		strings.TrimSpace(first + " " + last),
+		strings.TrimSpace(last + " " + first),
+	} {
+		if field != "" && strings.Contains(strings.ToLower(field), needle) {
+			return true
+		}
+	}
+	return false
 }

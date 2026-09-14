@@ -38,6 +38,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_lineage_upstream"
 	"github.com/collibra/chip/pkg/tools/get_measure_data"
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
+	"github.com/collibra/chip/pkg/tools/get_user_id_by_name"
 	"github.com/collibra/chip/pkg/tools/init_data_contract"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_context_specifications"
@@ -98,6 +99,13 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
+	// Registered WITHOUT an experimental flag, deviating from
+	// docs/TOOL_CONTRIBUTION_STANDARDS.md 3.1: this resolver only feeds the
+	// user-valued parameters of tools that are themselves ungated (the
+	// assessment tools below, edit_asset, search_asset_keyword). Gating it
+	// would ship exactly the broken half-a-pair that section 1.1 warns about —
+	// callers that accept a name with no tool available to resolve one.
+	toolRegister(server, toolConfig, get_user_id_by_name.NewTool(client))
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))

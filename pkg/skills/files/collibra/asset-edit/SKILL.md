@@ -21,8 +21,8 @@ runs them in order.
 | `add_relation` | Link this asset to another by relation role (e.g. `is synonym of`) | `relationType`, target asset identifier |
 | `remove_relation` | Unlink a relation | `relationType`, target asset identifier |
 | `add_tag` | Append a free-text tag (does not replace existing tags) | `tag` |
-| `set_responsibility` | Assign a user or group to a resource role (e.g. `Steward`, `Owner`) | `role`, `userId` (UUID, username, or email) |
-| `remove_responsibility` | Unassign a user or group from a resource role | `role`, `userId` (UUID, username, or email) |
+| `set_responsibility` | Assign a user or group to a resource role (e.g. `Steward`, `Owner`) | `role`, `userId` (UUID, username, email, or full name) |
+| `remove_responsibility` | Unassign a user or group from a resource role | `role`, `userId` (UUID, username, email, or full name) |
 
 ## Hard rules
 
@@ -37,9 +37,11 @@ runs them in order.
    `statusId`. Other fields return an error listing the allowed set.
 3. **`statusId` accepts names.** Pass a human-readable status name (e.g. `"Candidate"`,
    `"Accepted"`) or the UUID — chip resolves either.
-4. **Responsibility ops accept user identifiers in three forms.** For `set_responsibility`
-   and `remove_responsibility`, `userId` may be a UUID, a username, or an email. Chip resolves
-   the form server-side. The same applies to `relationType` targets in `add_relation` /
+4. **Responsibility ops accept user identifiers in four forms.** For `set_responsibility`
+   and `remove_responsibility`, `userId` may be a UUID, a username, an email, or a person's full
+   name (`"Jane Smith"`). Chip resolves the form server-side; a full name shared by several users
+   comes back as an error listing the candidates — ask which person is meant rather than picking
+   one, or resolve it up front with `get_user_id_by_name`. The same applies to `relationType` targets in `add_relation` /
    `remove_relation`.
 5. **`remove_responsibility` only removes direct responsibilities.** It deletes a responsibility
    assigned directly on the asset; one inherited from a parent domain or community can't be
