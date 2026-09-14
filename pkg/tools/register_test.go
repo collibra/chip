@@ -36,6 +36,7 @@ var dataQualityGatedTools = []string{
 	"update_data_quality_rule_template",
 	"delete_data_quality_rule_template",
 	"list_data_quality_rule_template_deployments",
+	"detach_data_quality_rule_from_template",
 }
 
 func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {

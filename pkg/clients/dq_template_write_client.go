@@ -21,6 +21,13 @@ var (
 	// ErrDQRuleTemplateReadOnly means the template is out-of-the-box
 	// (system-defined) and the API refuses to modify or delete it.
 	ErrDQRuleTemplateReadOnly = errors.New("rule template is out-of-the-box and cannot be modified")
+	// ErrDQRuleNotFound means the job has no rule under the given name. The
+	// detach endpoint answers 404 for this, distinctly from an unknown template.
+	ErrDQRuleNotFound = errors.New("rule not found on job")
+	// ErrDQRuleNotFromTemplate means the rule exists but is not currently linked
+	// to the given template — either it is already standalone, or it came from a
+	// different template. The API answers 400 and does not distinguish the two.
+	ErrDQRuleNotFromTemplate = errors.New("rule is not linked to this template")
 )
 
 // DQRuleTemplateWriteRequest is the create/update payload for a rule template
@@ -133,5 +140,50 @@ func DeleteDQRuleTemplate(ctx context.Context, client *http.Client, ruleTemplate
 		return fmt.Errorf("%s: missing permission to manage rule templates: %s", op, string(respBody))
 	default:
 		return fmt.Errorf("%s: unexpected status %d: %s", op, status, string(respBody))
+	}
+}
+
+// dqRuleDetachRequest is the detach payload (RuleTemplateDetachRequest). A
+// deployment has no id of its own, so the rule is addressed by the job it runs
+// on plus its deployed name.
+type dqRuleDetachRequest struct {
+	JobName          string `json:"jobName"`
+	DeployedRuleName string `json:"deployedRuleName"`
+}
+
+// DetachDQRuleFromTemplate soft-unlinks one deployed rule from its template —
+// POST /rest/dq/1.0/ruleTemplates/{ruleTemplateName}/detach. The rule and all of
+// its run history are preserved; only the link is cleared, so later cascades
+// from the template no longer reach it. Answers 204 with no body on success.
+//
+// The 400 is deliberately mapped to a single sentinel: RuleTemplatesBll.detach
+// raises the same RULE_NOT_FROM_TEMPLATE for a rule that is already standalone
+// and for one that belongs to a different template, so the API gives callers no
+// way to tell those apart.
+func DetachDQRuleFromTemplate(ctx context.Context, client *http.Client, ruleTemplateName, jobName, deployedRuleName string) error {
+	path := "/rest/dq/1.0/ruleTemplates/" + url.PathEscape(ruleTemplateName) + "/detach"
+	respBody, status, err := dqDo(ctx, client, http.MethodPost, path, dqRuleDetachRequest{
+		JobName:          jobName,
+		DeployedRuleName: deployedRuleName,
+	})
+	if err != nil {
+		return fmt.Errorf("detaching dq rule from template: %w", err)
+	}
+	switch status {
+	case http.StatusNoContent, http.StatusOK:
+		return nil
+	case http.StatusBadRequest:
+		return fmt.Errorf("detaching dq rule from template: %w: %q on job %q: %s",
+			ErrDQRuleNotFromTemplate, deployedRuleName, jobName, string(respBody))
+	case http.StatusNotFound:
+		// The endpoint answers 404 for both an unknown template and a rule that
+		// does not exist on the job; the body is the only discriminator, so the
+		// tool layer reports both possibilities rather than guessing.
+		return fmt.Errorf("detaching dq rule from template: %w: template %q or rule %q on job %q: %s",
+			ErrDQRuleNotFound, ruleTemplateName, deployedRuleName, jobName, string(respBody))
+	case http.StatusForbidden:
+		return fmt.Errorf("detaching dq rule from template: missing permission to manage template deployments: %s", string(respBody))
+	default:
+		return fmt.Errorf("detaching dq rule from template: unexpected status %d: %s", status, string(respBody))
 	}
 }
