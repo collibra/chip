@@ -24,9 +24,23 @@ type collibraStandardError struct {
 // machine-readable errorCode and user-facing userMessage so the calling model
 // can understand why the call failed.
 func executeCollibraRequest(client *http.Client, req *http.Request) ([]byte, error) {
+	body, _, err := executeCollibraRequestWithStatus(client, req)
+	return body, err
+}
+
+// executeCollibraRequestWithStatus is executeCollibraRequest plus the response's HTTP status
+// code, for callers that need to branch on it (e.g. 403 vs. 404 vs. everything else) rather than
+// just surfacing the error message. See executeRequestWithStatus for the non-envelope-aware
+// equivalent used by callers that don't go through the Collibra standard error envelope.
+//
+// The body is nil whenever the error is non-nil, exactly as executeCollibraRequest has always
+// behaved — this function is what that one now delegates to, and every existing caller in the repo
+// inherits its contract. Returning the body alongside the error would widen that contract for all
+// of them to buy nothing: the envelope's errorCode and userMessage are already in the error.
+func executeCollibraRequestWithStatus(client *http.Client, req *http.Request) ([]byte, int, error) {
 	response, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, 0, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func(body io.ReadCloser) {
 		_ = body.Close()
@@ -34,7 +48,7 @@ func executeCollibraRequest(client *http.Client, req *http.Request) ([]byte, err
 
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, response.StatusCode, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
@@ -47,10 +61,10 @@ func executeCollibraRequest(client *http.Client, req *http.Request) ([]byte, err
 			if errResp.HelpMessage != "" {
 				msg += ". Hint: " + errResp.HelpMessage
 			}
-			return nil, errors.New(msg)
+			return nil, response.StatusCode, errors.New(msg)
 		}
-		return nil, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
+		return nil, response.StatusCode, fmt.Errorf("HTTP %d: %s", response.StatusCode, string(responseBody))
 	}
 
-	return responseBody, nil
+	return responseBody, response.StatusCode, nil
 }

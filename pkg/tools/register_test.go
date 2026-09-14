@@ -29,11 +29,34 @@ func TestRegisterAll_DebugToolVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+var workflowsToolNames = []string{
+	"list_workflow_definitions",
+	"start_workflow",
+}
+
+func TestRegisterAll_WorkflowsToolsHiddenByDefault(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range workflowsToolNames {
+		if slices.Contains(names, name) {
+			t.Fatalf("expected %q to be absent without the %q experimental feature; got tools=%v", name, tools.WorkflowsFeatureName, names)
+		}
+	}
+}
+
+func TestRegisterAll_WorkflowsToolsVisibleWhenEnabled(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.WorkflowsFeatureName}})
+	for _, name := range workflowsToolNames {
+		if !slices.Contains(names, name) {
+			t.Fatalf("expected %q to be present with the %q experimental feature; got tools=%v", name, tools.WorkflowsFeatureName, names)
+		}
+	}
+}
+
 func TestRegisterAll_AllToolsHaveProperAnnotations(t *testing.T) {
 	// Every gate on, so a feature-flagged tool can't skip the annotation check.
 	cfg := &chip.ServerToolConfig{
 		EnableDebugTools: true,
-		Experimental:     []string{tools.ContextSpecificationsFeature, skills.FeatureName},
+		Experimental:     []string{tools.ContextSpecificationsFeature, tools.WorkflowsFeatureName, skills.FeatureName},
 	}
 	for _, tool := range listTools(t, cfg) {
 		if tool.Title == "" {
