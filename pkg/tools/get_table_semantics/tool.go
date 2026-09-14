@@ -60,6 +60,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{}, err
 		}
 
+		if _, err := clients.RequireAsset(ctx, collibraClient, "table", input.TableID); err != nil {
+			return Output{}, err
+		}
+
 		rawColumns, err := clients.FindConnectedAssets(ctx, collibraClient, input.TableID, clients.ColumnIsPartOfTableRelID)
 		if err != nil {
 			return Output{}, err
