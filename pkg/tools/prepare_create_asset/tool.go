@@ -85,6 +85,7 @@ type AssetTypeOption struct {
 	ID       string `json:"id" jsonschema:"UUID of the asset type."`
 	PublicID string `json:"publicId" jsonschema:"PublicId of the asset type."`
 	Name     string `json:"name" jsonschema:"Display name of the asset type."`
+	Product  string `json:"product,omitempty" jsonschema:"Product code the asset type belongs to (e.g. 'HELPDESK', 'GLOSSARY'). Use this to tell a real product type apart from a test or custom type of the same name. Absent when the API returned no product for this type."`
 }
 
 // DomainOption is one entry in domainOptions.
@@ -601,7 +602,7 @@ func hydrateComplexRelation(ctx context.Context, client *http.Client, rel *Relat
 func toAssetTypeOptions(in []clients.PrepareCreateAssetType) []AssetTypeOption {
 	out := make([]AssetTypeOption, len(in))
 	for i, at := range in {
-		out[i] = AssetTypeOption{ID: at.ID, PublicID: at.PublicID, Name: at.Name}
+		out[i] = AssetTypeOption{ID: at.ID, PublicID: at.PublicID, Name: at.Name, Product: at.Product}
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
 	return out

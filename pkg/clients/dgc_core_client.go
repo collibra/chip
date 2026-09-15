@@ -26,9 +26,10 @@ type AssetTypeDetails struct {
 }
 
 type AssetTypesQueryParams struct {
-	ExcludeMeta bool `url:"excludeMeta,omitempty"`
-	Limit       int  `url:"limit,omitempty"`
-	Offset      int  `url:"offset,omitempty"`
+	ExcludeMeta bool   `url:"excludeMeta,omitempty"`
+	Limit       int    `url:"limit,omitempty"`
+	Offset      int    `url:"offset,omitempty"`
+	Name        string `url:"name,omitempty"`
 }
 
 func ParseAssetTypesResponse(jsonData []byte) (*AssetTypePagedResponse, error) {

@@ -27,6 +27,7 @@ type PrepareCreateAssetType struct {
 	ID       string                  `json:"id"`
 	PublicID string                  `json:"publicId"`
 	Name     string                  `json:"name"`
+	Product  string                  `json:"product,omitempty"`
 	Parent   *PrepareCreateAssetType `json:"parent,omitempty"`
 }
 

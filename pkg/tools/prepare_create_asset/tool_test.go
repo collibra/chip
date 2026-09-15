@@ -35,6 +35,13 @@ const (
 	cxLeg1Role       = "source"
 	cxLeg2Role       = "target"
 	groupsRelID      = "00000000-0000-0000-0000-000000004201"
+	issueTypeID      = "00000000-0000-0000-0000-000000031111"
+	issuePublicID    = "Issue"
+	issueName        = "Issue"
+	issueProduct     = "HELPDESK"
+	decoyTypeID      = "00000000-0000-0000-0000-000000031112"
+	decoyPublicID    = "ASSET_TYPE_issue_1932371956241142"
+	decoyProduct     = "GLOSSARY"
 )
 
 // Mock fixture for the consolidated /assignments shape. Kept local rather
@@ -45,6 +52,7 @@ type assetTypeRow struct {
 	ID       string `json:"id"`
 	PublicID string `json:"publicId"`
 	Name     string `json:"name"`
+	Product  string `json:"product,omitempty"`
 }
 type domainRow struct {
 	ID   string                           `json:"id"`
@@ -59,6 +67,7 @@ type mockDGC struct {
 	noAssignments    bool // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
 	emptyDomainTypes bool // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
 	bidiRelation     bool // the assignment carries one relation type assigned in BOTH directions
+	productRows      bool // /assetTypes unfiltered listing includes a real type and a decoy with distinct product values
 }
 
 func (m *mockDGC) server() *httptest.Server {
@@ -96,6 +105,12 @@ func (m *mockDGC) server() *httptest.Server {
 			}
 			if !m.excludeBT {
 				rows = append(rows, assetTypeRow{ID: btTypeID, PublicID: btTypePublicID, Name: btTypeName})
+			}
+			if m.productRows {
+				rows = append(rows,
+					assetTypeRow{ID: issueTypeID, PublicID: issuePublicID, Name: issueName, Product: issueProduct},
+					assetTypeRow{ID: decoyTypeID, PublicID: decoyPublicID, Name: decoyPublicID, Product: decoyProduct},
+				)
 			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"results": rows, "total": len(rows)})
@@ -570,6 +585,45 @@ func TestPrepare_BidirectionalRelation_BothDirectionsAsSeparateEntries(t *testin
 	}
 	if fwd.Role != "groups" || rev.Role != "groups" || fwd.CoRole != "is grouped by" {
 		t.Errorf("each direction must carry the relation type's role/coRole, got fwd=%+v rev=%+v", fwd, rev)
+	}
+}
+
+func TestPrepare_AssetTypeOptions_CarryProduct(t *testing.T) {
+	c := client(t, &mockDGC{t: t, productRows: true})
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{})
+	if out.Status != prepare_create_asset.StatusIncomplete {
+		t.Fatalf("want incomplete, got %q", out.Status)
+	}
+	products := map[string]string{}
+	for _, o := range out.AssetTypeOptions {
+		products[o.PublicID] = o.Product
+	}
+	if products[issuePublicID] != issueProduct {
+		t.Errorf("expected %q to carry product %q, got %q", issuePublicID, issueProduct, products[issuePublicID])
+	}
+	if products[decoyPublicID] != decoyProduct {
+		t.Errorf("expected %q to carry product %q, got %q", decoyPublicID, decoyProduct, products[decoyPublicID])
+	}
+	if products[issuePublicID] == products[decoyPublicID] {
+		t.Errorf("expected the real type and the decoy to be distinguishable by product, both got %q", products[issuePublicID])
+	}
+}
+
+func TestAssetTypeOption_ProductAbsentWhenEmpty(t *testing.T) {
+	withProduct, err := json.Marshal(prepare_create_asset.AssetTypeOption{ID: "1", PublicID: "Issue", Name: "Issue", Product: "HELPDESK"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(withProduct), `"product":"HELPDESK"`) {
+		t.Errorf("expected product field present, got %s", withProduct)
+	}
+
+	withoutProduct, err := json.Marshal(prepare_create_asset.AssetTypeOption{ID: "2", PublicID: "Code", Name: "Code"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(withoutProduct), "product") {
+		t.Errorf("expected product field absent, not empty string, got %s", withoutProduct)
 	}
 }
 

@@ -57,7 +57,7 @@ All of a domain's tools share a single feature name, across PRs and teams. Do no
 or per tool. Gate the registrations as a block in `pkg/tools/register.go`:
 
 ```go
-const DataQualityFeatureName = "data-quality"   // existing: "context-specifications"
+const YourDomainFeatureName = "your-domain"   // existing: "context-specifications"
 
 if toolConfig.IsExperimentalEnabled(YourDomainFeatureName) {
     toolRegister(server, toolConfig, your_tool.NewTool(client))
@@ -143,6 +143,12 @@ Message: "columnName is required for a SIMPLE_SQL rule (the single column the ch
 ### 6.4 Search and list tools require at least one filter
 
 An unfiltered call must be a `validation_error`, not a full-instance scan.
+
+**Exception:** a read-only enumeration of a type or vocabulary catalog — one that is bounded and
+small (e.g. asset types on an instance) — may accept an unfiltered call, provided it also offers
+filters and reports whether a filtered result is truncated. `list_asset_types` is the instance:
+unfiltered listing stays legal, `name`/`publicId`/`product` narrow it, and `resultsTruncated`
+tells the caller when a `publicId`/`product` scan stopped short of the whole catalog.
 
 ### 6.5 Be consistent with sibling tools
 

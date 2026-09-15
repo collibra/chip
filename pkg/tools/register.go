@@ -57,6 +57,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_data_access_objects"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
+	"github.com/collibra/chip/pkg/tools/search_dq_job_runs"
+	"github.com/collibra/chip/pkg/tools/search_dq_jobs"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
@@ -66,12 +68,6 @@ import (
 // ContextSpecificationsFeature is the experimental-feature identifier used to
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
-
-// DataQualityFeatureName gates the data-quality rule tools (create/validate/read rules,
-// rule templates, Text2SQL and catalog column search) behind --experimental. Some WRITE to
-// Collibra (create rules, deploy templates), so they stay opt-in until they graduate. Off by
-// default. Shared with the data-quality job-creation and job run tools.
-const DataQualityFeatureName = "data-quality"
 
 // DataAccessFeatureName gates the Collibra Data Access tools (search identities and data
 // objects, check a user's access, read a data source or an access control, and raise an access
@@ -117,6 +113,25 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
+	toolRegister(server, toolConfig, create_dq_job.NewTool(client))
+	toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
+	toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
+	toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
+	toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
+	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
+	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
+	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
+	toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
+	toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
+	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
+	toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
+	toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
+	toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
+	toolRegister(server, toolConfig, update_dq_job.NewTool(client))
+	toolRegister(server, toolConfig, get_dq_job.NewTool(client))
+	toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
+	toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
+	toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
 	if toolConfig.IsExperimentalEnabled(DataAccessFeatureName) {
 		toolRegister(server, toolConfig, search_data_access_identities.NewTool(client))
 		toolRegister(server, toolConfig, search_data_access_objects.NewTool(client))
@@ -124,25 +139,6 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, check_user_data_object_access.NewTool(client))
 		toolRegister(server, toolConfig, get_data_access_data_source.NewTool(client))
 		toolRegister(server, toolConfig, get_data_access_control_details.NewTool(client))
-	}
-	if toolConfig.IsExperimentalEnabled(DataQualityFeatureName) {
-		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
-		toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
-		toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
-		toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
-		toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
-		toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
-		toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
-		toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
-		toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
-		toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
-		toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
-		toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
-		toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
-		toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
-		toolRegister(server, toolConfig, update_dq_job.NewTool(client))
-		toolRegister(server, toolConfig, get_dq_job.NewTool(client))
-		toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
 	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
