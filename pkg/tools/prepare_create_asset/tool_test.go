@@ -35,13 +35,18 @@ const (
 	cxLeg1Role       = "source"
 	cxLeg2Role       = "target"
 	groupsRelID      = "00000000-0000-0000-0000-000000004201"
-	issueTypeID      = "00000000-0000-0000-0000-000000031111"
-	issuePublicID    = "Issue"
-	issueName        = "Issue"
-	issueProduct     = "HELPDESK"
-	decoyTypeID      = "00000000-0000-0000-0000-000000031112"
-	decoyPublicID    = "ASSET_TYPE_issue_1932371956241142"
-	decoyProduct     = "GLOSSARY"
+	// A derived relation type and a derived attribute type, as they appear in a
+	// scoped assignment. Neither resolves via /relationTypes/{id} or
+	// /attributeTypes/{id} from 2026.10 on.
+	drtID         = "00000000-0000-0000-0000-000000007999"
+	datID         = "00000000-0000-0000-0000-000000000299"
+	issueTypeID   = "00000000-0000-0000-0000-000000031111"
+	issuePublicID = "Issue"
+	issueName     = "Issue"
+	issueProduct  = "HELPDESK"
+	decoyTypeID   = "00000000-0000-0000-0000-000000031112"
+	decoyPublicID = "ASSET_TYPE_issue_1932371956241142"
+	decoyProduct  = "GLOSSARY"
 )
 
 // Mock fixture for the consolidated /assignments shape. Kept local rather
@@ -62,12 +67,14 @@ type domainRow struct {
 
 type mockDGC struct {
 	t                *testing.T
-	excludeBT        bool // simulate license-gated asset type missing from /assetTypes
-	domainTypeOther  bool // domain returns a non-Glossary type
-	noAssignments    bool // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
-	emptyDomainTypes bool // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
-	bidiRelation     bool // the assignment carries one relation type assigned in BOTH directions
-	productRows      bool // /assetTypes unfiltered listing includes a real type and a decoy with distinct product values
+	excludeBT        bool     // simulate license-gated asset type missing from /assetTypes
+	domainTypeOther  bool     // domain returns a non-Glossary type
+	noAssignments    bool     // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
+	emptyDomainTypes bool     // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
+	bidiRelation     bool     // the assignment carries one relation type assigned in BOTH directions
+	derivedTypes     bool     // the assignment also carries a derived relation type and a derived attribute type
+	asked            []string // every id looked up via /relationTypes/{id} or /attributeTypes/{id}
+	productRows      bool     // /assetTypes unfiltered listing includes a real type and a decoy with distinct product values
 }
 
 func (m *mockDGC) server() *httptest.Server {
@@ -186,47 +193,67 @@ func (m *mockDGC) server() *httptest.Server {
 			}})
 			return
 		}
-		writeJSON(w, http.StatusOK, []map[string]any{{
-			"id":          "asgn-1",
-			"domainTypes": domainTypes,
-			"assignedCharacteristicTypeReferences": []map[string]any{
-				{
-					"id": "ref-def",
-					"assignedResourceReference": map[string]string{
-						"id": defAttrID, "name": defAttrName, "resourceDiscriminator": "StringAttributeType",
-					},
-					"assignedResourcePublicId": "Definition",
-					"minimumOccurrences":       1,
+		refs := []map[string]any{
+			{
+				"id": "ref-def",
+				"assignedResourceReference": map[string]string{
+					"id": defAttrID, "name": defAttrName, "resourceDiscriminator": "StringAttributeType",
 				},
-				{
-					"id": "ref-note",
-					"assignedResourceReference": map[string]string{
-						"id": noteAttrID, "name": noteAttrName, "resourceDiscriminator": "StringAttributeType",
-					},
-					"assignedResourcePublicId": "Note",
-					"minimumOccurrences":       0,
+				"assignedResourcePublicId": "Definition",
+				"minimumOccurrences":       1,
+			},
+			{
+				"id": "ref-note",
+				"assignedResourceReference": map[string]string{
+					"id": noteAttrID, "name": noteAttrName, "resourceDiscriminator": "StringAttributeType",
 				},
-				{
-					"id": "ref-rel",
-					"assignedResourceReference": map[string]string{
-						"id": relTypeID, "name": relTypePublicID, "resourceDiscriminator": "RelationType",
-					},
-					"assignedResourcePublicId": relTypePublicID,
-					"minimumOccurrences":       0,
-					"relationTypeDirection":    "TO_TARGET",
-					"relationTypeRestriction": map[string]string{
-						"id": relTargetTypeID, "name": relTargetName,
-					},
+				"assignedResourcePublicId": "Note",
+				"minimumOccurrences":       0,
+			},
+			{
+				"id": "ref-rel",
+				"assignedResourceReference": map[string]string{
+					"id": relTypeID, "name": relTypePublicID, "resourceDiscriminator": "RelationType",
 				},
-				{
-					"id": "ref-cxrel",
-					"assignedResourceReference": map[string]string{
-						"id": cxRelTypeID, "name": cxRelPublicID, "resourceDiscriminator": "ComplexRelationType",
-					},
-					"assignedResourcePublicId": cxRelPublicID,
-					"minimumOccurrences":       0,
+				"assignedResourcePublicId": relTypePublicID,
+				"minimumOccurrences":       0,
+				"relationTypeDirection":    "TO_TARGET",
+				"relationTypeRestriction": map[string]string{
+					"id": relTargetTypeID, "name": relTargetName,
 				},
 			},
+			{
+				"id": "ref-cxrel",
+				"assignedResourceReference": map[string]string{
+					"id": cxRelTypeID, "name": cxRelPublicID, "resourceDiscriminator": "ComplexRelationType",
+				},
+				"assignedResourcePublicId": cxRelPublicID,
+				"minimumOccurrences":       0,
+			},
+		}
+		if m.derivedTypes {
+			refs = append(refs,
+				map[string]any{
+					"id": "ref-drt",
+					"assignedResourceReference": map[string]string{
+						"id": drtID, "name": "derived from", "resourceDiscriminator": "DerivedRelationType",
+					},
+					"minimumOccurrences":    0,
+					"relationTypeDirection": "TO_TARGET",
+				},
+				map[string]any{
+					"id": "ref-dat",
+					"assignedResourceReference": map[string]string{
+						"id": datID, "name": "Derived Definition", "resourceDiscriminator": "DerivedAttributeType",
+					},
+					"minimumOccurrences": 0,
+				},
+			)
+		}
+		writeJSON(w, http.StatusOK, []map[string]any{{
+			"id":                                   "asgn-1",
+			"domainTypes":                          domainTypes,
+			"assignedCharacteristicTypeReferences": refs,
 		}})
 	})
 
@@ -249,7 +276,9 @@ func (m *mockDGC) server() *httptest.Server {
 	})
 
 	mux.HandleFunc("GET /rest/2.0/relationTypes/", func(w http.ResponseWriter, r *http.Request) {
-		switch strings.TrimPrefix(r.URL.Path, "/rest/2.0/relationTypes/") {
+		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/relationTypes/")
+		m.asked = append(m.asked, id)
+		switch id {
 		case relTypeID:
 			writeJSON(w, http.StatusOK, map[string]any{
 				"id":       relTypeID,
@@ -270,6 +299,7 @@ func (m *mockDGC) server() *httptest.Server {
 
 	mux.HandleFunc("GET /rest/2.0/attributeTypes/", func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/rest/2.0/attributeTypes/")
+		m.asked = append(m.asked, id)
 		switch id {
 		case defAttrID:
 			writeJSON(w, http.StatusOK, map[string]any{
