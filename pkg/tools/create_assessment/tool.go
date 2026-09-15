@@ -71,6 +71,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Title: "Create Assessment",
 		Description: "Create a new assessment from an assessment template. " +
 			"Requires a template (name or UUID) and at least one of name or assetId — the API rejects requests that supply neither. " +
+			"Optionally attach an asset, assignees, an owner, visibility, and an initial status. " +
 			"This tool does NOT set answers — the created assessment comes back with the template's questions unanswered. " +
 			"Use the returned question ids with edit_assessment to fill in the answers afterwards.",
 		Handler:     handler(collibraClient),
