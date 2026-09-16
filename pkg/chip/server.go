@@ -118,13 +118,27 @@ type ToolMetadata struct {
 	Permissions []string
 }
 
+// DataQualityCapabilityName is the name of the data quality capability as it
+// is spelled outside Go: the --data-quality flag, the
+// COLLIBRA_MCP_DATA_QUALITY env var, the mcp.data-quality YAML field, and a
+// skill's `requires:` frontmatter. It is deliberately NOT an experimental
+// feature name — see ServerToolConfig.DataQuality.
+const DataQualityCapabilityName = "data-quality"
+
 // ServerToolConfig is used to configure which tools are enabled/disabled at the server level
 type ServerToolConfig struct {
 	EnabledTools  []string
 	DisabledTools []string
 	// EnableDebugTools, when true, registers debug tools that are otherwise hidden.
 	EnableDebugTools bool
-	Experimental     []string
+	// DataQuality, when true, registers the data quality tools, which are
+	// otherwise not registered at all. It is a capability flag, not an
+	// experimental feature: the tools it gates are generally available, they
+	// write to (and two of them irreversibly delete from) Collibra, so an
+	// operator opts into the capability as a whole. Experimental is the other
+	// axis — a list of opt-in feature names with no stability promise.
+	DataQuality  bool
+	Experimental []string
 	// SkillsDir is the optional path to an external skills directory whose
 	// contents are merged on top of the embedded catalog. Empty means the
 	// embedded catalog alone is served. Only consulted when the "skills"
@@ -147,6 +161,40 @@ func (tc *ServerToolConfig) IsToolEnabled(toolName string) bool {
 // mcp.experimental in the YAML config.
 func (tc *ServerToolConfig) IsExperimentalEnabled(featureName string) bool {
 	return slices.Contains(tc.Experimental, featureName)
+}
+
+// CapabilityEnabled resolves a capability name — the spelling used outside
+// Go, e.g. in a skill's `requires:` frontmatter — against this config. It
+// lives here, next to the fields it reads, so adding a capability flag is
+// one edit: the bool field, its constant, and its entry in capabilityFields.
+// An unrecognized name is an error, not false: a consumer that silently
+// ignored it would apply the opposite of the gate its author asked for.
+func (tc *ServerToolConfig) CapabilityEnabled(name string) (bool, error) {
+	enabled, ok := capabilityFields[name]
+	if !ok {
+		return false, fmt.Errorf("unknown capability %q (known capabilities: %s)",
+			name, strings.Join(KnownCapabilityNames(), ", "))
+	}
+	return enabled(tc), nil
+}
+
+// KnownCapabilityNames lists the capability names CapabilityEnabled
+// resolves, in sorted order, for help and error text.
+func KnownCapabilityNames() []string {
+	names := make([]string, 0, len(capabilityFields))
+	for name := range capabilityFields {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+// capabilityFields maps each capability name to the ServerToolConfig field
+// that carries it. This is a lookup for the name→field pairing, not a
+// generalised flag mechanism: every capability is still its own plain bool
+// with its own flag, env var and YAML field.
+var capabilityFields = map[string]func(*ServerToolConfig) bool{
+	DataQualityCapabilityName: func(tc *ServerToolConfig) bool { return tc.DataQuality },
 }
 
 type ServerOption func(*Server)

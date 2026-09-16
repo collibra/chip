@@ -58,11 +58,12 @@ func Enabled(toolConfig *chip.ServerToolConfig) bool {
 }
 
 // RegisterAll loads the embedded catalog, optionally overlays it with
-// skills from externalDir, and registers the two skill tools. An empty
-// externalDir means embedded-only. Callers must check Enabled first;
-// RegisterAll does not re-gate.
-func RegisterAll(server *chip.Server, externalDir string) error {
-	catalog, err := LoadWith(externalDir)
+// skills from toolConfig.SkillsDir, and registers the two skill tools. An
+// empty SkillsDir means embedded-only. Skills that require a capability
+// toolConfig has switched off are not served. Callers must check Enabled
+// first; RegisterAll does not re-gate.
+func RegisterAll(server *chip.Server, toolConfig *chip.ServerToolConfig) error {
+	catalog, err := LoadWith(toolConfig.SkillsDir, toolConfig)
 	if err != nil {
 		return err
 	}
