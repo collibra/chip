@@ -1,0 +1,110 @@
+# Trigger scenarios for the dq-job-from-data-contract skill.
+#
+# Ported verbatim (query text and should_trigger labels) from the skill's own
+# trigger_evals.json - see README.md for the source path. 10 should-trigger
+# queries exercise the skill's description; 10 should-not-trigger queries are
+# deliberate near-misses (authoring a contract/product, contract-less DQ rules,
+# lineage/glossary/PII-tag questions, read-only results lookups, plain SQL) that
+# should either load a sibling skill (e.g. collibra/dq-rule-workbench) or no
+# skill at all - never this one.
+#
+# Graded by the single function in trigger_checks.py, not checks.py - see
+# runner.py's `--suite trigger` path.
+
+- name: trigger-01-snowflake-orders-contract-enforce
+  query: >
+    I published a data contract for our orders table in Snowflake — can you set up
+    monitoring that actually enforces what it promises?
+  should_trigger: true
+
+- name: trigger-02-customer-360-meets-contract
+  query: make sure the data behind the customer_360 data product actually meets its contract
+  should_trigger: true
+
+- name: trigger-03-transactions-dont-trust-add-checks
+  query: >
+    we have a data contract on the transactions table but I don't trust the data —
+    add the checks and tell me if it's passing
+  should_trigger: true
+
+- name: trigger-04-accounts-contract-to-real-checks
+  query: >
+    turn the not-null and uniqueness rules in our accounts data contract into real
+    DQ checks in collibra
+  should_trigger: true
+
+- name: trigger-05-payments-contract-latest-partition
+  query: >
+    can you stand up data quality monitoring for the payments contract and only
+    scan the latest partition each run?
+  should_trigger: true
+
+- name: trigger-06-dim-customer-existing-job-add-contract-rules
+  query: >
+    there's already a dq job on dim_customer, i just added a contract to it — add
+    the contract's rules to that job please
+  should_trigger: true
+
+- name: trigger-07-inventory-freshness-completeness-slas
+  query: enforce the freshness and completeness SLAs from our inventory data contract
+  should_trigger: true
+
+- name: trigger-08-employees-verify-contract-flag-violations
+  query: verify the employees table meets its published contract and flag any violations
+  should_trigger: true
+
+- name: trigger-09-orders-data-product-contract-prove
+  query: >
+    our snowflake ORDERS data product has a contract — build the checks that prove
+    the data honors it
+  should_trigger: true
+
+- name: trigger-10-sales-fact-contract-guarantees-not-profiling
+  query: >
+    add data quality rules that match what the sales_fact contract guarantees,
+    don't just profile it
+  should_trigger: true
+
+- name: trigger-11-author-new-product-and-contract
+  query: create a data product and data contract for our new marketing_leads snowflake table
+  should_trigger: false
+
+- name: trigger-12-author-contract-with-uptime-sla
+  query: author a new data contract for the orders table with a 99.9% uptime SLA
+  should_trigger: false
+
+- name: trigger-13-contractless-not-null-rule
+  query: >
+    add a not-null DQ rule on the amount column of PUBLIC.PAYMENTS — there's no
+    contract involved
+  should_trigger: false
+
+- name: trigger-14-template-deploy-across-schema
+  query: deploy the completeness rule template across every column in our staging schema
+  should_trigger: false
+
+- name: trigger-15-lineage-question
+  query: what's the upstream lineage of the revenue column in our finance mart?
+  should_trigger: false
+
+- name: trigger-16-pii-tag-question
+  query: which columns in the customer schema are tagged PII?
+  should_trigger: false
+
+- name: trigger-17-read-only-results-lookup
+  query: just show me the latest pass/fail results for the existing PUBLIC.EMPLOYEES_1 dq job
+  should_trigger: false
+
+- name: trigger-18-write-plain-sql
+  query: write a snowflake SQL query to find duplicate order ids in PUBLIC.ORDERS
+  should_trigger: false
+
+- name: trigger-19-glossary-term-question
+  query: what does the term 'active customer' mean in our business glossary?
+  should_trigger: false
+
+- name: trigger-20-profile-whole-warehouse-no-contract
+  query: >
+    set up a DQ job that profiles our whole warehouse for anomalies — no contract,
+    just watch for drift
+  should_trigger: false

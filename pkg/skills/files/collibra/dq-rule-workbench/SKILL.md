@@ -1,6 +1,6 @@
 ---
 description: Author data quality rules at scale against catalog columns — target columns, check for duplicates, define rules via templates or plain-language SQL, assign or create a job, and deploy in bulk with a partial-success model.
-related: collibra/dq-rules, collibra/discovery, collibra/asset-edit
+related: collibra/dq-rules, collibra/discovery, collibra/asset-edit, collibra/dq-job-from-data-contract
 ---
 
 # Data quality rule workbench
