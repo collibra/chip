@@ -849,6 +849,46 @@ func SearchDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobNa
 	return &DqJobRunSearchPage{Results: resp.Results, Total: resp.Total, Offset: resp.Offset, Limit: resp.Limit}, code, nil
 }
 
+// RunDqJobRequest is the body for POST /rest/dq/1.0/jobs/{jobName}/run (JobRunRequest in the public
+// spec). All fields are optional; the zero value runs the job with its current settings (runDate
+// defaults to now server-side, no backrun).
+type RunDqJobRequest struct {
+	RunDate    *DqPublicRunDate `json:"runDate,omitempty"`
+	RunDateEnd *DqPublicRunDate `json:"runDateEnd,omitempty"`
+	Backrun    *DqPublicBackrun `json:"backrun,omitempty"`
+}
+
+// JobSubmission is the receipt returned by RunDqJob: the generated run id.
+type JobSubmission struct {
+	JobRunID string `json:"jobRunId"`
+}
+
+// RunDqJob triggers a run of an existing job via the PUBLIC POST /rest/dq/1.0/jobs/{jobName}/run.
+func RunDqJob(ctx context.Context, collibraHttpClient *http.Client, jobName string, request RunDqJobRequest) (*JobSubmission, int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Running DQ job '%s'", jobName))
+
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to marshal run job request: %w", err)
+	}
+	endpoint := "/rest/dq/1.0/jobs/" + url.PathEscape(jobName) + "/run"
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return nil, code, err
+	}
+	var resp JobSubmission
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, code, fmt.Errorf("failed to parse run job response: %w", err)
+	}
+	return &resp, code, nil
+}
+
 func CancelDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID string) (int, error) {
 	slog.InfoContext(ctx, fmt.Sprintf("Cancelling DQ job run '%s'", jobRunID))
 	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID) + "/cancel"
