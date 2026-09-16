@@ -97,6 +97,12 @@ func handler(collibraClient *http.Client, contextSpecsEnabled bool) chip.ToolHan
 		// Best-effort: surface the full assignable-attribute schema (incl. empty ones).
 		assignable := resolveAssignableAttributes(ctx, collibraClient, assetUUID.String(), &assets[0])
 
+		// Best-effort: fetch values for multi-value (selection) attributes via REST,
+		// since Collibra's GQL schema does not expose a scalar value field on MultiValueAttribute.
+		if len(assets[0].MultiValueAttributes) > 0 {
+			enrichMultiValueAttributes(ctx, collibraClient, assetUUID.String(), &assets[0])
+		}
+
 		output := Output{
 			Asset:                  &assets[0],
 			AssignableAttributes:   assignable,
@@ -122,6 +128,31 @@ func handler(collibraClient *http.Client, contextSpecsEnabled bool) chip.ToolHan
 		}
 
 		return output, nil
+	}
+}
+
+// enrichMultiValueAttributes populates the Value field on each MultiValueAttribute
+// using the REST /attributes endpoint, since Collibra's GQL schema has no scalar
+// value field on MultiValueAttribute. Called only when the asset has multi-value
+// attributes; failures are logged and silently skipped.
+func enrichMultiValueAttributes(ctx context.Context, collibraClient *http.Client, assetID string, asset *clients.Asset) {
+	instances, err := clients.ListAttributesForAsset(ctx, collibraClient, assetID)
+	if err != nil {
+		slog.WarnContext(ctx, fmt.Sprintf("Failed to fetch multi-value attribute values: %s", err.Error()))
+		return
+	}
+	byName := make(map[string]string, len(instances))
+	for _, inst := range instances {
+		byName[strings.ToLower(strings.TrimSpace(inst.Type.Name))] = inst.Value
+	}
+	for i := range asset.MultiValueAttributes {
+		if asset.MultiValueAttributes[i].Type == nil {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(asset.MultiValueAttributes[i].Type.Name))
+		if v, ok := byName[key]; ok {
+			asset.MultiValueAttributes[i].Value = v
+		}
 	}
 }
 
@@ -152,6 +183,9 @@ func resolveAssignableAttributes(ctx context.Context, collibraClient *http.Clien
 	}
 	for i := range asset.DateAttributes {
 		addName(asset.DateAttributes[i].Type)
+	}
+	for i := range asset.MultiValueAttributes {
+		addName(asset.MultiValueAttributes[i].Type)
 	}
 
 	result := make([]AssignableAttribute, 0, len(assignment.AttributeTypes))
