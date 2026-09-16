@@ -28,14 +28,19 @@ func main() {
 		slog.Warn("Using a single basic auth header for all requests is not recommended as it will result in all actions being attributed to the same account. Consider setting an appropriate basic auth header for each request.")
 	}
 
+	if config.Api.OAuth.ClientID != "" && config.Api.OAuth.ClientSecret != "" {
+		slog.Info("Using OAuth 2.0 client credentials authentication")
+		slog.Warn("Using a single OAuth client for all requests will result in all actions being attributed to the same service account.")
+	}
+
 	client := newCollibraClient(config)
 
 	toolConfig := &chip.ServerToolConfig{
 		EnabledTools:     config.Mcp.EnabledTools,
 		DisabledTools:    config.Mcp.DisabledTools,
 		EnableDebugTools: config.Mcp.EnableDebugTools,
-		Experimental:  config.Mcp.Experimental,
-		SkillsDir:     config.Mcp.SkillsDir,
+		Experimental:     config.Mcp.Experimental,
+		SkillsDir:        config.Mcp.SkillsDir,
 	}
 
 	serverOpts := []chip.ServerOption{

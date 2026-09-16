@@ -19,7 +19,18 @@ api:
   # For client-provided authentication (recommended):
   # Leave username and password empty or omit them entirely
   # Clients will provide Authorization headers with each request
-  
+
+  # For OAuth 2.0 client credentials authentication (e.g. SSO-only instances):
+  # Register an OAuth client in Collibra and set its credentials here instead
+  # of username/password. The server exchanges them for a Bearer token,
+  # caches it, and refreshes it before expiry. Cannot be combined with
+  # username/password.
+  # oauth:
+  #   client-id: "your-client-id"
+  #   client-secret: "your-client-secret"
+  #   # Token endpoint (optional, default: <url>/rest/oauth/v2/token)
+  #   token-url: ""
+
   # Skip TLS certificate verification (optional, default: false)
   # Set to true only for development with self-signed certificates
   http-skip-tls-verify: false
