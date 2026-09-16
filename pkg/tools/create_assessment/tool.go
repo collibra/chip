@@ -1,8 +1,9 @@
 // Package create_assessment implements the create_assessment MCP tool: a write
 // tool that starts a new assessment from a template. Creating an assessment
-// only requires a template — the returned assessment carries the template's
-// questions (unanswered). The caller then fills those answers in via the
-// separate edit_assessment tool; this tool never sets answers itself.
+// requires a template and at least one of name or assetId — the returned
+// assessment carries the template's questions (unanswered). The caller then
+// fills those answers in via the separate edit_assessment tool; this tool never
+// sets answers itself.
 package create_assessment
 
 import (
@@ -21,8 +22,8 @@ import (
 // Input is the tool's typed input.
 type Input struct {
 	Template            string          `json:"template" jsonschema:"Required. The assessment template to create from — either its name (e.g. 'Business Context', resolved to the latest version) or its UUID."`
-	Name                string          `json:"name,omitempty" jsonschema:"Optional. Name for the new assessment."`
-	AssetID             string          `json:"assetId,omitempty" jsonschema:"Optional. UUID of the asset to conduct the assessment on."`
+	Name                string          `json:"name,omitempty" jsonschema:"Required when assetId is not provided. Name for the new assessment. At least one of name or assetId must be supplied alongside the template."`
+	AssetID             string          `json:"assetId,omitempty" jsonschema:"Required when name is not provided. UUID of the asset to conduct the assessment on. At least one of assetId or name must be supplied alongside the template."`
 	Assignees           []InputAssignee `json:"assignees,omitempty" jsonschema:"Optional. Users or groups assigned to the assessment."`
 	OwnerID             string          `json:"ownerId,omitempty" jsonschema:"Optional. UUID of the assessment owner (a user)."`
 	IsVisibleToEveryone *bool           `json:"isVisibleToEveryone,omitempty" jsonschema:"Optional. When true, the assessment is visible to everyone."`
@@ -69,7 +70,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Name:  "create_assessment",
 		Title: "Create Assessment",
 		Description: "Create a new assessment from an assessment template. " +
-			"Creating only needs a template — give its name (resolved to the latest version) or its UUID; optionally attach an asset, assignees, an owner, visibility, and an initial status. " +
+			"Requires a template (name or UUID) and at least one of name or assetId — the API rejects requests that supply neither. " +
+			"Optionally attach an asset, assignees, an owner, visibility, and an initial status. " +
 			"This tool does NOT set answers — the created assessment comes back with the template's questions unanswered. " +
 			"Use the returned question ids with edit_assessment to fill in the answers afterwards.",
 		Handler:     handler(collibraClient),
