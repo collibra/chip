@@ -48,6 +48,9 @@ func main() {
 	if toolConfig.IsExperimentalEnabled(tools.ContextSpecificationsFeature) {
 		slog.Info("Experimental feature enabled: context-specifications")
 	}
+	if toolConfig.IsExperimentalEnabled(tools.DataQualityFeature) {
+		slog.Info("Experimental feature enabled: data-quality")
+	}
 	server := chip.NewServer(serverOpts...)
 
 	if err := tools.RegisterAll(server, client, toolConfig); err != nil {
