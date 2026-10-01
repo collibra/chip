@@ -8,6 +8,7 @@ import (
 const (
 	AttributesLimit = 100
 	RelationsLimit  = 50
+	TagsLimit       = 100
 )
 
 func CreateAssetDetailsGraphQLQuery(
@@ -19,10 +20,11 @@ func CreateAssetDetailsGraphQLQuery(
 		"assetIds":        assetIds,
 		"attributesLimit": AttributesLimit,
 		"relationsLimit":  RelationsLimit,
+		"tagsLimit":       TagsLimit,
 	}
 
 	// Build query parameters list
-	queryParams := "$assetIds: [UUID!]!, $attributesLimit: Int!, $relationsLimit: Int!"
+	queryParams := "$assetIds: [UUID!]!, $attributesLimit: Int!, $relationsLimit: Int!, $tagsLimit: Int!"
 
 	// Build outgoing relations clause
 	outgoingClause := "outgoingRelations(order: { id: asc }, limit: $relationsLimit)"
@@ -52,6 +54,10 @@ query GetAssetDetails(%s) {
       name
     }
     status {
+      name
+    }
+    tags(limit: $tagsLimit) {
+      id
       name
     }
     stringAttributes(limit: $attributesLimit) {
@@ -163,6 +169,12 @@ type Asset struct {
 	DateAttributes    []DateAttribute    `json:"dateAttributes,omitempty"`
 	OutgoingRelations []OutgoingRelation `json:"outgoingRelations,omitempty"`
 	IncomingRelations []IncomingRelation `json:"incomingRelations,omitempty"`
+	Tags              []Tag              `json:"tags,omitempty"`
+}
+
+type Tag struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type AssetType struct {

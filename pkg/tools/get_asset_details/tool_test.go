@@ -60,6 +60,46 @@ func TestGetAssetDetails(t *testing.T) {
 	}
 }
 
+func TestGetAssetDetailsReturnsTags(t *testing.T) {
+	assetId, _ := uuid.NewUUID()
+	var sentQuery string
+
+	handler := http.NewServeMux()
+	handler.Handle("/graphql/knowledgeGraph/v1", testutil.JsonHandlerInOut(func(httpRequest *http.Request, request clients.Request) (int, clients.Response) {
+		sentQuery = request.Query
+		return http.StatusOK, clients.Response{
+			Data: &clients.AssetQueryData{
+				Assets: []clients.Asset{
+					{
+						ID:          assetId.String(),
+						DisplayName: "My Asset Name",
+						Tags:        []clients.Tag{{ID: "tag-1", Name: "MCP"}},
+					},
+				},
+			},
+		}
+	}))
+	handler.Handle("/rest/2.0/responsibilities", testutil.JsonHandlerOut(func(r *http.Request) (int, clients.ResponsibilityPagedResponse) {
+		return http.StatusOK, clients.ResponsibilityPagedResponse{Limit: 100}
+	}))
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	output, err := tools.NewTool(testutil.NewClient(server), false).Handler(t.Context(), tools.Input{
+		AssetID: assetId.String(),
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if !strings.Contains(sentQuery, "tags(limit:") {
+		t.Errorf("tags selected without an explicit limit, will truncate at 10:\n%s", sentQuery)
+	}
+	if len(output.Asset.Tags) != 1 || output.Asset.Tags[0].Name != "MCP" {
+		t.Fatalf("Expected one tag named MCP, got: %+v", output.Asset.Tags)
+	}
+}
+
 func TestGetAssetDetailsWithResponsibilities(t *testing.T) {
 	assetId, _ := uuid.NewUUID()
 	domainId := "domain-123"
