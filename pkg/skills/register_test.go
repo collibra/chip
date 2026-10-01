@@ -70,7 +70,7 @@ func TestEnabled(t *testing.T) {
 // with. If these diverge, Enabled would return true while RegisterAll
 // registers tools under different names — or vice versa.
 func TestEnabledToolNamesMatchRegisteredTools(t *testing.T) {
-	catalog, err := Load()
+	catalog, err := Load(testConfig())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -84,15 +84,15 @@ func TestEnabledToolNamesMatchRegisteredTools(t *testing.T) {
 
 func TestRegisterAll_emptyExternalDirSucceeds(t *testing.T) {
 	server := chip.NewServer()
-	if err := RegisterAll(server, ""); err != nil {
-		t.Fatalf("RegisterAll(server, \"\"): %v", err)
+	if err := RegisterAll(server, &chip.ServerToolConfig{}); err != nil {
+		t.Fatalf("RegisterAll with no skills dir: %v", err)
 	}
 }
 
 func TestRegisterAll_badExternalDirReturnsError(t *testing.T) {
 	server := chip.NewServer()
 	badPath := "/this/path/should/not/exist/abc123"
-	err := RegisterAll(server, badPath)
+	err := RegisterAll(server, &chip.ServerToolConfig{SkillsDir: badPath})
 	if err == nil {
 		t.Fatal("expected error for missing external dir")
 	}

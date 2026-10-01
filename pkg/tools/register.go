@@ -101,25 +101,34 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
-	toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
-	toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
 	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
-	toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, update_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
-	toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
+	// The data quality tools are gated as one block behind the data-quality
+	// capability flag (--data-quality), not behind an experimental feature
+	// name: they are generally available, but several write to Collibra and
+	// two delete irreversibly, so an operator opts the capability in as a
+	// whole. Because the gate skips registration, the --enabled-tools
+	// allow-list cannot re-open it: it filters within the enabled
+	// capabilities, it is not an escape hatch around them.
+	if toolConfig.DataQuality {
+		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
+		toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
+		toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
+		toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, update_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
+		toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
+	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
@@ -130,7 +139,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	}
 
 	if skills.Enabled(toolConfig) {
-		if err := skills.RegisterAll(server, toolConfig.SkillsDir); err != nil {
+		if err := skills.RegisterAll(server, toolConfig); err != nil {
 			return fmt.Errorf("register skills: %w", err)
 		}
 	}
