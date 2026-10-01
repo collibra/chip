@@ -17,6 +17,13 @@ those tools. Skill content lives in [`pkg/skills/files/collibra/`](pkg/skills/fi
 | `collibra/lineage` | Technical lineage; DGC UUID ↔ lineage entity ID bridge; column-level workaround |
 | `collibra/asset-create` | `create_asset` workflow; RICH_TEXT Markdown handling; duplicate gating |
 | `collibra/asset-edit` | `edit_asset` operation types |
+| `collibra/dq-incident-triage` | Triage a DQ finding: data vs check fault, impact via catalog relations, owner, priority, action |
+| `collibra/dq-job-run-troubleshooting` | Diagnose failed/hung/slow DQ job runs from exceptions and Edge stage logs; name the layer and fix |
+| `collibra/dq-root-cause` | Trace a DQ monitor failure upstream through lineage to the causing source asset |
+| `collibra/data-access` | Grants, masks, filters, and access requests |
+| `collibra/techlin` | Technical lineage harvesting setup and runs |
+| `collibra/jdbc-ingestion` | Edge JDBC connection, database registration, ingestion |
+| `collibra/etl-integration` | Edge ETL integrations (Dataplex, Unity Catalog, Purview, Sigma, …) |
 
 Each skill is one `SKILL.md` per directory, with frontmatter (`description`, `related`, `shared`,
 `requires`) and an optional `references/` directory for bundled reference documents.

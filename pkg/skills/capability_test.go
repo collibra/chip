@@ -13,7 +13,13 @@ import (
 // dataQualitySkills are the embedded skills that declare
 // `requires: data-quality`; they document tools that are only registered when
 // the data quality capability is on.
-var dataQualitySkills = []string{"collibra/dq-rule-workbench", "collibra/dq-rules"}
+var dataQualitySkills = []string{
+	"collibra/dq-incident-triage",
+	"collibra/dq-job-run-troubleshooting",
+	"collibra/dq-root-cause",
+	"collibra/dq-rule-workbench",
+	"collibra/dq-rules",
+}
 
 // capabilityFreeSkills are the embedded skills that require no capability and
 // are therefore served in every configuration.
@@ -21,10 +27,14 @@ var capabilityFreeSkills = []string{
 	"collibra/asset-create",
 	"collibra/asset-edit",
 	"collibra/context",
+	"collibra/data-access",
 	"collibra/data-product-create",
 	"collibra/discovery",
+	"collibra/etl-integration",
 	"collibra/index",
+	"collibra/jdbc-ingestion",
 	"collibra/lineage",
+	"collibra/techlin",
 }
 
 func TestEmbeddedCatalog_dataQualitySkillsHiddenWhenCapabilityOff(t *testing.T) {

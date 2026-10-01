@@ -51,6 +51,8 @@ var dataQualityToolNames = []string{
 	"dq_get_job_run",
 	"dq_search_jobs",
 	"dq_search_job_runs",
+	"dq_run_job",
+	"dq_get_job_run_logs",
 }
 
 func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {

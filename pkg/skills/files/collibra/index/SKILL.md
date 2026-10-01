@@ -1,6 +1,6 @@
 ---
 description: Navigator for chip's Collibra skills. Start here when unsure which skill applies.
-related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context
+related: collibra/discovery, collibra/lineage, collibra/asset-create, collibra/asset-edit, collibra/data-product-create, collibra/context, collibra/data-access, collibra/techlin, collibra/jdbc-ingestion, collibra/etl-integration
 ---
 
 # Collibra skills — navigator
@@ -19,6 +19,10 @@ must be bridged to another, and which permissions are required.
 | Modify an existing asset's attributes, relations, tags, status, or owners | `collibra/asset-edit` |
 | Register a table (and its dimension tables) as a Collibra Data Product with ports | `collibra/data-product-create` |
 | Generate governed YAML context (semantic blueprints, metric definitions) for an asset | `collibra/context` |
+| Manage who can access what data — grants, masks, filters, access requests | `collibra/data-access` |
+| Set up and run technical lineage harvesting for a registered database | `collibra/techlin` |
+| Set up an Edge JDBC connection, register a database, and run ingestion | `collibra/jdbc-ingestion` |
+| Set up, schedule, and run Edge ETL integrations (Dataplex, Unity Catalog, Purview, Sigma, …) | `collibra/etl-integration` |
 
 Data quality skills are not listed here: the data quality tools are a capability this server
 may be run without, and their skills are only served when it is switched on. When they are
