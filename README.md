@@ -123,7 +123,7 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 ### Authentication Options
 
-The server supports two authentication approaches, either configured through environment variables or a configuration file
+The server supports three authentication approaches, either configured through environment variables or a configuration file
 
 #### Option 1: Server-wide Authentication
 When running over the stdio transport, configure credentials at the server level - all requests use the same credentials:
@@ -159,6 +159,17 @@ When running over the http transport, it is recommended that MCP clients provide
 export COLLIBRA_MCP_API_URL="https://your-collibra-instance.com"
 ./mcp-server
 ```
+
+#### Option 3: OAuth 2.0 Client Credentials
+For Collibra instances fronted by SSO, where users have no local password, register an OAuth client in Collibra (see the [client registration API](https://developer.collibra.com/api/references/oauth-client-management/client-registration.md)) and let the server exchange its client credentials for a Bearer token:
+```bash
+export COLLIBRA_MCP_API_URL="https://your-collibra-instance.com"
+export COLLIBRA_MCP_API_OAUTH_CLIENT_ID="your-client-id"
+export COLLIBRA_MCP_API_OAUTH_CLIENT_SECRET="your-client-secret"
+./mcp-server
+```
+
+Tokens are fetched from `<api-url>/rest/oauth/v2/token`, cached, and refreshed before they expire. This works over both the stdio and http transports. Like Option 1, all actions are attributed to the single OAuth client.
 
 **For detailed configuration instructions, see [CONFIG.md](docs/CONFIG.md).**
 
