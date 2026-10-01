@@ -45,6 +45,10 @@ func main() {
 		slog.Info("Experimental feature enabled: skills")
 		serverOpts = append(serverOpts, chip.WithReplacementInstructions(skills.Instructions))
 	}
+	if toolConfig.IsExperimentalEnabled(chip.MCPAppsFeature) {
+		slog.Info("Experimental feature enabled: mcp-apps")
+		serverOpts = append(serverOpts, chip.WithMCPApps())
+	}
 	if toolConfig.IsExperimentalEnabled(tools.ContextSpecificationsFeature) {
 		slog.Info("Experimental feature enabled: context-specifications")
 	}

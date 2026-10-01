@@ -57,6 +57,9 @@ type Server struct {
 	toolMiddlewares  []ToolMiddleware
 	toolMetadata     map[string]*ToolMetadata
 	instructionParts []string
+	// uiApps reports whether the experimental MCP Apps feature is on. See
+	// WithMCPApps in ui.go.
+	uiApps bool
 	mcp.Server
 }
 
@@ -77,6 +80,7 @@ func NewServer(opts ...ServerOption) *Server {
 		Version: Version,
 	}, &mcp.ServerOptions{
 		Instructions: joinInstructions(s.instructionParts),
+		Capabilities: uiCapabilities(s.uiApps),
 	})
 
 	store := &initParamsStore{}
@@ -191,6 +195,13 @@ type Tool[In, Out any] struct {
 	Permissions []string
 	TypeSchemas map[reflect.Type]*jsonschema.Schema
 	Annotations *mcp.ToolAnnotations
+	// UIResourceURI is the ui:// URI an MCP Apps host renders for this tool.
+	// Empty means the tool has no UI. Only honoured when the server was built
+	// with WithMCPApps.
+	UIResourceURI string
+	// UICardHTML is the MCP App served at UIResourceURI. Embed it with
+	// //go:embed rather than building it at runtime.
+	UICardHTML string
 }
 
 func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
@@ -232,14 +243,17 @@ func RegisterTool[In, Out any](s *Server, tool *Tool[In, Out]) {
 		return res, capturedOutput, err
 	}
 
-	mcp.AddTool(&s.Server, &mcp.Tool{
+	mcpTool := &mcp.Tool{
 		Name:         tool.Name,
 		Title:        tool.Title,
 		Description:  tool.Description,
 		InputSchema:  buildSchema[In](tool.TypeSchemas),
 		OutputSchema: buildSchema[Out](tool.TypeSchemas),
 		Annotations:  tool.Annotations,
-	}, handler)
+	}
+	attachUI(s, mcpTool, tool.UIResourceURI, tool.UICardHTML)
+
+	mcp.AddTool(&s.Server, mcpTool, handler)
 }
 
 func buildSchema[Schema any](typeSchemas map[reflect.Type]*jsonschema.Schema) *jsonschema.Schema {
