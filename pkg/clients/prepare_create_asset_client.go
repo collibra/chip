@@ -801,7 +801,7 @@ func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAs
 	for _, refs := range characteristicSourcesFrom(a.AssignedCharacteristicTypeReferences, a.TraitAssignmentInheritances, a.AssignmentInheritances) {
 		for _, ref := range refs {
 			disc := ref.AssignedResourceReference.ResourceDiscriminator
-			if disc == "DerivedRelationType" {
+			if isDerivedDiscriminator(disc) {
 				continue
 			}
 			switch {
@@ -855,6 +855,14 @@ func containsResourceRef(refs []rawAssignmentResourceRef, id string) bool {
 		}
 	}
 	return false
+}
+
+// isDerivedDiscriminator recognises the assignment-side discriminators for
+// derived characteristics. Derived types are computed and read-only, so they
+// are never a slot an agent can write — and from 2026.10 their uuids stop
+// resolving via /relationTypes/{id} and /attributeTypes/{id} anyway.
+func isDerivedDiscriminator(disc string) bool {
+	return disc == "DerivedRelationType" || disc == "DerivedAttributeType"
 }
 
 // isAttributeTypeDiscriminator recognises the assignment-side discriminator

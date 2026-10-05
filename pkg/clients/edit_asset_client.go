@@ -330,7 +330,7 @@ func mergeEditAssignments(merged *EditAssetAssignment, resp rawAssignmentRespons
 	for _, refs := range characteristicSourcesFrom(resp.AssignedCharacteristicTypeReferences, resp.TraitAssignmentInheritances, resp.AssignmentInheritances) {
 		for _, ref := range refs {
 			disc := ref.AssignedResourceReference.ResourceDiscriminator
-			if disc == "DerivedRelationType" {
+			if isDerivedDiscriminator(disc) {
 				continue
 			}
 			switch {
