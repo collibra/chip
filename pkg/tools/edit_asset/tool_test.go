@@ -920,7 +920,7 @@ func TestEditAsset_SetAttribute_ReadOnlyRejected(t *testing.T) {
 	if out.Status != edit_asset.StatusError {
 		t.Fatalf("expected error, got %q", out.Status)
 	}
-	want := `attribute "Definition" is read-only for asset type "Business Term" and cannot be changed`
+	want := `attribute "Definition" is read-only for asset type "Business Term" and cannot be changed: Collibra sets its value. Drop this operation; other attributes can still be edited.`
 	if out.Results[0].Status != "error" || out.Results[0].Error != want {
 		t.Fatalf("expected read-only error %q, got %+v", want, out.Results[0])
 	}

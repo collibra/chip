@@ -46,6 +46,10 @@ runs them in order.
    removed here and returns an error pointing to where it's defined.
 6. **RICH_TEXT attribute values are Markdown.** Same rule as `create_asset` — write Markdown,
    chip converts to HTML. See `shared/rich-text-markdown.md` for the full rules.
+7. **Read-only attributes can't be edited.** `set_attribute`, `add_attribute` and
+   `remove_attribute` return an error for an attribute the assignment marks read-only, because
+   Collibra calculates its value (e.g. a trust score). Tell the user the value is calculated;
+   don't retry or report it as changed.
 
 ## Workflow
 

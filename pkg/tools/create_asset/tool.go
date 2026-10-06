@@ -116,6 +116,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Inputs accept human-friendly identifiers: assetType resolves from UUID, publicId, or display name; domain from UUID or display name; status from UUID or status name; attributes by name or typeId. " +
 			"Markdown in RICH_TEXT attribute values (e.g. 'Definition') is converted to HTML server-side so it renders correctly in Collibra. " +
 			"When allowDuplicate is false (the default), an existing asset with the same name in the same (assetType, domain) returns status=duplicate_found without writing. " +
+			"Attributes the assignment marks read-only (values Collibra calculates, such as a trust score) are rejected with status=validation_error and never need to be supplied; prepare_create_asset flags them with readOnly=true. " +
 			"Validation errors return suggestion-rich messages so the agent can self-correct. " +
 			"Calling prepare_create_asset first is optional — only needed when the agent wants to enumerate options or inspect a type's full attribute schema.",
 		Handler:     handler(collibraClient),
@@ -347,7 +348,7 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 		if slot.ReadOnly {
 			return nil, &Output{
 				Status:  StatusValidationError,
-				Message: fmt.Sprintf("attributes[%d]: %s", i, clients.ReadOnlyAttributeMessage(slot.AttributeTypeName, assetTypeName)),
+				Message: fmt.Sprintf("attributes[%d]: %s", i, clients.ReadOnlyAttributeMessage(slot.AttributeTypeName, assetTypeName, "Remove it from attributes and retry.")),
 			}
 		}
 		entry := resolvedAttribute{
@@ -373,7 +374,9 @@ func validateRequiredAttributes(resolved []resolvedAttribute, assignment *client
 	}
 	var missing []string
 	for _, slot := range assignment.Attributes {
-		if !slot.Required {
+		// A read-only slot is rejected when supplied, so demanding it would
+		// leave no valid call; Collibra fills it in itself.
+		if !slot.Required || slot.ReadOnly {
 			continue
 		}
 		if _, ok := supplied[slot.AttributeTypeID]; !ok {

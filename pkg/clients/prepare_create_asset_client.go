@@ -941,8 +941,9 @@ func NotAllowedMessage(ctx context.Context, client *http.Client, assetTypeID, as
 
 // ReadOnlyAttributeMessage is the error create_asset and edit_asset return
 // when asked to write an attribute the asset type's assignment marks read-only.
-func ReadOnlyAttributeMessage(attributeName, assetTypeName string) string {
-	return fmt.Sprintf("attribute %q is read-only for asset type %q and cannot be changed", attributeName, assetTypeName)
+// The hint tells the agent how to correct its call in that tool.
+func ReadOnlyAttributeMessage(attributeName, assetTypeName, hint string) string {
+	return fmt.Sprintf("attribute %q is read-only for asset type %q and cannot be changed: Collibra sets its value. %s", attributeName, assetTypeName, hint)
 }
 
 // GetAttributeTypeFull fetches /attributeTypes/{id} and decodes the full

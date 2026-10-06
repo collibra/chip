@@ -104,6 +104,7 @@ type AttributeSchemaEntry struct {
 	Required        bool     `json:"required" jsonschema:"True when the assignment's minimumOccurrences > 0. Note: Collibra doesn't always enforce this at create time — it can be an attestation/workflow signal rather than a hard create-time requirement. Agents may try a minimal create to discover what's actually enforced."`
 	Min             int      `json:"min" jsonschema:"Minimum number of occurrences."`
 	Max             *int     `json:"max,omitempty" jsonschema:"Maximum number of occurrences. Absent when unbounded."`
+	ReadOnly        bool     `json:"readOnly,omitempty" jsonschema:"True when the assignment marks the attribute read-only because Collibra sets its value. create_asset rejects it in attributes[] and does not require it, even when required is true."`
 	StringType      string   `json:"stringType,omitempty" jsonschema:"For string-kind attributes: 'RICH_TEXT' means create_asset will run the value through Markdown→HTML conversion. Only populated when input.includeStringType is true."`
 	Description     string   `json:"description,omitempty" jsonschema:"Server-defined description of the attribute. Only populated when input.includeStringType is true."`
 	AllowedValues   []string `json:"allowedValues,omitempty" jsonschema:"Permitted values for list-type attributes. Only populated when input.includeStringType is true."`
@@ -641,6 +642,7 @@ func schemaEntriesFromAssignment(in []clients.PrepareCreateScopedAttribute) []At
 			Required:        a.Required,
 			Min:             a.Min,
 			Max:             a.Max,
+			ReadOnly:        a.ReadOnly,
 		}
 	}
 	return out

@@ -58,6 +58,7 @@ type mockDGC struct {
 	emptyDomainTypes bool   // the default assignment lists empty domainTypes (creatable nowhere, sub-case b)
 	domainTypeOther  bool   // the glossary domain resolves to a non-Glossary type, so the assignment doesn't govern it (not-here)
 	noteReadOnly     bool   // the default assignment marks Note read-only
+	defReadOnly      bool   // the default assignment marks the required Definition read-only
 
 	extraAssignments []map[string]any
 
@@ -190,6 +191,7 @@ func (m *mockDGC) server() *httptest.Server {
 					},
 					"assignedResourcePublicId": defAttrPublicID,
 					"minimumOccurrences":       1,
+					"readOnly":                 m.defReadOnly,
 				},
 				{
 					"id": "ref-note",
@@ -570,7 +572,7 @@ func TestCreateAsset_ReadOnlyAttribute_ReturnsValidationError(t *testing.T) {
 	if out.Status != create_asset.StatusValidationError {
 		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
 	}
-	want := `attributes[1]: attribute "Note" is read-only for asset type "Business Term" and cannot be changed`
+	want := `attributes[1]: attribute "Note" is read-only for asset type "Business Term" and cannot be changed: Collibra sets its value. Remove it from attributes and retry.`
 	if out.Message != want {
 		t.Errorf("want message %q, got %q", want, out.Message)
 	}
@@ -600,6 +602,23 @@ func TestCreateAsset_ReadOnlyAttributeByTypeID_ReturnsValidationError(t *testing
 	}
 	if len(m.createdAssets) != 0 {
 		t.Errorf("no create must be attempted, got %d", len(m.createdAssets))
+	}
+}
+
+func TestCreateAsset_RequiredReadOnlyAttribute_NotDemanded(t *testing.T) {
+	m := newMockDGC(t)
+	m.defReadOnly = true
+	c, _ := newClient(t, m)
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:      "Customer",
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+	})
+	if out.Status != create_asset.StatusSuccess {
+		t.Fatalf("want success when a required attribute is read-only and omitted, got %q (%s)", out.Status, out.Message)
+	}
+	if len(m.createdAssets) != 1 || len(m.createdAttributes) != 0 {
+		t.Errorf("expected one asset and no attributes written, got assets=%d attributes=%d", len(m.createdAssets), len(m.createdAttributes))
 	}
 }
 

@@ -68,6 +68,7 @@ type mockDGC struct {
 	emptyDomainTypes bool // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
 	bidiRelation     bool // the assignment carries one relation type assigned in BOTH directions
 	productRows      bool // /assetTypes unfiltered listing includes a real type and a decoy with distinct product values
+	noteReadOnly     bool // the assignment marks Note read-only
 }
 
 func (m *mockDGC) server() *httptest.Server {
@@ -205,6 +206,7 @@ func (m *mockDGC) server() *httptest.Server {
 					},
 					"assignedResourcePublicId": "Note",
 					"minimumOccurrences":       0,
+					"readOnly":                 m.noteReadOnly,
 				},
 				{
 					"id": "ref-rel",
@@ -460,6 +462,29 @@ func TestPrepare_BothResolved_ReturnsReadyWithSchema(t *testing.T) {
 	}
 	if cxRel.Legs[0].RelationTypePublicID != "FieldMappingSourceDataElement_C" {
 		t.Errorf("expected leg relationTypePublicId, got %q", cxRel.Legs[0].RelationTypePublicID)
+	}
+}
+
+func TestPrepare_ReadOnlyAttributeFlagged(t *testing.T) {
+	c := client(t, &mockDGC{t: t, noteReadOnly: true})
+	out, _ := prepare_create_asset.NewTool(c).Handler(t.Context(), prepare_create_asset.Input{
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+	})
+	if out.Status != prepare_create_asset.StatusReady {
+		t.Fatalf("want ready, got %q (%s)", out.Status, out.Message)
+	}
+	for _, e := range out.AttributeSchema {
+		switch e.AttributeTypeID {
+		case noteAttrID:
+			if !e.ReadOnly {
+				t.Errorf("expected Note to be flagged readOnly, got %+v", e)
+			}
+		case defAttrID:
+			if e.ReadOnly {
+				t.Errorf("expected Definition not to be readOnly, got %+v", e)
+			}
+		}
 	}
 }
 
