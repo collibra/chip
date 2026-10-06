@@ -125,6 +125,29 @@ func newStub() *stub {
 	}
 }
 
+// markReadOnly flags the given attribute types as read-only in the served
+// assignment.
+func (s *stub) markReadOnly(attrTypeIDs ...string) {
+	for _, id := range attrTypeIDs {
+		at := s.attrTypesByID[id]
+		at.ReadOnly = true
+		s.attrTypesByID[id] = at
+	}
+}
+
+// attributeWrites counts every attribute create, patch and delete the
+// stub received, individual or bulk.
+func (s *stub) attributeWrites() int {
+	n := len(s.patchedAttrs) + len(s.createdAttrs) + len(s.deletedAttrIDs)
+	for _, batch := range s.bulkCreatedAttrs {
+		n += len(batch)
+	}
+	for _, batch := range s.bulkPatchedAttrs {
+		n += len(batch)
+	}
+	return n
+}
+
 func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 	t.Helper()
 
@@ -224,6 +247,7 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 			refs = append(refs, map[string]any{
 				"id":                 "attr-line-" + v.ID,
 				"minimumOccurrences": 0,
+				"readOnly":           v.ReadOnly,
 				"assignedResourceReference": map[string]any{
 					"id":                    v.ID,
 					"name":                  v.Name,
@@ -878,6 +902,149 @@ func TestEditAsset_UnknownAttributeName(t *testing.T) {
 	}
 	if !strings.Contains(out.Results[0].Error, "not valid for asset type") {
 		t.Fatalf("expected scoped-assignment error, got %q", out.Results[0].Error)
+	}
+}
+
+func TestEditAsset_SetAttribute_ReadOnlyRejected(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetAttribute, AttributeName: "Definition", Value: "new def",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected error, got %q", out.Status)
+	}
+	want := `attribute "Definition" is read-only for asset type "Business Term" and cannot be changed`
+	if out.Results[0].Status != "error" || out.Results[0].Error != want {
+		t.Fatalf("expected read-only error %q, got %+v", want, out.Results[0])
+	}
+	if len(s.patchedAttrs) != 0 || len(s.createdAttrs) != 0 {
+		t.Fatalf("expected no writes, got patched=%+v created=%+v", s.patchedAttrs, s.createdAttrs)
+	}
+}
+
+func TestEditAsset_UpdateAttribute_ReadOnlyRejected(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "new def",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.Results[0].Error, "is read-only for asset type") {
+		t.Fatalf("expected read-only error, got %+v", out.Results[0])
+	}
+	if len(s.patchedAttrs) != 0 {
+		t.Fatalf("expected no PATCH, got %+v", s.patchedAttrs)
+	}
+}
+
+func TestEditAsset_AddAttribute_ReadOnlyRejected(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(noteAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddAttribute, AttributeName: "Note", Value: "Reviewed",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected error, got %q", out.Status)
+	}
+	if !strings.Contains(out.Results[0].Error, "is read-only for asset type") {
+		t.Fatalf("expected read-only error, got %+v", out.Results[0])
+	}
+	if len(s.createdAttrs) != 0 {
+		t.Fatalf("expected no POST /attributes, got %+v", s.createdAttrs)
+	}
+}
+
+func TestEditAsset_RemoveAttribute_ReadOnlyRejected(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpRemoveAttribute, AttributeName: "Definition",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected error, got %q", out.Status)
+	}
+	if !strings.Contains(out.Results[0].Error, "is read-only for asset type") {
+		t.Fatalf("expected read-only error, got %+v", out.Results[0])
+	}
+	if len(s.deletedAttrIDs) != 0 {
+		t.Fatalf("expected no DELETE, got %+v", s.deletedAttrIDs)
+	}
+}
+
+func TestEditAsset_ReadOnlyExcludedFromBulk(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID, acrAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpSetAttribute, AttributeName: "Definition", Value: "new def"},
+			{Type: edit_asset.OpSetAttribute, AttributeName: "Acronym", Value: "CHR"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected error, got %q", out.Status)
+	}
+	for i, r := range out.Results {
+		if r.Status != "error" || !strings.Contains(r.Error, "is read-only for asset type") {
+			t.Fatalf("op %d: expected read-only error, got %+v", i, r)
+		}
+	}
+	if n := s.attributeWrites(); n != 0 {
+		t.Fatalf("expected no attribute writes, got %d", n)
+	}
+}
+
+func TestEditAsset_ReadOnlyAlongsideWritable_PartialSuccess(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpSetAttribute, AttributeName: "Definition", Value: "new def"},
+			{Type: edit_asset.OpSetAttribute, AttributeName: "Acronym", Value: "CHR"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusPartialSuccess {
+		t.Fatalf("expected partial_success, got %q", out.Status)
+	}
+	if !strings.Contains(out.Results[0].Error, "is read-only for asset type") {
+		t.Fatalf("expected read-only error on Definition, got %+v", out.Results[0])
+	}
+	if out.Results[1].Status != "success" {
+		t.Fatalf("expected Acronym to succeed, got %+v", out.Results[1])
+	}
+	if s.attributeWrites() != 1 || s.patchedAttrs[acrInstanceID] != "CHR" {
+		t.Fatalf("expected a single PATCH of Acronym, got patched=%+v", s.patchedAttrs)
 	}
 }
 

@@ -334,6 +334,11 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 	}, nil
 }
 
+// readOnlyMessage explains that attrType cannot be written on this asset.
+func (ec *editContext) readOnlyMessage(attrType clients.EditAssetAssignmentAttributeType) string {
+	return clients.ReadOnlyAttributeMessage(attrType.Name, ec.asset.Type.Name)
+}
+
 // availableAttributeNames returns the original (un-normalized) attribute
 // names from the assignment, for inclusion in error suggestions.
 func (ec *editContext) availableAttributeNames() []string {

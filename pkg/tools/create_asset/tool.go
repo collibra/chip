@@ -154,7 +154,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}
 		}
 
-		resolvedAttrs, attrOut := resolveAttributes(ctx, collibraClient, input.Attributes, ec.assignment)
+		resolvedAttrs, attrOut := resolveAttributes(ctx, collibraClient, input.Attributes, ec.assignment, ec.assetType.Name)
 		if attrOut != nil {
 			return *attrOut, nil
 		}
@@ -325,8 +325,9 @@ func resolveStatus(ctx context.Context, client *http.Client, value string) (stri
 // the scoped assignment, surfaces unknown attribute names as a single
 // validation error, and pre-fetches the stringType for any string-kind
 // attribute so we can decide whether to run its value through Markdown
-// conversion. Returns the resolved list ready for writing.
-func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttribute, assignment *clients.PrepareCreateScopedAssignment) ([]resolvedAttribute, *Output) {
+// conversion. Attributes the assignment marks read-only are rejected.
+// Returns the resolved list ready for writing.
+func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttribute, assignment *clients.PrepareCreateScopedAssignment, assetTypeName string) ([]resolvedAttribute, *Output) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -341,6 +342,12 @@ func resolveAttributes(ctx context.Context, client *http.Client, in []InputAttri
 			return nil, &Output{
 				Status:  StatusValidationError,
 				Message: fmt.Sprintf("attributes[%d]: %v. %s", i, err, suggestionSuffix("Attributes", names)),
+			}
+		}
+		if slot.ReadOnly {
+			return nil, &Output{
+				Status:  StatusValidationError,
+				Message: fmt.Sprintf("attributes[%d]: %s", i, clients.ReadOnlyAttributeMessage(slot.AttributeTypeName, assetTypeName)),
 			}
 		}
 		entry := resolvedAttribute{

@@ -141,12 +141,14 @@ type rawAssignmentResponse struct {
 }
 
 // EditAssetAssignmentAttributeType is an attribute type allowed by a scoped
-// assignment, with its full name and (optional) constraints.
+// assignment, with its full name and (optional) constraints. ReadOnly is true
+// when the assignment forbids users from changing the attribute.
 type EditAssetAssignmentAttributeType struct {
 	ID          string                          `json:"id"`
 	Name        string                          `json:"name"`
 	Kind        string                          `json:"kind,omitempty"`
 	Required    bool                            `json:"required,omitempty"`
+	ReadOnly    bool                            `json:"readOnly,omitempty"`
 	Constraints *EditAssetAssignmentConstraints `json:"constraints,omitempty"`
 }
 
@@ -344,6 +346,7 @@ func mergeEditAssignments(merged *EditAssetAssignment, resp rawAssignmentRespons
 					Name:     ref.AssignedResourceReference.Name,
 					Kind:     normalizeAttributeKind(disc),
 					Required: ref.MinimumOccurrences > 0,
+					ReadOnly: ref.ReadOnly,
 				})
 			case isRelationTypeDiscriminator(disc):
 				var reversed bool

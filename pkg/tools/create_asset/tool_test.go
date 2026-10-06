@@ -57,6 +57,7 @@ type mockDGC struct {
 	noAssignments    bool   // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
 	emptyDomainTypes bool   // the default assignment lists empty domainTypes (creatable nowhere, sub-case b)
 	domainTypeOther  bool   // the glossary domain resolves to a non-Glossary type, so the assignment doesn't govern it (not-here)
+	noteReadOnly     bool   // the default assignment marks Note read-only
 
 	extraAssignments []map[string]any
 
@@ -197,6 +198,7 @@ func (m *mockDGC) server() *httptest.Server {
 					},
 					"assignedResourcePublicId": "Note",
 					"minimumOccurrences":       0,
+					"readOnly":                 m.noteReadOnly,
 				},
 			},
 		}
@@ -549,6 +551,55 @@ func TestCreateAsset_UnknownAttributeName_ReturnsValidationError(t *testing.T) {
 	}
 	if !strings.Contains(out.Message, "Attributes available:") {
 		t.Errorf("expected attribute suggestions in message, got %q", out.Message)
+	}
+}
+
+func TestCreateAsset_ReadOnlyAttribute_ReturnsValidationError(t *testing.T) {
+	m := newMockDGC(t)
+	m.noteReadOnly = true
+	c, _ := newClient(t, m)
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:      "Customer",
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+		Attributes: []create_asset.InputAttribute{
+			{Name: defAttrName, Value: "A customer."},
+			{Name: noteAttrName, Value: "Plain note."},
+		},
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
+	}
+	want := `attributes[1]: attribute "Note" is read-only for asset type "Business Term" and cannot be changed`
+	if out.Message != want {
+		t.Errorf("want message %q, got %q", want, out.Message)
+	}
+	if len(m.createdAssets) != 0 || len(m.createdAttributes) != 0 {
+		t.Errorf("no create must be attempted, got assets=%d attributes=%d", len(m.createdAssets), len(m.createdAttributes))
+	}
+}
+
+func TestCreateAsset_ReadOnlyAttributeByTypeID_ReturnsValidationError(t *testing.T) {
+	m := newMockDGC(t)
+	m.noteReadOnly = true
+	c, _ := newClient(t, m)
+	out, _ := create_asset.NewTool(c).Handler(t.Context(), create_asset.Input{
+		Name:      "Customer",
+		AssetType: btTypeName,
+		Domain:    glossaryDomain,
+		Attributes: []create_asset.InputAttribute{
+			{TypeID: defAttrID, Value: "A customer."},
+			{TypeID: noteAttrID, Value: "Plain note."},
+		},
+	})
+	if out.Status != create_asset.StatusValidationError {
+		t.Fatalf("want validation_error, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, "is read-only for asset type") {
+		t.Errorf("expected read-only message, got %q", out.Message)
+	}
+	if len(m.createdAssets) != 0 {
+		t.Errorf("no create must be attempted, got %d", len(m.createdAssets))
 	}
 }
 

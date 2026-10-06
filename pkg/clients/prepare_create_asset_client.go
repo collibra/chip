@@ -320,6 +320,9 @@ type PrepareCreateScopedAttribute struct {
 	Min                   int
 	// Max is nil when there is no upper bound (i.e. unbounded).
 	Max *int
+	// ReadOnly is true when the assignment forbids users from setting the
+	// attribute, typically because another component calculates its value.
+	ReadOnly bool
 }
 
 // PrepareCreateScopedRelation is one relation slot in a scoped assignment.
@@ -393,6 +396,7 @@ type rawAssignedCharacteristicTypeReference struct {
 	AssignedResourcePublicID  string                    `json:"assignedResourcePublicId"`
 	MinimumOccurrences        int                       `json:"minimumOccurrences"`
 	MaximumOccurrences        *int                      `json:"maximumOccurrences"`
+	ReadOnly                  bool                      `json:"readOnly"`
 	RelationTypeDirection     string                    `json:"relationTypeDirection,omitempty"`
 	RelationTypeRestriction   *rawAssignmentResourceRef `json:"relationTypeRestriction,omitempty"`
 }
@@ -819,6 +823,7 @@ func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAs
 					Required:              ref.MinimumOccurrences > 0,
 					Min:                   ref.MinimumOccurrences,
 					Max:                   ref.MaximumOccurrences,
+					ReadOnly:              ref.ReadOnly,
 				})
 			case isRelationTypeDiscriminator(disc):
 				key := characteristicKey{
@@ -932,6 +937,12 @@ func NotAllowedMessage(ctx context.Context, client *http.Client, assetTypeID, as
 	return fmt.Sprintf(
 		"Asset type %q isn't allowed in domain %q (domain type %q). Pick a different asset type, or a different domain.",
 		assetTypeName, domainName, domainTypeName)
+}
+
+// ReadOnlyAttributeMessage is the error create_asset and edit_asset return
+// when asked to write an attribute the asset type's assignment marks read-only.
+func ReadOnlyAttributeMessage(attributeName, assetTypeName string) string {
+	return fmt.Sprintf("attribute %q is read-only for asset type %q and cannot be changed", attributeName, assetTypeName)
 }
 
 // GetAttributeTypeFull fetches /attributeTypes/{id} and decodes the full
