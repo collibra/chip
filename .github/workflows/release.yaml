@@ -35,7 +35,8 @@ jobs:
       - runs-on
       - run-id=${{ github.run_id }}
       - runner=md
-      - env=production-eu
+      - env=production-eu-v3
+      - volume=40gb
       - tag=build-${{ github.event.repository.name }}
     environment: Release
     permissions:

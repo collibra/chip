@@ -53,6 +53,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{}, err
 		}
 
+		if _, err := clients.RequireAsset(ctx, collibraClient, "column", input.ColumnID); err != nil {
+			return Output{}, err
+		}
+
 		dataAttributes, err := clients.FindColumnsForDataAttribute(ctx, collibraClient, input.ColumnID)
 		if err != nil {
 			return Output{}, err

@@ -13,6 +13,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/collibra/chip/pkg/chip"
 )
 
 //go:embed all:files
@@ -42,9 +44,11 @@ type Catalog struct {
 	order  []string
 }
 
-// Load walks the embedded filesystem and returns a populated catalog.
-func Load() (*Catalog, error) {
-	return loadFromFS(embeddedFS, "files")
+// Load walks the embedded filesystem and returns a populated catalog. Skills
+// whose `requires:` frontmatter names a capability that toolConfig does not
+// enable are left out (see requirementsMet).
+func Load(toolConfig *chip.ServerToolConfig) (*Catalog, error) {
+	return loadFromFS(embeddedFS, "files", toolConfig)
 }
 
 // LoadWith returns the embedded catalog, optionally overlaid with skills
@@ -52,8 +56,10 @@ func Load() (*Catalog, error) {
 // "collibra/lineage") matches an embedded skill replace it wholesale —
 // body, description, related, and resources all come from the external
 // entry. New names are added. An empty externalDir is equivalent to Load.
-func LoadWith(externalDir string) (*Catalog, error) {
-	cat, err := Load()
+// External skills are filtered on `requires:` exactly like embedded ones, so
+// a skill supplied via --skills-dir can gate itself on a capability.
+func LoadWith(externalDir string, toolConfig *chip.ServerToolConfig) (*Catalog, error) {
+	cat, err := Load(toolConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +70,7 @@ func LoadWith(externalDir string) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	ext, err := loadFromFS(os.DirFS(abs), ".")
+	ext, err := loadFromFS(os.DirFS(abs), ".", toolConfig)
 	if err != nil {
 		return nil, fmt.Errorf("load external skills from %q: %w", abs, err)
 	}
@@ -85,16 +91,16 @@ func (c *Catalog) merge(other *Catalog) {
 	sort.Strings(c.order)
 }
 
-func loadFromFS(fsys fs.FS, root string) (*Catalog, error) {
+func loadFromFS(fsys fs.FS, root string, toolConfig *chip.ServerToolConfig) (*Catalog, error) {
 	cat := &Catalog{byName: map[string]*Skill{}}
-	if err := cat.walk(fsys, root); err != nil {
+	if err := cat.walk(fsys, root, toolConfig); err != nil {
 		return nil, err
 	}
 	sort.Strings(cat.order)
 	return cat, nil
 }
 
-func (c *Catalog) walk(fsys fs.FS, root string) error {
+func (c *Catalog) walk(fsys fs.FS, root string, toolConfig *chip.ServerToolConfig) error {
 	return fs.WalkDir(fsys, root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -105,9 +111,13 @@ func (c *Catalog) walk(fsys fs.FS, root string) error {
 		skillDir := path.Dir(p)
 		name := strings.TrimPrefix(skillDir, root+"/")
 		sharedDir := path.Join(path.Dir(skillDir), "_shared")
-		skill, err := loadSkill(fsys, name, skillDir, sharedDir)
+		skill, err := loadSkill(fsys, name, skillDir, sharedDir, toolConfig)
 		if err != nil {
 			return fmt.Errorf("load skill %q: %w", name, err)
+		}
+		if skill == nil {
+			// A capability the skill requires is off; it is not served.
+			return nil
 		}
 		c.byName[name] = skill
 		c.order = append(c.order, name)
@@ -115,12 +125,23 @@ func (c *Catalog) walk(fsys fs.FS, root string) error {
 	})
 }
 
-func loadSkill(fsys fs.FS, name, dir, sharedDir string) (*Skill, error) {
+// loadSkill reads one SKILL.md. It returns (nil, nil) — not an error — when
+// the skill declares a `requires:` capability that toolConfig has switched
+// off: the skill exists but is not served, so the agent cannot be told to
+// call tools that were never registered.
+func loadSkill(fsys fs.FS, name, dir, sharedDir string, toolConfig *chip.ServerToolConfig) (*Skill, error) {
 	raw, err := fs.ReadFile(fsys, path.Join(dir, "SKILL.md"))
 	if err != nil {
 		return nil, err
 	}
 	meta, body := parseFrontmatter(string(raw))
+	met, err := requirementsMet(meta.requires, toolConfig)
+	if err != nil {
+		return nil, err
+	}
+	if !met {
+		return nil, nil
+	}
 	resources, err := loadResources(fsys, path.Join(dir, "references"))
 	if err != nil {
 		return nil, err
