@@ -19,6 +19,7 @@ import (
 var knownExperimentalFeatures = map[string]string{
 	skills.FeatureName:                 "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
 	tools.ContextSpecificationsFeature: "Context specification tools: list_context_specifications, get_context_specification, and contextSpecificationId parameter on get_asset_details.",
+	tools.KnowledgeGraphSearchFeature:  "search_knowledge_graph and get_knowledge_graph_schema: query-syntax search over catalog assets of any type, and its schema, via preview Knowledge Graph REST endpoints.",
 }
 
 // validateExperimental warns (without exiting) when the user enabled an

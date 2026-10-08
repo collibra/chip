@@ -32,6 +32,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_results"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_template"
+	"github.com/collibra/chip/pkg/tools/get_knowledge_graph_schema"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
@@ -53,6 +54,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_data_classification_matches"
 	"github.com/collibra/chip/pkg/tools/search_dq_job_runs"
 	"github.com/collibra/chip/pkg/tools/search_dq_jobs"
+	"github.com/collibra/chip/pkg/tools/search_knowledge_graph"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
@@ -62,6 +64,11 @@ import (
 // ContextSpecificationsFeature is the experimental-feature identifier used to
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
+
+// KnowledgeGraphSearchFeature is the experimental-feature identifier used to
+// gate search_knowledge_graph. It calls a preview Knowledge Graph REST
+// endpoint that has not yet been promoted to a stable, versioned contract.
+const KnowledgeGraphSearchFeature = "knowledge-graph-search"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -132,6 +139,10 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
+	}
+	if toolConfig.IsExperimentalEnabled(KnowledgeGraphSearchFeature) {
+		toolRegister(server, toolConfig, search_knowledge_graph.NewTool(client))
+		toolRegister(server, toolConfig, get_knowledge_graph_schema.NewTool(client))
 	}
 
 	if toolConfig.EnableDebugTools {

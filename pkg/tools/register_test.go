@@ -97,6 +97,26 @@ func TestRegisterAll_DataQualityFlagOnlyMovesDataQualityTools(t *testing.T) {
 	}
 }
 
+// search_knowledge_graph and get_knowledge_graph_schema both call preview
+// Knowledge Graph REST endpoints, so they stay behind the same experimental
+// feature until those endpoints are a stable contract.
+func TestRegisterAll_SearchKnowledgeGraphGatedByExperimentalFeature(t *testing.T) {
+	knowledgeGraphToolNames := []string{"search_knowledge_graph", "get_knowledge_graph_schema"}
+
+	off := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range knowledgeGraphToolNames {
+		if slices.Contains(off, name) {
+			t.Errorf("expected %q to be absent by default", name)
+		}
+	}
+	on := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.KnowledgeGraphSearchFeature}})
+	for _, name := range knowledgeGraphToolNames {
+		if !slices.Contains(on, name) {
+			t.Errorf("expected %q to be present when %q is enabled", name, tools.KnowledgeGraphSearchFeature)
+		}
+	}
+}
+
 // search_catalog_columns sits among the DQ registrations but is a Knowledge
 // Graph search over catalog Column assets; it is not gated.
 func TestRegisterAll_SearchCatalogColumnsIsNotGated(t *testing.T) {
