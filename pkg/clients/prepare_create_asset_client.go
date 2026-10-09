@@ -802,6 +802,7 @@ func characteristicSourcesFrom(
 func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAssignment {
 	out := &PrepareCreateScopedAssignment{AssignmentID: a.ID}
 	seen := make(map[characteristicKey]struct{})
+	attrIndexByID := make(map[string]int)
 	for _, refs := range characteristicSourcesFrom(a.AssignedCharacteristicTypeReferences, a.TraitAssignmentInheritances, a.AssignmentInheritances) {
 		for _, ref := range refs {
 			disc := ref.AssignedResourceReference.ResourceDiscriminator
@@ -810,11 +811,13 @@ func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAs
 			}
 			switch {
 			case isAttributeTypeDiscriminator(disc):
-				key := characteristicKey{resourceID: ref.AssignedResourceReference.ID}
-				if _, dup := seen[key]; dup {
+				// The closest copy wins, except that a read-only copy anywhere
+				// makes the attribute read-only.
+				if i, dup := attrIndexByID[ref.AssignedResourceReference.ID]; dup {
+					out.Attributes[i].ReadOnly = out.Attributes[i].ReadOnly || ref.ReadOnly
 					continue
 				}
-				seen[key] = struct{}{}
+				attrIndexByID[ref.AssignedResourceReference.ID] = len(out.Attributes)
 				out.Attributes = append(out.Attributes, PrepareCreateScopedAttribute{
 					AttributeTypeID:       ref.AssignedResourceReference.ID,
 					AttributeTypeName:     ref.AssignedResourceReference.Name,
