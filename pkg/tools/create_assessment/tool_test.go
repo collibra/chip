@@ -197,3 +197,21 @@ func TestCreateAssessment_AssigneeListValidatedBeforeAnyLookup(t *testing.T) {
 		t.Fatalf("expected no assessment to be created, got %+v", s.created)
 	}
 }
+
+func TestCreateAssessment_AssigneeListValidatedBeforeOwnerLookup(t *testing.T) {
+	s := &assessmentsStub{users: directory()}
+	_, err := tool.NewTool(s.client(t)).Handler(t.Context(), tool.Input{
+		Template:  "Business Context",
+		OwnerID:   "Jane Smith",
+		Assignees: []tool.InputAssignee{{ID: "x", Type: "TEAM"}},
+	})
+	if err == nil {
+		t.Fatal("expected the unknown assignee type to be rejected")
+	}
+	if s.nameHits != 0 {
+		t.Fatalf("expected no owner lookup before the assignee list validated, got %d", s.nameHits)
+	}
+	if s.created != nil {
+		t.Fatalf("expected no assessment to be created, got %+v", s.created)
+	}
+}

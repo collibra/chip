@@ -746,12 +746,7 @@ type editAssetUsersList struct {
 // parameter defaulting to exactly these five values and `includeDisabled` as a
 // boolean defaulting to false. Repeated query parameters are how this client
 // already sends that API's array parameters (see the `status` parameter in
-// dgc_dq_client.go). NOT verified against a live instance from this
-// environment: no DGC deployment was reachable, so the values below are read
-// from the API documentation, not from a response. Per
-// docs/TOOL_CONTRIBUTION_STANDARDS.md 8.3 a contract test on the DGC side is
-// owed for this dependency; until then a CHIP-side change of these constants
-// cannot be validated by CI.
+// dgc_dq_client.go).
 //
 // They are the endpoint's own defaults, sent explicitly so a change of
 // server-side default cannot silently narrow the search: FIRSTNAME_LASTNAME

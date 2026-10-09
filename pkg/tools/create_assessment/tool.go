@@ -91,11 +91,15 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if err := validation.UUIDOptional("assetId", input.AssetID); err != nil {
 			return Output{}, err
 		}
+		checked, err := resolve.CheckAssignees(assigneeRefs(input.Assignees))
+		if err != nil {
+			return Output{}, err
+		}
 		ownerID, err := resolveOwnerID(ctx, collibraClient, input.OwnerID)
 		if err != nil {
 			return Output{}, err
 		}
-		assignees, err := resolveAssignees(ctx, collibraClient, input.Assignees)
+		assignees, err := resolve.ResolveAssignees(ctx, collibraClient, checked)
 		if err != nil {
 			return Output{}, err
 		}
@@ -189,42 +193,12 @@ func resolveOwnerID(ctx context.Context, client *http.Client, owner string) (str
 	return resolve.UserID(ctx, client, owner, resolve.Hints{})
 }
 
-// resolveAssignees validates each assignee's type and resolves USER assignees
-// by UUID, email address, username or full name. GROUP assignees must be given
-// as a UUID: group names are not resolvable through the user lookup.
-//
-// Everything that can be checked locally is checked first, across the whole
-// list, so a bad type or a named group is reported without spending a user
-// lookup on the entries before it (standards 6.1).
-func resolveAssignees(ctx context.Context, client *http.Client, assignees []InputAssignee) ([]clients.Assignee, error) {
-	if len(assignees) == 0 {
-		return nil, nil
-	}
-	out := make([]clients.Assignee, len(assignees))
+func assigneeRefs(assignees []InputAssignee) []resolve.AssigneeRef {
+	refs := make([]resolve.AssigneeRef, len(assignees))
 	for i, a := range assignees {
-		switch strings.ToUpper(strings.TrimSpace(a.Type)) {
-		case "USER":
-			continue // resolved below, once the whole list is known to be well-formed
-		case "GROUP":
-			if err := validation.UUID(fmt.Sprintf("assignees[%d].id", i), a.ID); err != nil {
-				return nil, fmt.Errorf("%w (a GROUP assignee must be given as its UUID)", err)
-			}
-			out[i] = clients.Assignee{ID: a.ID, Type: "GROUP"}
-		default:
-			return nil, fmt.Errorf("assignees[%d].type must be USER or GROUP, got %q", i, a.Type)
-		}
+		refs[i] = resolve.AssigneeRef{ID: a.ID, Type: a.Type}
 	}
-	for i, a := range assignees {
-		if out[i].Type != "" {
-			continue
-		}
-		id, err := resolve.UserID(ctx, client, a.ID, resolve.Hints{})
-		if err != nil {
-			return nil, fmt.Errorf("assignees[%d]: %w", i, err)
-		}
-		out[i] = clients.Assignee{ID: id, Type: "USER"}
-	}
-	return out, nil
+	return refs
 }
 
 func summarise(a *clients.Assessment) *AssessmentSummary {

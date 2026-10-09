@@ -128,7 +128,7 @@ func BuildNotificationOptions(enabledKeys []string, quantities map[string]int, m
 // Unresolved holds every recipient that could not be bound, as the caller wrote it. Ambiguous is the
 // subset of those that could not be pinned to ONE account — a name several accounts share, or a
 // search too broad to be sure of — rather than one that matched nobody. The two need different
-// advice ("use a username" vs "that name matches nobody"), so the caller can say which happened
+// advice ("use an email address" vs "that name matches nobody"), so the caller can say which happened
 // instead of reporting a typo either way.
 type RecipientResolution struct {
 	UserIDs    []string
@@ -206,7 +206,7 @@ func UnresolvedRecipientsMessage(res RecipientResolution) string {
 	}
 	if len(shared) > 0 {
 		parts = append(parts, fmt.Sprintf(
-			"These matched more than one active account, or too many to be sure, and were not bound to anyone: %s — give the intended person's username or email address instead of their name.",
+			"These matched more than one active account, or too many to be sure, and were not bound to anyone: %s — give the intended person's email address instead.",
 			strings.Join(shared, ", ")))
 	}
 	return strings.Join(parts, " ")
