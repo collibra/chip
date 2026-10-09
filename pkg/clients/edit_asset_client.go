@@ -141,12 +141,14 @@ type rawAssignmentResponse struct {
 }
 
 // EditAssetAssignmentAttributeType is an attribute type allowed by a scoped
-// assignment, with its full name and (optional) constraints.
+// assignment, with its full name and (optional) constraints. ReadOnly is true
+// when the assignment forbids users from changing the attribute.
 type EditAssetAssignmentAttributeType struct {
 	ID          string                          `json:"id"`
 	Name        string                          `json:"name"`
 	Kind        string                          `json:"kind,omitempty"`
 	Required    bool                            `json:"required,omitempty"`
+	ReadOnly    bool                            `json:"readOnly,omitempty"`
 	Constraints *EditAssetAssignmentConstraints `json:"constraints,omitempty"`
 }
 
@@ -325,7 +327,7 @@ func mergeEditAssignments(merged *EditAssetAssignment, resp rawAssignmentRespons
 		merged.DomainType = &dt
 	}
 	simple := make(map[string]struct{})
-	seenAttrIDs := make(map[string]struct{})
+	attrIndexByID := make(map[string]int)
 	seenRelKeys := make(map[string]struct{})
 	for _, refs := range characteristicSourcesFrom(resp.AssignedCharacteristicTypeReferences, resp.TraitAssignmentInheritances, resp.AssignmentInheritances) {
 		for _, ref := range refs {
@@ -335,15 +337,19 @@ func mergeEditAssignments(merged *EditAssetAssignment, resp rawAssignmentRespons
 			}
 			switch {
 			case isAttributeTypeDiscriminator(disc):
-				if _, dup := seenAttrIDs[ref.AssignedResourceReference.ID]; dup {
+				// The closest copy wins, except that a read-only copy anywhere
+				// makes the attribute read-only.
+				if i, dup := attrIndexByID[ref.AssignedResourceReference.ID]; dup {
+					merged.AttributeTypes[i].ReadOnly = merged.AttributeTypes[i].ReadOnly || ref.ReadOnly
 					continue
 				}
-				seenAttrIDs[ref.AssignedResourceReference.ID] = struct{}{}
+				attrIndexByID[ref.AssignedResourceReference.ID] = len(merged.AttributeTypes)
 				merged.AttributeTypes = append(merged.AttributeTypes, EditAssetAssignmentAttributeType{
 					ID:       ref.AssignedResourceReference.ID,
 					Name:     ref.AssignedResourceReference.Name,
 					Kind:     normalizeAttributeKind(disc),
 					Required: ref.MinimumOccurrences > 0,
+					ReadOnly: ref.ReadOnly,
 				})
 			case isRelationTypeDiscriminator(disc):
 				var reversed bool

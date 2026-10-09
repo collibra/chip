@@ -233,6 +233,126 @@ func TestGetEffectiveAssignmentForAsset_NormalizesDateTimeAttributeType(t *testi
 	}
 }
 
+func TestGetEffectiveAssignmentForAsset_ParsesReadOnly(t *testing.T) {
+	const assetID = "019e027f-25b9-728f-9ed8-77c315ac377f"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "AI Use Case"},
+			"assignedCharacteristicTypeReferences": [
+				{
+					"id": "line-score",
+					"minimumOccurrences": 0,
+					"readOnly": true,
+					"assignedResourceReference": {"id": "attr-score", "name": "AI Trust Score", "resourceDiscriminator": "NumericAttributeType"}
+				},
+				{
+					"id": "line-desc",
+					"minimumOccurrences": 0,
+					"assignedResourceReference": {"id": "attr-desc", "name": "Description", "resourceDiscriminator": "StringAttributeType"}
+				}
+			]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+	if len(got.AttributeTypes) != 2 {
+		t.Fatalf("expected 2 attribute types, got %d: %+v", len(got.AttributeTypes), got.AttributeTypes)
+	}
+	if !got.AttributeTypes[0].ReadOnly {
+		t.Errorf("expected AI Trust Score to be read-only, got %+v", got.AttributeTypes[0])
+	}
+	if got.AttributeTypes[1].ReadOnly {
+		t.Errorf("expected Description to be writable when readOnly is absent, got %+v", got.AttributeTypes[1])
+	}
+}
+
+func TestGetEffectiveAssignmentForAsset_ParsesReadOnlyFromTrait(t *testing.T) {
+	const assetID = "019e027f-25b9-728f-9ed8-77c315ac377f"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "AI Use Case"},
+			"assignedCharacteristicTypeReferences": [],
+			"traitAssignmentInheritances": [{
+				"assignedCharacteristicTypeReferences": [{
+					"id": "line-trait-score",
+					"minimumOccurrences": 0,
+					"readOnly": true,
+					"assignedResourceReference": {"id": "attr-score", "name": "AI Trust Score", "resourceDiscriminator": "NumericAttributeType"}
+				}]
+			}]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+	if len(got.AttributeTypes) != 1 || !got.AttributeTypes[0].ReadOnly {
+		t.Errorf("expected trait-inherited AI Trust Score to be read-only, got %+v", got.AttributeTypes)
+	}
+}
+
+func TestGetEffectiveAssignmentForAsset_ReadOnlyTraitCopyMarksAttributeReadOnly(t *testing.T) {
+	const assetID = "019e027f-25b9-728f-9ed8-77c315ac377f"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rest/2.0/assignments/asset/"+assetID, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "at-1", "name": "AI Use Case"},
+			"assignedCharacteristicTypeReferences": [{
+				"id": "line-score",
+				"minimumOccurrences": 1,
+				"assignedResourceReference": {"id": "attr-score", "name": "AI Trust Score", "resourceDiscriminator": "NumericAttributeType"}
+			}],
+			"traitAssignmentInheritances": [{
+				"assignedCharacteristicTypeReferences": [{
+					"id": "line-trait-score",
+					"minimumOccurrences": 0,
+					"readOnly": true,
+					"assignedResourceReference": {"id": "attr-score", "name": "AI Trust Score", "resourceDiscriminator": "NumericAttributeType"}
+				}]
+			}]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := testutil.NewClient(srv)
+
+	got, err := GetEffectiveAssignmentForAsset(t.Context(), client, assetID)
+	if err != nil {
+		t.Fatalf("GetEffectiveAssignmentForAsset: %v", err)
+	}
+	if len(got.AttributeTypes) != 1 {
+		t.Fatalf("expected the duplicate to be merged into one attribute type, got %+v", got.AttributeTypes)
+	}
+	score := got.AttributeTypes[0]
+	if !score.ReadOnly {
+		t.Errorf("a read-only trait copy must make the attribute read-only, got %+v", score)
+	}
+	if !score.Required {
+		t.Errorf("the direct reference must still win the other fields (Required), got %+v", score)
+	}
+}
+
 func hasAttr(a *EditAssetAssignment, id string) bool {
 	for _, at := range a.AttributeTypes {
 		if at.ID == id {

@@ -154,6 +154,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"set_attribute (set an attribute's value such as 'Definition' or 'Note' by attribute type name — creates the value if the attribute is empty, updates it if it already has one, so this is the right op for normal single-valued attributes whether or not a value exists yet); " +
 			"add_attribute (append an additional value to a multi-valued attribute; for single-valued attributes prefer set_attribute); " +
 			"remove_attribute (clear an attribute value); " +
+			"set_attribute, add_attribute and remove_attribute fail on an attribute the assignment marks read-only (values Collibra calculates, such as a trust score); " +
 			"for RICH_TEXT attributes like 'Definition' the value is treated as Markdown and converted to HTML before writing; " +
 			"update_property (whitelisted fields only: 'name' to rename — also updates displayName when it tracks the current name, so the user-facing label stays in sync; 'displayName' to change the display name; or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
 			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes a forward role name like 'is synonym of' plus the target assetId, remove_relation takes the relation instance UUID); " +
@@ -332,6 +333,11 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		roleByName:           rolesByName,
 		statusByName:         statusesByName,
 	}, nil
+}
+
+// readOnlyMessage explains that attrType cannot be written on this asset.
+func (ec *editContext) readOnlyMessage(attrType clients.EditAssetAssignmentAttributeType) string {
+	return clients.ReadOnlyAttributeMessage(attrType.Name, ec.asset.Type.Name, "Drop this operation; other attributes can still be edited.")
 }
 
 // availableAttributeNames returns the original (un-normalized) attribute

@@ -320,6 +320,9 @@ type PrepareCreateScopedAttribute struct {
 	Min                   int
 	// Max is nil when there is no upper bound (i.e. unbounded).
 	Max *int
+	// ReadOnly is true when the assignment forbids users from setting the
+	// attribute, typically because another component calculates its value.
+	ReadOnly bool
 }
 
 // PrepareCreateScopedRelation is one relation slot in a scoped assignment.
@@ -393,6 +396,7 @@ type rawAssignedCharacteristicTypeReference struct {
 	AssignedResourcePublicID  string                    `json:"assignedResourcePublicId"`
 	MinimumOccurrences        int                       `json:"minimumOccurrences"`
 	MaximumOccurrences        *int                      `json:"maximumOccurrences"`
+	ReadOnly                  bool                      `json:"readOnly"`
 	RelationTypeDirection     string                    `json:"relationTypeDirection,omitempty"`
 	RelationTypeRestriction   *rawAssignmentResourceRef `json:"relationTypeRestriction,omitempty"`
 }
@@ -798,6 +802,7 @@ func characteristicSourcesFrom(
 func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAssignment {
 	out := &PrepareCreateScopedAssignment{AssignmentID: a.ID}
 	seen := make(map[characteristicKey]struct{})
+	attrIndexByID := make(map[string]int)
 	for _, refs := range characteristicSourcesFrom(a.AssignedCharacteristicTypeReferences, a.TraitAssignmentInheritances, a.AssignmentInheritances) {
 		for _, ref := range refs {
 			disc := ref.AssignedResourceReference.ResourceDiscriminator
@@ -806,11 +811,13 @@ func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAs
 			}
 			switch {
 			case isAttributeTypeDiscriminator(disc):
-				key := characteristicKey{resourceID: ref.AssignedResourceReference.ID}
-				if _, dup := seen[key]; dup {
+				// The closest copy wins, except that a read-only copy anywhere
+				// makes the attribute read-only.
+				if i, dup := attrIndexByID[ref.AssignedResourceReference.ID]; dup {
+					out.Attributes[i].ReadOnly = out.Attributes[i].ReadOnly || ref.ReadOnly
 					continue
 				}
-				seen[key] = struct{}{}
+				attrIndexByID[ref.AssignedResourceReference.ID] = len(out.Attributes)
 				out.Attributes = append(out.Attributes, PrepareCreateScopedAttribute{
 					AttributeTypeID:       ref.AssignedResourceReference.ID,
 					AttributeTypeName:     ref.AssignedResourceReference.Name,
@@ -819,6 +826,7 @@ func emitAssignmentCharacteristics(a rawScopedAssignment) *PrepareCreateScopedAs
 					Required:              ref.MinimumOccurrences > 0,
 					Min:                   ref.MinimumOccurrences,
 					Max:                   ref.MaximumOccurrences,
+					ReadOnly:              ref.ReadOnly,
 				})
 			case isRelationTypeDiscriminator(disc):
 				key := characteristicKey{
@@ -932,6 +940,13 @@ func NotAllowedMessage(ctx context.Context, client *http.Client, assetTypeID, as
 	return fmt.Sprintf(
 		"Asset type %q isn't allowed in domain %q (domain type %q). Pick a different asset type, or a different domain.",
 		assetTypeName, domainName, domainTypeName)
+}
+
+// ReadOnlyAttributeMessage is the error create_asset and edit_asset return
+// when asked to write an attribute the asset type's assignment marks read-only.
+// The hint tells the agent how to correct its call in that tool.
+func ReadOnlyAttributeMessage(attributeName, assetTypeName, hint string) string {
+	return fmt.Sprintf("attribute %q is read-only for asset type %q and cannot be changed: Collibra sets its value. %s", attributeName, assetTypeName, hint)
 }
 
 // GetAttributeTypeFull fetches /attributeTypes/{id} and decodes the full

@@ -33,6 +33,10 @@ func validateSetAttribute(ec *editContext, plan opPlan) opPlan {
 			suggestionSuffix("Attributes", ec.availableAttributeNames(), 10)))
 		return plan
 	}
+	if attrType.ReadOnly {
+		plan.result = newErrorResult(op, ec.readOnlyMessage(attrType))
+		return plan
+	}
 	if err := validateAttributeValue(attrType, op.Value); err != nil {
 		plan.result = newErrorResult(op, err.Error())
 		return plan
@@ -100,6 +104,10 @@ func validateAddAttribute(ec *editContext, plan opPlan) opPlan {
 			suggestionSuffix("Attributes", ec.availableAttributeNames(), 10)))
 		return plan
 	}
+	if attrType.ReadOnly {
+		plan.result = newErrorResult(op, ec.readOnlyMessage(attrType))
+		return plan
+	}
 	if err := validateAttributeValue(attrType, op.Value); err != nil {
 		plan.result = newErrorResult(op, err.Error())
 		return plan
@@ -134,7 +142,12 @@ func validateRemoveAttribute(ec *editContext, plan opPlan) opPlan {
 		plan.result = newErrorResult(op, "attributeName is required for remove_attribute")
 		return plan
 	}
-	instances := ec.attributesByTypeName[normalize(op.AttributeName)]
+	key := normalize(op.AttributeName)
+	if attrType, ok := ec.attributeTypeByName[key]; ok && attrType.ReadOnly {
+		plan.result = newErrorResult(op, ec.readOnlyMessage(attrType))
+		return plan
+	}
+	instances := ec.attributesByTypeName[key]
 	switch len(instances) {
 	case 0:
 		plan.result = newErrorResult(op, fmt.Sprintf("no %q attribute to remove on this asset", op.AttributeName))
