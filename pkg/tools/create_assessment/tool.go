@@ -15,6 +15,7 @@ import (
 
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/clients"
+	"github.com/collibra/chip/pkg/tools/resolve"
 	"github.com/collibra/chip/pkg/tools/validation"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -25,14 +26,14 @@ type Input struct {
 	Name                string          `json:"name,omitempty" jsonschema:"Required when assetId is not provided. Name for the new assessment. At least one of name or assetId must be supplied alongside the template."`
 	AssetID             string          `json:"assetId,omitempty" jsonschema:"Required when name is not provided. UUID of the asset to conduct the assessment on. At least one of assetId or name must be supplied alongside the template."`
 	Assignees           []InputAssignee `json:"assignees,omitempty" jsonschema:"Optional. Users or groups assigned to the assessment."`
-	OwnerID             string          `json:"ownerId,omitempty" jsonschema:"Optional. UUID of the assessment owner (a user)."`
+	OwnerID             string          `json:"ownerId,omitempty" jsonschema:"Optional. The assessment owner (a user), given as their UUID, email address, username, or full name such as 'Jane Smith'. Anything but a UUID is resolved to the user's UUID; a full name shared by several users returns an error listing the candidates."`
 	IsVisibleToEveryone *bool           `json:"isVisibleToEveryone,omitempty" jsonschema:"Optional. When true, the assessment is visible to everyone."`
 	Status              string          `json:"status,omitempty" jsonschema:"Optional. Initial status: DRAFT, SUBMITTED, or OBSOLETE. Defaults to the API default (DRAFT) when omitted."`
 }
 
 // InputAssignee is one user or group assigned to the assessment.
 type InputAssignee struct {
-	ID   string `json:"id" jsonschema:"UUID of the user or group."`
+	ID   string `json:"id" jsonschema:"The user or group to assign. For type USER: a UUID, email address, username, or full name such as 'Jane Smith' — anything but a UUID is resolved to the user's UUID. For type GROUP: the group's UUID (group names are not resolved)."`
 	Type string `json:"type" jsonschema:"USER or GROUP."`
 }
 
@@ -72,6 +73,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 		Description: "Create a new assessment from an assessment template. " +
 			"Requires a template (name or UUID) and at least one of name or assetId — the API rejects requests that supply neither. " +
 			"Optionally attach an asset, assignees, an owner, visibility, and an initial status. " +
+			"The owner and any USER assignee may be given as a UUID, an email address, a username, or a person's full name such as 'Jane Smith' — anything but a UUID is resolved to that user's UUID, and a name shared by several users returns an error listing the candidates rather than picking one (get_user_id_by_name resolves a name to a UUID up front); a GROUP assignee must be given as its UUID. " +
 			"This tool does NOT set answers — the created assessment comes back with the template's questions unanswered. " +
 			"Use the returned question ids with edit_assessment to fill in the answers afterwards.",
 		Handler:     handler(collibraClient),
@@ -89,18 +91,17 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if err := validation.UUIDOptional("assetId", input.AssetID); err != nil {
 			return Output{}, err
 		}
-		if err := validation.UUIDOptional("ownerId", input.OwnerID); err != nil {
+		checked, err := resolve.CheckAssignees(assigneeRefs(input.Assignees))
+		if err != nil {
 			return Output{}, err
 		}
-		for i, a := range input.Assignees {
-			if err := validation.UUID(fmt.Sprintf("assignees[%d].id", i), a.ID); err != nil {
-				return Output{}, err
-			}
-			switch strings.ToUpper(strings.TrimSpace(a.Type)) {
-			case "USER", "GROUP":
-			default:
-				return Output{}, fmt.Errorf("assignees[%d].type must be USER or GROUP, got %q", i, a.Type)
-			}
+		ownerID, err := resolveOwnerID(ctx, collibraClient, input.OwnerID)
+		if err != nil {
+			return Output{}, err
+		}
+		assignees, err := resolve.ResolveAssignees(ctx, collibraClient, checked)
+		if err != nil {
+			return Output{}, err
 		}
 
 		req := clients.CreateAssessmentRequest{
@@ -110,15 +111,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if input.AssetID != "" {
 			req.Asset = &clients.AssessmentRef{ID: input.AssetID}
 		}
-		if input.OwnerID != "" {
-			req.Owner = &clients.AssessmentRef{ID: input.OwnerID}
+		if ownerID != "" {
+			req.Owner = &clients.AssessmentRef{ID: ownerID}
 		}
-		if len(input.Assignees) > 0 {
-			req.Assignees = make([]clients.Assignee, len(input.Assignees))
-			for i, a := range input.Assignees {
-				req.Assignees[i] = clients.Assignee{ID: a.ID, Type: strings.ToUpper(strings.TrimSpace(a.Type))}
-			}
-		}
+		req.Assignees = assignees
 		req.IsVisibleToEveryone = input.IsVisibleToEveryone
 		if s := strings.TrimSpace(input.Status); s != "" {
 			req.Status = chip.Ptr(strings.ToUpper(s))
@@ -184,6 +180,25 @@ func resolveTemplateID(ctx context.Context, client *http.Client, template string
 	}
 	sort.Strings(names)
 	return "", fmt.Errorf("template %q is ambiguous; matched: %s — specify the exact name or the template UUID", template, strings.Join(names, ", "))
+}
+
+// resolveOwnerID resolves the optional owner reference to a user UUID. A blank
+// owner stays blank (the field is optional); anything else goes through the
+// shared user resolver, which accepts a UUID, email address, username or full
+// name and reports an ambiguous name as an error rather than picking a person.
+func resolveOwnerID(ctx context.Context, client *http.Client, owner string) (string, error) {
+	if strings.TrimSpace(owner) == "" {
+		return "", nil
+	}
+	return resolve.UserID(ctx, client, owner, resolve.Hints{})
+}
+
+func assigneeRefs(assignees []InputAssignee) []resolve.AssigneeRef {
+	refs := make([]resolve.AssigneeRef, len(assignees))
+	for i, a := range assignees {
+		refs[i] = resolve.AssigneeRef{ID: a.ID, Type: a.Type}
+	}
+	return refs
 }
 
 func summarise(a *clients.Assessment) *AssessmentSummary {
