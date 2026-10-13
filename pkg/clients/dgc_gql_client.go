@@ -3,6 +3,7 @@ package clients
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 const (
@@ -84,6 +85,12 @@ query GetAssetDetails(%s) {
         name
       }
     }
+    multiValueAttributes(limit: $attributesLimit) {
+      stringValues
+      type {
+        name
+      }
+    }
     %s {
       type {
         id
@@ -158,18 +165,19 @@ type AssetQueryData struct {
 }
 
 type Asset struct {
-	ID                string             `json:"id"`
-	DisplayName       string             `json:"displayName"`
-	Type              *AssetType         `json:"type,omitempty"`
-	Domain            *Domain            `json:"domain,omitempty"`
-	Status            *Status            `json:"status,omitempty"`
-	StringAttributes  []StringAttribute  `json:"stringAttributes,omitempty"`
-	NumericAttributes []NumericAttribute `json:"numericAttributes,omitempty"`
-	BooleanAttributes []BooleanAttribute `json:"booleanAttributes,omitempty"`
-	DateAttributes    []DateAttribute    `json:"dateAttributes,omitempty"`
-	OutgoingRelations []OutgoingRelation `json:"outgoingRelations,omitempty"`
-	IncomingRelations []IncomingRelation `json:"incomingRelations,omitempty"`
-	Tags              []Tag              `json:"tags,omitempty"`
+	ID                   string                `json:"id"`
+	DisplayName          string                `json:"displayName"`
+	Type                 *AssetType            `json:"type,omitempty"`
+	Domain               *Domain               `json:"domain,omitempty"`
+	Status               *Status               `json:"status,omitempty"`
+	StringAttributes     []StringAttribute     `json:"stringAttributes,omitempty"`
+	NumericAttributes    []NumericAttribute    `json:"numericAttributes,omitempty"`
+	BooleanAttributes    []BooleanAttribute    `json:"booleanAttributes,omitempty"`
+	DateAttributes       []DateAttribute       `json:"dateAttributes,omitempty"`
+	MultiValueAttributes []MultiValueAttribute `json:"multiValueAttributes,omitempty"`
+	OutgoingRelations    []OutgoingRelation    `json:"outgoingRelations,omitempty"`
+	IncomingRelations    []IncomingRelation    `json:"incomingRelations,omitempty"`
+	Tags                 []Tag                 `json:"tags,omitempty"`
 }
 
 type Tag struct {
@@ -207,6 +215,62 @@ type BooleanAttribute struct {
 type DateAttribute struct {
 	Value string         `json:"dateValue"`
 	Type  *AttributeType `json:"type,omitempty"`
+}
+
+// MultiValueAttribute is a Multiple Selection attribute with every selected value.
+type MultiValueAttribute struct {
+	Values []string       `json:"stringValues"`
+	Type   *AttributeType `json:"type,omitempty"`
+}
+
+// UnmarshalJSON accepts stringValues either as DGC's single delimited string
+// or as an already split list, so a marshalled MultiValueAttribute decodes back
+// to the same values.
+func (a *MultiValueAttribute) UnmarshalJSON(data []byte) error {
+	type alias MultiValueAttribute
+	aux := struct {
+		*alias
+		Values json.RawMessage `json:"stringValues"`
+	}{alias: (*alias)(a)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	a.Values = nil
+	if len(aux.Values) == 0 || string(aux.Values) == "null" {
+		return nil
+	}
+	if aux.Values[0] == '[' {
+		return json.Unmarshal(aux.Values, &a.Values)
+	}
+	var joined string
+	if err := json.Unmarshal(aux.Values, &joined); err != nil {
+		return err
+	}
+	a.Values = splitMultiValues(joined)
+	return nil
+}
+
+// splitMultiValues splits DGC's encoding of a value list: values joined by ';',
+// with a ';' inside a value written as '\;'. Any other backslash is literal.
+func splitMultiValues(joined string) []string {
+	if joined == "" {
+		return nil
+	}
+	var values []string
+	var current strings.Builder
+	for i := 0; i < len(joined); i++ {
+		switch {
+		case joined[i] == '\\' && i+1 < len(joined) && joined[i+1] == ';':
+			current.WriteByte(';')
+			i++
+		case joined[i] == ';':
+			values = append(values, current.String())
+			current.Reset()
+		default:
+			current.WriteByte(joined[i])
+		}
+	}
+	return append(values, current.String())
 }
 
 type AttributeType struct {

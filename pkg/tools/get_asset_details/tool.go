@@ -153,6 +153,9 @@ func resolveAssignableAttributes(ctx context.Context, collibraClient *http.Clien
 	for i := range asset.DateAttributes {
 		addName(asset.DateAttributes[i].Type)
 	}
+	for i := range asset.MultiValueAttributes {
+		addName(asset.MultiValueAttributes[i].Type)
+	}
 
 	result := make([]AssignableAttribute, 0, len(assignment.AttributeTypes))
 	for _, at := range assignment.AttributeTypes {

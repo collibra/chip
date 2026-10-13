@@ -3,6 +3,7 @@ package get_asset_details_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -376,5 +377,132 @@ func TestGetAssetDetailsSurfacesEmptyAssignableAttribute(t *testing.T) {
 	}
 	if !note.IsSet {
 		t.Errorf("Note has a value and should be isSet=true")
+	}
+}
+
+// DGC returns a Multiple Selection attribute's values as one ';'-joined string.
+func TestGetAssetDetailsReturnsMultipleSelectionValues(t *testing.T) {
+	assetId, _ := uuid.NewUUID()
+	handler := http.NewServeMux()
+	handler.HandleFunc("/graphql/knowledgeGraph/v1", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data": {"assets": [{
+			"id": "` + assetId.String() + `",
+			"displayName": "Customer Table",
+			"multiValueAttributes": [
+				{"stringValues": "PII;Financial", "type": {"name": "Confidentiality"}}
+			]
+		}]}}`))
+	})
+	handler.Handle("/rest/2.0/responsibilities", testutil.JsonHandlerOut(func(*http.Request) (int, clients.ResponsibilityPagedResponse) {
+		return http.StatusOK, clients.ResponsibilityPagedResponse{Limit: 100}
+	}))
+	handler.HandleFunc("GET /rest/2.0/assignments/asset/"+assetId.String(), func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "tbl", "name": "Table"},
+			"assignedCharacteristicTypeReferences": [
+				{"id": "c1", "minimumOccurrences": 0, "assignedResourceReference": {"id": "conf", "name": "Confidentiality", "resourceDiscriminator": "MultiValueListAttributeType"}}
+			]
+		}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	output, err := tools.NewTool(testutil.NewClient(server), false).Handler(t.Context(), tools.Input{AssetID: assetId.String()})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if output.Asset == nil || len(output.Asset.MultiValueAttributes) != 1 {
+		t.Fatalf("expected one multi-value attribute, got: %+v", output.Asset)
+	}
+	attr := output.Asset.MultiValueAttributes[0]
+	if attr.Type == nil || attr.Type.Name != "Confidentiality" {
+		t.Errorf("expected attribute type Confidentiality, got: %+v", attr.Type)
+	}
+	if !slices.Equal(attr.Values, []string{"PII", "Financial"}) {
+		t.Errorf("expected values [PII Financial], got: %q", attr.Values)
+	}
+
+	var entries []tools.AssignableAttribute
+	for _, a := range output.AssignableAttributes {
+		if a.Name == "Confidentiality" {
+			entries = append(entries, a)
+		}
+	}
+	if len(entries) == 0 {
+		t.Fatalf("Confidentiality missing from assignableAttributes: %+v", output.AssignableAttributes)
+	}
+	for _, a := range entries {
+		if !a.IsSet {
+			t.Errorf("Confidentiality has values and should be isSet=true, got: %+v", a)
+		}
+	}
+}
+
+func TestGetAssetDetailsReturnsSingleValuedAttributesAsSet(t *testing.T) {
+	assetId, _ := uuid.NewUUID()
+	handler := http.NewServeMux()
+	handler.HandleFunc("/graphql/knowledgeGraph/v1", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data": {"assets": [{
+			"id": "` + assetId.String() + `",
+			"displayName": "Customer Table",
+			"stringAttributes": [
+				{"stringValue": "Gold", "type": {"name": "Tier"}},
+				{"stringValue": "Customer master data", "type": {"name": "Description"}}
+			],
+			"numericAttributes": [{"numericValue": 42.5, "type": {"name": "Row Count"}}],
+			"booleanAttributes": [{"booleanValue": true, "type": {"name": "Personal Data"}}],
+			"dateAttributes": [{"dateValue": "1700000000000", "type": {"name": "Review Date"}}]
+		}]}}`))
+	})
+	handler.Handle("/rest/2.0/responsibilities", testutil.JsonHandlerOut(func(*http.Request) (int, clients.ResponsibilityPagedResponse) {
+		return http.StatusOK, clients.ResponsibilityPagedResponse{Limit: 100}
+	}))
+	handler.HandleFunc("GET /rest/2.0/assignments/asset/"+assetId.String(), func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "tbl", "name": "Table"},
+			"assignedCharacteristicTypeReferences": [
+				{"id": "c1", "minimumOccurrences": 0, "assignedResourceReference": {"id": "tier", "name": "Tier", "resourceDiscriminator": "SingleValueListAttributeType"}},
+				{"id": "c2", "minimumOccurrences": 0, "assignedResourceReference": {"id": "desc", "name": "Description", "resourceDiscriminator": "StringAttributeType"}},
+				{"id": "c3", "minimumOccurrences": 0, "assignedResourceReference": {"id": "rows", "name": "Row Count", "resourceDiscriminator": "NumericAttributeType"}},
+				{"id": "c4", "minimumOccurrences": 0, "assignedResourceReference": {"id": "pd", "name": "Personal Data", "resourceDiscriminator": "BooleanAttributeType"}},
+				{"id": "c5", "minimumOccurrences": 0, "assignedResourceReference": {"id": "rev", "name": "Review Date", "resourceDiscriminator": "DateAttributeType"}}
+			]
+		}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	output, err := tools.NewTool(testutil.NewClient(server), false).Handler(t.Context(), tools.Input{AssetID: assetId.String()})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	asset := output.Asset
+	if asset == nil {
+		t.Fatalf("expected an asset, got none: %+v", output)
+	}
+	if len(asset.StringAttributes) != 2 || asset.StringAttributes[0].Value != "Gold" || asset.StringAttributes[1].Value != "Customer master data" {
+		t.Errorf("unexpected string attributes: %+v", asset.StringAttributes)
+	}
+	if len(asset.NumericAttributes) != 1 || asset.NumericAttributes[0].Value != 42.5 {
+		t.Errorf("unexpected numeric attributes: %+v", asset.NumericAttributes)
+	}
+	if len(asset.BooleanAttributes) != 1 || !asset.BooleanAttributes[0].Value {
+		t.Errorf("unexpected boolean attributes: %+v", asset.BooleanAttributes)
+	}
+	if len(asset.DateAttributes) != 1 || asset.DateAttributes[0].Value != "1700000000000" {
+		t.Errorf("unexpected date attributes: %+v", asset.DateAttributes)
+	}
+
+	if len(output.AssignableAttributes) != 5 {
+		t.Fatalf("expected 5 assignable attributes, got: %+v", output.AssignableAttributes)
+	}
+	for _, a := range output.AssignableAttributes {
+		if !a.IsSet {
+			t.Errorf("%s has a value and should be isSet=true", a.Name)
+		}
 	}
 }
