@@ -39,3 +39,35 @@ func TestMultiValueAttributeRoundTripsThroughJSON(t *testing.T) {
 		t.Errorf("got values %q, want %q", decoded.Values, original.Values)
 	}
 }
+
+func TestMultiValueAttributeDropsEmptySegments(t *testing.T) {
+	var attr MultiValueAttribute
+	if err := json.Unmarshal([]byte(`{"stringValues": ";a;;b;"}`), &attr); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{"a", "b"}
+	if !slices.Equal(attr.Values, want) {
+		t.Errorf("got values %q, want %q", attr.Values, want)
+	}
+}
+
+func TestMultiValueAttributeWithoutValuesDecodesToNoValues(t *testing.T) {
+	cases := map[string]string{
+		"null":         `{"stringValues": null}`,
+		"missing":      `{}`,
+		"empty string": `{"stringValues": ""}`,
+		"empty list":   `{"stringValues": []}`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			attr := MultiValueAttribute{Values: []string{"stale"}}
+			if err := json.Unmarshal([]byte(body), &attr); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(attr.Values) != 0 {
+				t.Errorf("got values %q, want none", attr.Values)
+			}
+		})
+	}
+}

@@ -251,11 +251,11 @@ func (a *MultiValueAttribute) UnmarshalJSON(data []byte) error {
 }
 
 // splitMultiValues splits DGC's encoding of a value list: values joined by ';',
-// with a ';' inside a value written as '\;'. Any other backslash is literal.
+// with a ';' inside a value written as '\;'. Any other backslash is literal, so
+// a value ending in a backslash followed by the separator cannot be told apart
+// from an escaped semicolon. Empty segments are dropped because a selection
+// cannot be an empty value.
 func splitMultiValues(joined string) []string {
-	if joined == "" {
-		return nil
-	}
 	var values []string
 	var current strings.Builder
 	for i := 0; i < len(joined); i++ {
@@ -264,13 +264,20 @@ func splitMultiValues(joined string) []string {
 			current.WriteByte(';')
 			i++
 		case joined[i] == ';':
-			values = append(values, current.String())
+			values = appendNonEmpty(values, current.String())
 			current.Reset()
 		default:
 			current.WriteByte(joined[i])
 		}
 	}
-	return append(values, current.String())
+	return appendNonEmpty(values, current.String())
+}
+
+func appendNonEmpty(values []string, value string) []string {
+	if value == "" {
+		return values
+	}
+	return append(values, value)
 }
 
 type AttributeType struct {
