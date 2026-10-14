@@ -1,0 +1,23 @@
+# Fixture for the data-product-create happy-path eval.
+#
+# Fill in `source_table` and `expected` for your test environment before running.
+# The eval fails fast with a clear error while `source_table` is empty.
+
+# The fact table the agent starts from: a name, a DGC UUID, or a Collibra URL.
+# e.g. "SALES>ORDERS" or "01924cdc-41c3-772b-94db-9c0fbae84d77"
+source_table: "019df8b6-6e10-739d-a129-e38602326f42"
+
+expected:
+  # Exact name of the Data Product the skill should create.
+  # Skill naming rule: human-readable, derived from the table
+  # (e.g. sales.customer_orders -> "Sales Customer Orders").
+  data_product_name: "Sakila Film Catalog"
+
+  # Names of the tables the physical Port must `groups`-link:
+  # the source table plus every HIGH-confidence dimension in your environment.
+  grouped_tables: [ "film" , "film_actor", "film_category" ]
+  #  - "ORDERS"
+  #  - "CUSTOMER"
+
+  # 1 normally; 2 when the tables have a semantic layer (physical + UI port).
+  ports: 1
