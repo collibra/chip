@@ -174,6 +174,34 @@ func TestDeleteSurfacesAPIRejection(t *testing.T) {
 	}
 }
 
+func TestDeleteServiceFailuresGetTailoredGuidance(t *testing.T) {
+	for name, tc := range map[string]struct {
+		getCode, deleteCode int
+		wantMessage         string
+		wantGuidance        string
+	}{
+		"unauthenticated on read":  {http.StatusUnauthorized, http.StatusNoContent, "HTTP 401", "Re-authenticate"},
+		"server error on read":     {http.StatusInternalServerError, http.StatusNoContent, "status 500", "nothing was deleted"},
+		"unauthenticated on write": {http.StatusOK, http.StatusUnauthorized, "HTTP 401", "Re-authenticate"},
+		"server error on write":    {http.StatusOK, http.StatusServiceUnavailable, "status 503", "not known whether the template"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client, _ := newServer(t, tc.getCode, storedTemplate(0, false), tc.deleteCode)
+
+			out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, Confirm: true})
+			if out.Status != tools.StatusError {
+				t.Fatalf("status = %q, want error", out.Status)
+			}
+			if !strings.Contains(out.Message, tc.wantMessage) {
+				t.Errorf("message = %q, want it to contain %q", out.Message, tc.wantMessage)
+			}
+			if !strings.Contains(out.Guidance, tc.wantGuidance) {
+				t.Errorf("guidance = %q, want it to contain %q", out.Guidance, tc.wantGuidance)
+			}
+		})
+	}
+}
+
 func TestDelete422DoesNotTellTheAgentToRetryUnchanged(t *testing.T) {
 	// §6.6: 422 is a typed status; the catch-all arm advises retrying, which is
 	// wrong for an unprocessable entity.
