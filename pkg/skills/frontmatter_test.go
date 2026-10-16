@@ -7,12 +7,13 @@ import (
 
 func TestParseFrontmatter(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		wantDesc    string
-		wantRelated []string
-		wantShared  []string
-		wantBody    string
+		name         string
+		input        string
+		wantDesc     string
+		wantRelated  []string
+		wantShared   []string
+		wantRequires []string
+		wantBody     string
 	}{
 		{
 			name:        "no frontmatter",
@@ -65,6 +66,18 @@ body`,
 			wantBody:   "body",
 		},
 		{
+			name: "requires capability",
+			input: `---
+description: Needs a capability.
+requires: data-quality
+---
+
+body`,
+			wantDesc:     "Needs a capability.",
+			wantRequires: []string{"data-quality"},
+			wantBody:     "body",
+		},
+		{
 			name: "unrecognized keys ignored",
 			input: `---
 description: keep this
@@ -88,6 +101,9 @@ body`,
 			}
 			if !slices.Equal(meta.shared, tt.wantShared) {
 				t.Errorf("shared = %v, want %v", meta.shared, tt.wantShared)
+			}
+			if !slices.Equal(meta.requires, tt.wantRequires) {
+				t.Errorf("requires = %v, want %v", meta.requires, tt.wantRequires)
 			}
 			if body != tt.wantBody {
 				t.Errorf("body = %q, want %q", body, tt.wantBody)

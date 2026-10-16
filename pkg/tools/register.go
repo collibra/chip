@@ -40,6 +40,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_lineage_upstream"
 	"github.com/collibra/chip/pkg/tools/get_measure_data"
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
+	"github.com/collibra/chip/pkg/tools/get_user_id_by_name"
 	"github.com/collibra/chip/pkg/tools/init_data_contract"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_context_specifications"
@@ -64,10 +65,6 @@ import (
 // ContextSpecificationsFeature is the experimental-feature identifier used to
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
-
-// DataQualityFeature is the experimental-feature identifier used to gate the
-// data quality tools.
-const DataQualityFeature = "data-quality"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -104,36 +101,49 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
+	// Registered WITHOUT an experimental flag, deviating from
+	// docs/TOOL_CONTRIBUTION_STANDARDS.md 3.1: this resolver only feeds the
+	// user-valued parameters of tools that are themselves ungated (the
+	// assessment tools below, edit_asset, search_asset_keyword). Gating it
+	// would ship exactly the broken half-a-pair that section 1.1 warns about —
+	// callers that accept a name with no tool available to resolve one.
+	toolRegister(server, toolConfig, get_user_id_by_name.NewTool(client))
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
-	toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
-	toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
-	toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
-	toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
 	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
-	toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, update_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job.NewTool(client))
-	toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
-	toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
-	toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
+	// The data quality tools are gated as one block behind the data-quality
+	// capability flag (--data-quality), not behind an experimental feature
+	// name: they are generally available, but several write to Collibra and
+	// two delete irreversibly, so an operator opts the capability in as a
+	// whole. Because the gate skips registration, the --enabled-tools
+	// allow-list cannot re-open it: it filters within the enabled
+	// capabilities, it is not an escape hatch around them.
+	if toolConfig.DataQuality {
+		toolRegister(server, toolConfig, create_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, create_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule_results.NewTool(client))
+		toolRegister(server, toolConfig, validate_dq_rule.NewTool(client))
+		toolRegister(server, toolConfig, list_dq_rule_templates.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, deploy_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, generate_dq_rule_sql.NewTool(client))
+		toolRegister(server, toolConfig, find_dq_rules.NewTool(client))
+		toolRegister(server, toolConfig, cancel_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, delete_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, update_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run.NewTool(client))
+		toolRegister(server, toolConfig, search_dq_jobs.NewTool(client))
+		toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
+		toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
+	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
 		toolRegister(server, toolConfig, get_context_specification.NewTool(client))
-	}
-
-	if toolConfig.IsExperimentalEnabled(DataQualityFeature) {
-		toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
-		toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
 	}
 
 	if toolConfig.EnableDebugTools {
@@ -141,7 +151,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	}
 
 	if skills.Enabled(toolConfig) {
-		if err := skills.RegisterAll(server, toolConfig.SkillsDir); err != nil {
+		if err := skills.RegisterAll(server, toolConfig); err != nil {
 			return fmt.Errorf("register skills: %w", err)
 		}
 	}
