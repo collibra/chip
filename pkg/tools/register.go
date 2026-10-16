@@ -47,6 +47,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_context_specifications"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
+	"github.com/collibra/chip/pkg/tools/list_dq_rule_template_deployments"
 	"github.com/collibra/chip/pkg/tools/list_dq_rule_templates"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
@@ -146,6 +147,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, create_dq_rule_template.NewTool(client))
 		toolRegister(server, toolConfig, update_dq_rule_template.NewTool(client))
 		toolRegister(server, toolConfig, delete_dq_rule_template.NewTool(client))
+		toolRegister(server, toolConfig, list_dq_rule_template_deployments.NewTool(client))
 	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))
