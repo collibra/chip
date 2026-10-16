@@ -378,3 +378,71 @@ func TestGetAssetDetailsSurfacesEmptyAssignableAttribute(t *testing.T) {
 		t.Errorf("Note has a value and should be isSet=true")
 	}
 }
+
+// TestGetAssetDetailsReturnsMultiValueAttributes: a Multiple Selection attribute
+// with several selected values must be requested in the query and returned like a
+// single-select attribute with several values (one string attribute per value),
+// and reported as isSet=true in assignableAttributes.
+func TestGetAssetDetailsReturnsMultiValueAttributes(t *testing.T) {
+	assetId, _ := uuid.NewUUID()
+	var sentQuery string
+	handler := http.NewServeMux()
+	handler.Handle("/graphql/knowledgeGraph/v1", testutil.JsonHandlerInOut(func(_ *http.Request, request clients.Request) (int, clients.Response) {
+		sentQuery = request.Query
+		return http.StatusOK, clients.Response{
+			Data: &clients.AssetQueryData{
+				Assets: []clients.Asset{{
+					ID:          assetId.String(),
+					DisplayName: "My Asset Name",
+					StringAttributes: []clients.StringAttribute{
+						{Value: "a note", Type: &clients.AttributeType{Name: "Note"}},
+					},
+					MultiValueAttributes: []clients.MultiValueAttribute{
+						{StringValues: "Public;Internal;Restricted", Type: &clients.AttributeType{Name: "Confidentiality"}},
+					},
+				}},
+			},
+		}
+	}))
+	handler.Handle("/rest/2.0/responsibilities", testutil.JsonHandlerOut(func(*http.Request) (int, clients.ResponsibilityPagedResponse) {
+		return http.StatusOK, clients.ResponsibilityPagedResponse{Limit: 100}
+	}))
+	handler.HandleFunc("GET /rest/2.0/assignments/asset/"+assetId.String(), func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"id": "assignment-effective",
+			"assetType": {"id": "t", "name": "Table"},
+			"assignedCharacteristicTypeReferences": [
+				{"id": "c1", "minimumOccurrences": 0, "assignedResourceReference": {"id": "conf", "name": "Confidentiality", "resourceDiscriminator": "MultiValueListAttributeType"}}
+			]
+		}`))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	output, err := tools.NewTool(testutil.NewClient(server), false).Handler(t.Context(), tools.Input{AssetID: assetId.String()})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(sentQuery, "multiValueAttributes(limit:") || !strings.Contains(sentQuery, "stringValues") {
+		t.Errorf("multiValueAttributes with stringValues not requested:\n%s", sentQuery)
+	}
+	var confidentiality []string
+	for _, a := range output.Asset.StringAttributes {
+		if a.Type != nil && a.Type.Name == "Confidentiality" {
+			confidentiality = append(confidentiality, a.Value)
+		}
+	}
+	if got := strings.Join(confidentiality, "|"); got != "Public|Internal|Restricted" {
+		t.Fatalf("expected one string attribute per selected value, got: %q (all: %+v)", got, output.Asset.StringAttributes)
+	}
+	if len(output.Asset.StringAttributes) != 4 {
+		t.Errorf("existing string attributes must be kept, got: %+v", output.Asset.StringAttributes)
+	}
+	if output.Asset.MultiValueAttributes != nil {
+		t.Errorf("multiValueAttributes must not be exposed separately, got: %+v", output.Asset.MultiValueAttributes)
+	}
+	if len(output.AssignableAttributes) != 1 || !output.AssignableAttributes[0].IsSet {
+		t.Errorf("Confidentiality has values and should be isSet=true, got: %+v", output.AssignableAttributes)
+	}
+}
