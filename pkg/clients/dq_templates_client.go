@@ -121,7 +121,7 @@ func GetDQRuleTemplate(ctx context.Context, client *http.Client, ruleTemplateNam
 		case http.StatusNotFound:
 			return nil, fmt.Errorf("getting dq rule template: %w: %q: %s", ErrDQRuleTemplateNotFound, ruleTemplateName, string(respBody))
 		default:
-			return nil, fmt.Errorf("getting dq rule template: unexpected status %d: %s", status, string(respBody))
+			return nil, dqStatusError("getting dq rule template", status, respBody)
 		}
 	}
 	var tmpl DQRuleTemplate

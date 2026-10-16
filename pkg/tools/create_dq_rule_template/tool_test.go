@@ -41,10 +41,32 @@ func newServer(t *testing.T, createCode int, createBody any, assets []map[string
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"results": assets})
 	})
+	mux.HandleFunc("GET /rest/2.0/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		asset, ok := assetsByID[r.PathValue("id")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(asset)
+	})
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return testutil.NewClient(srv), state
+}
+
+// Assets served by id: one Business Rule (its type id matches the asset type the
+// mock resolves for "BusinessRule") and one asset of another type.
+const (
+	businessRuleAssetID = "99999999-8888-7777-6666-555555555555"
+	columnAssetID       = "cccccccc-8888-7777-6666-555555555555"
+	unknownAssetID      = "dddddddd-8888-7777-6666-555555555555"
+)
+
+var assetsByID = map[string]map[string]any{
+	businessRuleAssetID: {"id": businessRuleAssetID, "name": "Email must be valid", "type": map[string]any{"id": "asset-type-uuid", "name": "Business Rule"}},
+	columnAssetID:       {"id": columnAssetID, "name": "email", "type": map[string]any{"id": "column-type-uuid", "name": "Column"}},
 }
 
 func createdTemplate() map[string]any {
@@ -152,7 +174,7 @@ func TestCreateResolvesBusinessRuleLinkByName(t *testing.T) {
 	client, state := newServer(t, http.StatusCreated, createdTemplate(), assets)
 
 	input := validInput()
-	input.BusinessRuleLinks = []string{"Email must be valid", "99999999-8888-7777-6666-555555555555"}
+	input.BusinessRuleLinks = []string{"Email must be valid", businessRuleAssetID}
 	input.Confirm = true
 	out, err := tools.NewTool(client).Handler(t.Context(), input)
 	if err != nil {
@@ -164,13 +186,69 @@ func TestCreateResolvesBusinessRuleLinkByName(t *testing.T) {
 
 	posted, ok := state.createdBody["businessRuleAssetIds"].([]any)
 	if !ok || len(posted) != 2 {
-		t.Fatalf("posted businessRuleAssetIds = %v, want the resolved name plus the passed-through UUID", state.createdBody["businessRuleAssetIds"])
+		t.Fatalf("posted businessRuleAssetIds = %v, want the resolved name plus the verified UUID", state.createdBody["businessRuleAssetIds"])
 	}
 	if posted[0] != "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" {
 		t.Errorf("posted[0] = %v, want the UUID resolved from the name", posted[0])
 	}
-	if posted[1] != "99999999-8888-7777-6666-555555555555" {
-		t.Errorf("posted[1] = %v, want the UUID passed through unresolved", posted[1])
+	if posted[1] != businessRuleAssetID {
+		t.Errorf("posted[1] = %v, want the UUID verified as a Business Rule asset", posted[1])
+	}
+}
+
+func TestCreateRejectsUUIDThatIsNotABusinessRuleAsset(t *testing.T) {
+	for name, tc := range map[string]struct {
+		id       string
+		wantText string
+	}{
+		"wrong asset type": {columnAssetID, "is a Column, not a Business Rule asset"},
+		"no such asset":    {unknownAssetID, "no asset has the UUID"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client, state := newServer(t, http.StatusCreated, createdTemplate(), nil)
+			input := validInput()
+			input.BusinessRuleLinks = []string{tc.id}
+			input.Confirm = true
+
+			out, _ := tools.NewTool(client).Handler(t.Context(), input)
+			if out.Status != tools.StatusValidationError {
+				t.Fatalf("status = %q, want validation_error (%s)", out.Status, out.Message)
+			}
+			if !strings.Contains(out.Message, tc.wantText) {
+				t.Errorf("message = %q, want it to contain %q", out.Message, tc.wantText)
+			}
+			if state.createCalls != 0 {
+				t.Errorf("create was called %d times despite an invalid link, want 0", state.createCalls)
+			}
+		})
+	}
+}
+
+func TestCreateServiceFailuresGetTailoredGuidance(t *testing.T) {
+	for name, tc := range map[string]struct {
+		code         int
+		wantMessage  string
+		wantGuidance string
+	}{
+		"unauthenticated": {http.StatusUnauthorized, "HTTP 401", "Re-authenticate"},
+		"server error":    {http.StatusInternalServerError, "status 500", "not known whether the template was created"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client, _ := newServer(t, tc.code, map[string]any{"message": "boom"}, nil)
+			input := validInput()
+			input.Confirm = true
+
+			out, _ := tools.NewTool(client).Handler(t.Context(), input)
+			if out.Status != tools.StatusError {
+				t.Fatalf("status = %q, want error", out.Status)
+			}
+			if !strings.Contains(out.Message, tc.wantMessage) {
+				t.Errorf("message = %q, want it to contain %q", out.Message, tc.wantMessage)
+			}
+			if !strings.Contains(out.Guidance, tc.wantGuidance) {
+				t.Errorf("guidance = %q, want it to contain %q", out.Guidance, tc.wantGuidance)
+			}
+		})
 	}
 }
 

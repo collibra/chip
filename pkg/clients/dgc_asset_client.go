@@ -3,11 +3,15 @@ package clients
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 )
+
+// ErrAssetNotFound is returned by GetAssetIdentity when no asset has the id.
+var ErrAssetNotFound = errors.New("not found")
 
 // AssetIdentity is the core identity of an asset from GET /rest/2.0/assets/{id}.
 type AssetIdentity struct {
@@ -50,7 +54,7 @@ func GetAssetIdentity(ctx context.Context, client *http.Client, assetID string) 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("not found")
+		return nil, ErrAssetNotFound
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

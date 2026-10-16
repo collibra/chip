@@ -98,7 +98,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Use this to add a new reusable check to the library; to change one that already exists use update_data_quality_rule_template, and to write a one-off check on a single job use create_data_quality_rule instead. " +
 			"name must be unique across the library — creating a template whose name is already taken fails, so check with list_data_quality_rule_templates first if unsure. " +
 			"sql, dialect, dimensions and description are all required by the data quality service. dialect is the SQL dialect the query is authored in and must be one of 'snowflake', 'bigquery', 'oracle', 'sqlserver', 'spark', 'redshift', 'databricks', 'sap', 'athena' or 'trino'; postgres and mysql are not supported. " +
-			"tolerance is the number of failing records a deployed rule allows before it is considered failed — a count, not a percentage — and defaults to 0, meaning one failing record fails the rule. businessRuleLinks optionally ties the template to Business Rule assets in the catalog, given by exact name or UUID — names are resolved before the write and an ambiguous name is reported rather than guessed. " +
+			"tolerance is the number of failing records a deployed rule allows before it is considered failed — a count, not a percentage — and defaults to 0, meaning one failing record fails the rule. businessRuleLinks optionally ties the template to Business Rule assets in the catalog, given by exact name or UUID — names are resolved and UUIDs are checked to be Business Rule assets before the write, and an ambiguous name is reported rather than guessed. " +
 			"Built around a confirm checkpoint: confirm=false (default) returns a PREVIEW of the exact template that would be created and writes nothing — review it with the user; confirm=true creates it. " +
 			"Returns the created template including its server-assigned id. Requires permission to manage rule templates. " +
 			"Example user requests: \"Add a reusable null-check template\"; \"Create a rule template for row count ranges in Snowflake\"; \"Make a template that enforces our email format rule\".",
@@ -247,6 +247,10 @@ func invalid(message string) *Output {
 }
 
 func createError(err error, name string) Output {
+	if out, ok := serviceError(err, fmt.Sprintf("creating rule template %q", name),
+		"This is a server-side failure, so it is not known whether the template was created. Check with get_data_quality_rule_template before retrying, so a retry does not fail as a duplicate."); ok {
+		return out
+	}
 	if errors.Is(err, clients.ErrDQRuleTemplateNameTaken) {
 		return Output{
 			Status:   StatusError,
@@ -266,6 +270,28 @@ func createError(err error, name string) Output {
 		Message:  fmt.Sprintf("Could not create rule template %q: %s", name, safeErr(err)),
 		Guidance: "Check the SQL, dialect and businessRuleLinks against the message above, then retry. Nothing was created.",
 	}
+}
+
+// serviceError maps the two failures that say nothing about the inputs: rejected
+// credentials and a data quality service fault. ok is false for anything else.
+// unknownOutcome is the guidance for a 5xx, which depends on whether a write was
+// in flight.
+func serviceError(err error, action, unknownOutcome string) (out Output, ok bool) {
+	switch {
+	case errors.Is(err, clients.ErrDQUnauthenticated):
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("Not authenticated to the data quality service while %s (HTTP 401).", action),
+			Guidance: "Your Collibra session or token is missing or expired. Re-authenticate and retry; nothing was changed.",
+		}, true
+	case errors.Is(err, clients.ErrDQServiceError):
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("The data quality service failed while %s: %s", action, safeErr(err)),
+			Guidance: unknownOutcome,
+		}, true
+	}
+	return Output{}, false
 }
 
 // maxErrMessage caps how much of a downstream error is forwarded to the model.

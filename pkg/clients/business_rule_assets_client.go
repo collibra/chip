@@ -3,6 +3,7 @@ package clients
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -72,18 +73,36 @@ func FindBusinessRuleAssetsByName(ctx context.Context, collibraHttpClient *http.
 // either an asset UUID or an exact asset name — into the UUIDs the DQ rule
 // template API expects.
 //
-// A reference that is already a UUID is passed through without a lookup. Any
-// reference that cannot be resolved to exactly one asset is reported in problems
-// as a sentence the agent can act on; ids is only complete when problems is
-// empty. A non-nil error means the lookup itself failed.
+// A reference that is a UUID is checked to exist and to be a Business Rule
+// asset, so a wrong id is caught before the write rather than as the DQ API's
+// generic 400. Any reference that cannot be resolved to exactly one Business
+// Rule asset is reported in problems as a sentence the agent can act on; ids is
+// only complete when problems is empty. A non-nil error means the lookup itself
+// failed.
 func ResolveBusinessRuleAssetRefs(ctx context.Context, collibraHttpClient *http.Client, refs []string) (ids []string, problems []string, err error) {
 	seen := make(map[string]bool, len(refs))
+	var businessRuleTypeID string
 	for _, raw := range refs {
 		ref := strings.TrimSpace(raw)
 		if ref == "" {
 			continue
 		}
 		if isUUID(ref) {
+			if businessRuleTypeID == "" {
+				assetType, err := GetAssetTypeByPublicID(ctx, collibraHttpClient, businessRuleAssetTypePublicID)
+				if err != nil {
+					return nil, nil, fmt.Errorf("resolve Business Rule asset type: %w", err)
+				}
+				businessRuleTypeID = assetType.ID
+			}
+			problem, err := checkBusinessRuleAssetID(ctx, collibraHttpClient, ref, businessRuleTypeID)
+			if err != nil {
+				return nil, nil, err
+			}
+			if problem != "" {
+				problems = append(problems, problem)
+				continue
+			}
 			appendUnique(&ids, seen, ref)
 			continue
 		}
@@ -103,6 +122,23 @@ func ResolveBusinessRuleAssetRefs(ctx context.Context, collibraHttpClient *http.
 		}
 	}
 	return ids, problems, nil
+}
+
+// checkBusinessRuleAssetID returns a problem sentence when id is not an existing
+// Business Rule asset, or "" when it is.
+func checkBusinessRuleAssetID(ctx context.Context, collibraHttpClient *http.Client, id, businessRuleTypeID string) (string, error) {
+	asset, err := GetAssetIdentity(ctx, collibraHttpClient, id)
+	if errors.Is(err, ErrAssetNotFound) {
+		return fmt.Sprintf("no asset has the UUID %s — check the id, or pass the Business Rule asset's exact name instead", id), nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("looking up asset %s: %w", id, err)
+	}
+	if asset.Type.ID != businessRuleTypeID {
+		return fmt.Sprintf("asset %s (%q) is a %s, not a Business Rule asset — only Business Rule assets can be linked to a rule template",
+			id, asset.Name, asset.Type.Name), nil
+	}
+	return "", nil
 }
 
 func appendUnique(ids *[]string, seen map[string]bool, id string) {
