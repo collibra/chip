@@ -245,3 +245,42 @@ func TestServerToolConfig_IsExperimentalEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestServerToolConfig_CapabilityEnabled(t *testing.T) {
+	off := &ServerToolConfig{}
+	if enabled, err := off.CapabilityEnabled(DataQualityCapabilityName); err != nil || enabled {
+		t.Errorf("CapabilityEnabled(%q) = %v, %v; want false, nil", DataQualityCapabilityName, enabled, err)
+	}
+
+	on := &ServerToolConfig{DataQuality: true}
+	if enabled, err := on.CapabilityEnabled(DataQualityCapabilityName); err != nil || !enabled {
+		t.Errorf("CapabilityEnabled(%q) = %v, %v; want true, nil", DataQualityCapabilityName, enabled, err)
+	}
+
+	_, err := on.CapabilityEnabled("warp-drive")
+	if err == nil {
+		t.Fatal("expected an error for an unknown capability name")
+	}
+	if !strings.Contains(err.Error(), "warp-drive") {
+		t.Errorf("error should name the offending value, got: %v", err)
+	}
+	for _, known := range KnownCapabilityNames() {
+		if !strings.Contains(err.Error(), known) {
+			t.Errorf("error should list known capability %q, got: %v", known, err)
+		}
+	}
+}
+
+// The error text lists the known capabilities rather than restating one, so
+// it cannot go stale when a second capability flag lands.
+func TestKnownCapabilityNames(t *testing.T) {
+	names := KnownCapabilityNames()
+	if len(names) == 0 {
+		t.Fatal("expected at least one known capability")
+	}
+	for _, name := range names {
+		if _, err := (&ServerToolConfig{}).CapabilityEnabled(name); err != nil {
+			t.Errorf("KnownCapabilityNames lists %q but CapabilityEnabled rejects it: %v", name, err)
+		}
+	}
+}

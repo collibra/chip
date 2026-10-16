@@ -60,6 +60,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{}, err
 		}
 
+		if _, err := clients.RequireAsset(ctx, collibraClient, "business term", input.BusinessTermID); err != nil {
+			return Output{}, err
+		}
+
 		dataAttributes, err := clients.FindConnectedAssets(ctx, collibraClient, input.BusinessTermID, clients.BusinessAssetRepresentsDataAssetRelID)
 		if err != nil {
 			return Output{}, err
