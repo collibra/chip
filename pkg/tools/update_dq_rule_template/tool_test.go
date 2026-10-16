@@ -181,6 +181,92 @@ func TestUpdateSendsMergedPayload(t *testing.T) {
 	}
 }
 
+func TestUpdateClearsBusinessRuleLinks(t *testing.T) {
+	client, state := newServer(t, http.StatusOK, storedTemplate(), http.StatusOK, updateResult(nil))
+
+	preview, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, ClearBusinessRuleLinks: true})
+	if preview.Status != tools.StatusPreview {
+		t.Fatalf("preview status = %q, want preview (%s)", preview.Status, preview.Message)
+	}
+	if got := preview.Preview.ChangedFields; len(got) != 1 || got[0] != "businessRuleLinks" {
+		t.Errorf("changedFields = %v, want [businessRuleLinks]", got)
+	}
+	if len(preview.Preview.Template.BusinessRuleAssetIDs) != 0 {
+		t.Errorf("previewed links = %v, want none", preview.Preview.Template.BusinessRuleAssetIDs)
+	}
+
+	out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, ClearBusinessRuleLinks: true, Confirm: true})
+	if out.Status != tools.StatusSuccess {
+		t.Fatalf("status = %q, want success (%s)", out.Status, out.Message)
+	}
+	// The API reads an absent businessRuleAssetIds as an empty list, which clears them.
+	if links, present := state.putBody["businessRuleAssetIds"]; present && len(links.([]any)) != 0 {
+		t.Errorf("put businessRuleAssetIds = %v, want it absent or empty", links)
+	}
+	if got := state.putBody["sql"]; got != storedTemplate()["sql"] {
+		t.Errorf("put sql = %v, want the stored value preserved", got)
+	}
+}
+
+func TestUpdateClearingAbsentLinksIsNoChange(t *testing.T) {
+	stored := storedTemplate()
+	delete(stored, "businessRuleAssetIds")
+	client, state := newServer(t, http.StatusOK, stored, http.StatusOK, updateResult(nil))
+
+	out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, ClearBusinessRuleLinks: true, Confirm: true})
+	if out.Status != tools.StatusValidationError {
+		t.Fatalf("status = %q, want validation_error for a no-op (%s)", out.Status, out.Message)
+	}
+	if state.putCalls != 0 {
+		t.Errorf("put was called %d times for a no-op, want 0", state.putCalls)
+	}
+}
+
+func TestUpdateRejectsClearTogetherWithLinks(t *testing.T) {
+	client, state := newServer(t, http.StatusOK, storedTemplate(), http.StatusOK, updateResult(nil))
+
+	out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{
+		Name: templateName, ClearBusinessRuleLinks: true, BusinessRuleLinks: []string{"Email must be valid"}, Confirm: true,
+	})
+	if out.Status != tools.StatusValidationError {
+		t.Fatalf("status = %q, want validation_error", out.Status)
+	}
+	if !strings.Contains(out.Message, "cannot both be set") {
+		t.Errorf("message = %q, want it to explain the conflict", out.Message)
+	}
+	if state.putCalls != 0 {
+		t.Errorf("put was called %d times, want 0", state.putCalls)
+	}
+}
+
+func TestUpdateServiceFailuresGetTailoredGuidance(t *testing.T) {
+	for name, tc := range map[string]struct {
+		getCode, putCode int
+		wantMessage      string
+		wantGuidance     string
+	}{
+		"unauthenticated on read":  {http.StatusUnauthorized, http.StatusOK, "HTTP 401", "Re-authenticate"},
+		"server error on read":     {http.StatusInternalServerError, http.StatusOK, "status 500", "nothing was changed"},
+		"unauthenticated on write": {http.StatusOK, http.StatusUnauthorized, "HTTP 401", "Re-authenticate"},
+		"server error on write":    {http.StatusOK, http.StatusBadGateway, "status 502", "not known whether the update"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client, _ := newServer(t, tc.getCode, storedTemplate(), tc.putCode, map[string]any{"message": "boom"})
+
+			out, _ := tools.NewTool(client).Handler(t.Context(), tools.Input{Name: templateName, SQL: "select 2", Confirm: true})
+			if out.Status != tools.StatusError {
+				t.Fatalf("status = %q, want error", out.Status)
+			}
+			if !strings.Contains(out.Message, tc.wantMessage) {
+				t.Errorf("message = %q, want it to contain %q", out.Message, tc.wantMessage)
+			}
+			if !strings.Contains(out.Guidance, tc.wantGuidance) {
+				t.Errorf("guidance = %q, want it to contain %q", out.Guidance, tc.wantGuidance)
+			}
+		})
+	}
+}
+
 func TestUpdateReportsPartialCascade(t *testing.T) {
 	deployments := []map[string]any{
 		{"jobName": "PUBLIC.A", "status": "DEPLOYED", "deployedRuleName": "Row Count Range_amount"},

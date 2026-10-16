@@ -165,6 +165,10 @@ func deletedMessage(plan *DeletionPlan) string {
 }
 
 func lookupError(err error, name string) Output {
+	if out, ok := serviceError(err, fmt.Sprintf("reading rule template %q", name),
+		"This is a server-side failure reading the template; nothing was deleted. Retry shortly, and contact your Collibra administrator if it persists."); ok {
+		return out
+	}
 	if errors.Is(err, clients.ErrDQRuleTemplateNotFound) {
 		return Output{
 			Status:   StatusError,
@@ -180,6 +184,10 @@ func lookupError(err error, name string) Output {
 }
 
 func deleteError(err error, name string) Output {
+	if out, ok := serviceError(err, fmt.Sprintf("deleting rule template %q", name),
+		"This is a server-side failure, so it is not known whether the template (and, with cascade, its deployed rules) was deleted. Check with get_data_quality_rule_template before retrying."); ok {
+		return out
+	}
 	if errors.Is(err, clients.ErrDQRuleTemplateReadOnly) {
 		return Output{
 			Status:   StatusValidationError,
@@ -199,6 +207,28 @@ func deleteError(err error, name string) Output {
 		Message:  fmt.Sprintf("Could not delete rule template %q: %s", name, safeErr(err)),
 		Guidance: "Retry, or check your permission to manage rule templates. The template may still exist — confirm with get_data_quality_rule_template.",
 	}
+}
+
+// serviceError maps the two failures that say nothing about the inputs: rejected
+// credentials and a data quality service fault. ok is false for anything else.
+// unknownOutcome is the guidance for a 5xx, which depends on whether a write was
+// in flight.
+func serviceError(err error, action, unknownOutcome string) (out Output, ok bool) {
+	switch {
+	case errors.Is(err, clients.ErrDQUnauthenticated):
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("Not authenticated to the data quality service while %s (HTTP 401).", action),
+			Guidance: "Your Collibra session or token is missing or expired. Re-authenticate and retry; nothing was changed.",
+		}, true
+	case errors.Is(err, clients.ErrDQServiceError):
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("The data quality service failed while %s: %s", action, safeErr(err)),
+			Guidance: unknownOutcome,
+		}, true
+	}
+	return Output{}, false
 }
 
 // maxErrMessage caps how much of a downstream error is forwarded to the model.

@@ -65,14 +65,15 @@ const (
 // Input is the tool's typed input. Every field except name is optional: omit one
 // to leave that part of the template unchanged.
 type Input struct {
-	Name              string   `json:"name" jsonschema:"Required. Name of the existing rule template to update. The template is addressed by name; this tool never renames it."`
-	SQL               string   `json:"sql,omitempty" jsonschema:"Optional. Replacement parameterized SQL, up to 10000 characters, using {{dq-jobname}} for the job's table and {{column}} for the column being checked. Omit to keep the stored SQL."`
-	Dialect           string   `json:"dialect,omitempty" jsonschema:"Optional. Replacement SQL dialect the query is authored in, one of 'snowflake', 'bigquery', 'oracle', 'sqlserver', 'spark', 'redshift', 'databricks', 'sap', 'athena' or 'trino', matched case-insensitively. postgres and mysql are NOT supported. Omit to keep the stored dialect."`
-	Dimensions        []string `json:"dimensions,omitempty" jsonschema:"Optional. Replacement list of data quality dimensions, at least one and at most 20. This REPLACES the stored list rather than adding to it. Omit to keep the stored dimensions."`
-	Description       string   `json:"description,omitempty" jsonschema:"Optional. Replacement description, up to 1000 characters. Omit to keep the stored description."`
-	Tolerance         *int     `json:"tolerance,omitempty" jsonschema:"Optional. Number of failing ('breaking') records allowed before a rule deployed from this template is considered failed — a count, NOT a percentage. Must be 0 or greater. Omit to keep the stored tolerance. Setting it to 0 is a real change, not an omission: 0 means a single failing record fails the rule."`
-	BusinessRuleLinks []string `json:"businessRuleLinks,omitempty" jsonschema:"Optional, up to 100. Replacement list of Business Rule assets this template implements, each given as the asset's exact name or its UUID. This REPLACES the stored links rather than adding to them. Omit to keep the stored links. Names are resolved to UUIDs before the write; an ambiguous name is reported rather than guessed."`
-	Confirm           bool     `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of the merged template, plus the number of deployed rules the change will cascade onto, and writes NOTHING. Set true to apply the update after the user has approved."`
+	Name                   string   `json:"name" jsonschema:"Required. Name of the existing rule template to update. The template is addressed by name; this tool never renames it."`
+	SQL                    string   `json:"sql,omitempty" jsonschema:"Optional. Replacement parameterized SQL, up to 10000 characters, using {{dq-jobname}} for the job's table and {{column}} for the column being checked. Omit to keep the stored SQL."`
+	Dialect                string   `json:"dialect,omitempty" jsonschema:"Optional. Replacement SQL dialect the query is authored in, one of 'snowflake', 'bigquery', 'oracle', 'sqlserver', 'spark', 'redshift', 'databricks', 'sap', 'athena' or 'trino', matched case-insensitively. postgres and mysql are NOT supported. Omit to keep the stored dialect."`
+	Dimensions             []string `json:"dimensions,omitempty" jsonschema:"Optional. Replacement list of data quality dimensions, at least one and at most 20. This REPLACES the stored list rather than adding to it. Omit to keep the stored dimensions."`
+	Description            string   `json:"description,omitempty" jsonschema:"Optional. Replacement description, up to 1000 characters. Omit to keep the stored description."`
+	Tolerance              *int     `json:"tolerance,omitempty" jsonschema:"Optional. Number of failing ('breaking') records allowed before a rule deployed from this template is considered failed — a count, NOT a percentage. Must be 0 or greater. Omit to keep the stored tolerance. Setting it to 0 is a real change, not an omission: 0 means a single failing record fails the rule."`
+	BusinessRuleLinks      []string `json:"businessRuleLinks,omitempty" jsonschema:"Optional, up to 100. Replacement list of Business Rule assets this template implements, each given as the asset's exact name or its UUID. This REPLACES the stored links rather than adding to them. Omit to keep the stored links; to remove every link use clearBusinessRuleLinks instead. Names are resolved to UUIDs before the write; an ambiguous name is reported rather than guessed."`
+	ClearBusinessRuleLinks bool     `json:"clearBusinessRuleLinks,omitempty" jsonschema:"Optional. Set true to remove every Business Rule asset link from the template. Cannot be combined with businessRuleLinks. An empty businessRuleLinks list does NOT clear the links — it is treated as omitted."`
+	Confirm                bool     `json:"confirm,omitempty" jsonschema:"Safety checkpoint. false (default) returns a PREVIEW of the merged template, plus the number of deployed rules the change will cascade onto, and writes NOTHING. Set true to apply the update after the user has approved."`
 }
 
 // TemplateDefinition is the complete template that will be, or was, written —
@@ -129,7 +130,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"The preview reports how many deployed rules will be affected, and the result reports per-rule outcomes, since a rule can be SKIPPED (for example when the template cannot be translated into that job's dialect) while others take the change. " +
 			"Use this to correct or evolve a template already in the library; to add a new one use create_data_quality_rule_template, and to change a single rule on one job use create_data_quality_rule instead. " +
 			"Out-of-the-box (system) templates are read-only and cannot be updated. " +
-			"tolerance is the number of failing records a deployed rule allows before it is considered failed — a count, not a percentage. dimensions and businessRuleLinks REPLACE the stored lists rather than adding to them; businessRuleLinks accepts Business Rule asset names or UUIDs and resolves names before the write. " +
+			"tolerance is the number of failing records a deployed rule allows before it is considered failed — a count, not a percentage. dimensions and businessRuleLinks REPLACE the stored lists rather than adding to them; businessRuleLinks accepts Business Rule asset names or UUIDs and resolves names before the write; set clearBusinessRuleLinks=true to remove every link. " +
 			"Built around a confirm checkpoint: confirm=false (default) returns a PREVIEW of the merged template and the affected-rule count and writes nothing — review it with the user; confirm=true applies the update. " +
 			"Requires permission to manage rule templates. " +
 			"Example user requests: \"Update the null-check template's SQL\"; \"Change the dimensions on our row count template\"; \"Fix the template and push it to everything using it\".",
@@ -169,7 +170,7 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			return Output{
 				Status:   StatusValidationError,
 				Message:  fmt.Sprintf("No changes were supplied for rule template %q.", name),
-				Guidance: "Supply at least one of sql, dialect, dimensions, description, tolerance or businessRuleLinks with a value that differs from the stored one.",
+				Guidance: "Supply at least one of sql, dialect, dimensions, description, tolerance, businessRuleLinks or clearBusinessRuleLinks with a value that differs from the stored one.",
 			}, nil
 		}
 
@@ -221,6 +222,9 @@ func validateChanges(input Input) *Output {
 	}
 	if input.Tolerance != nil && *input.Tolerance < 0 {
 		return invalid(fmt.Sprintf("tolerance is %d; it must be 0 or greater — it is a count of failing records allowed, not a percentage.", *input.Tolerance))
+	}
+	if input.ClearBusinessRuleLinks && len(input.BusinessRuleLinks) > 0 {
+		return invalid("businessRuleLinks and clearBusinessRuleLinks cannot both be set — supply the replacement links, or set clearBusinessRuleLinks to remove them all.")
 	}
 	if len(input.BusinessRuleLinks) > maxBusinessRuleLinks {
 		return invalid(fmt.Sprintf("businessRuleLinks has %d entries; the maximum is %d.", len(input.BusinessRuleLinks), maxBusinessRuleLinks))
@@ -288,6 +292,12 @@ func merge(ctx context.Context, collibraClient *http.Client, input Input, stored
 			merged.BusinessRuleAssetIDs = ids
 			changed = append(changed, "businessRuleLinks")
 		}
+	}
+	// The PUT treats an absent businessRuleAssetIds as an empty list, so dropping
+	// the stored ids from the payload is what clears them server-side.
+	if input.ClearBusinessRuleLinks && len(stored.BusinessRuleAssetIDs) > 0 {
+		merged.BusinessRuleAssetIDs = nil
+		changed = append(changed, "businessRuleLinks")
 	}
 
 	// The PUT payload always requires these, so a template stored without one
@@ -384,6 +394,10 @@ func invalid(message string) *Output {
 }
 
 func lookupError(err error, name string) Output {
+	if out, ok := serviceError(err, fmt.Sprintf("reading rule template %q", name),
+		"This is a server-side failure reading the template; nothing was changed. Retry shortly, and contact your Collibra administrator if it persists."); ok {
+		return out
+	}
 	if errors.Is(err, clients.ErrDQRuleTemplateNotFound) {
 		return Output{
 			Status:   StatusError,
@@ -399,6 +413,10 @@ func lookupError(err error, name string) Output {
 }
 
 func updateError(err error, name string) Output {
+	if out, ok := serviceError(err, fmt.Sprintf("updating rule template %q", name),
+		"This is a server-side failure, so it is not known whether the update and its cascade were applied. Compare the template with get_data_quality_rule_template before retrying."); ok {
+		return out
+	}
 	if strings.Contains(err.Error(), "status 422") {
 		return Output{
 			Status:   StatusError,
@@ -411,6 +429,28 @@ func updateError(err error, name string) Output {
 		Message:  fmt.Sprintf("Could not update rule template %q: %s", name, safeErr(err)),
 		Guidance: "Check the SQL, dialect and businessRuleLinks against the message above, then retry. The template was not changed.",
 	}
+}
+
+// serviceError maps the two failures that say nothing about the inputs: rejected
+// credentials and a data quality service fault. ok is false for anything else.
+// unknownOutcome is the guidance for a 5xx, which depends on whether a write was
+// in flight.
+func serviceError(err error, action, unknownOutcome string) (out Output, ok bool) {
+	switch {
+	case errors.Is(err, clients.ErrDQUnauthenticated):
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("Not authenticated to the data quality service while %s (HTTP 401).", action),
+			Guidance: "Your Collibra session or token is missing or expired. Re-authenticate and retry; nothing was changed.",
+		}, true
+	case errors.Is(err, clients.ErrDQServiceError):
+		return Output{
+			Status:   StatusError,
+			Message:  fmt.Sprintf("The data quality service failed while %s: %s", action, safeErr(err)),
+			Guidance: unknownOutcome,
+		}, true
+	}
+	return Output{}, false
 }
 
 // maxErrMessage caps how much of a downstream error is forwarded to the model.

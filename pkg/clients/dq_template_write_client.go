@@ -28,6 +28,12 @@ var (
 	// to the given template — either it is already standalone, or it came from a
 	// different template. The API answers 400 and does not distinguish the two.
 	ErrDQRuleNotFromTemplate = errors.New("rule is not linked to this template")
+	// ErrDQUnauthenticated means the data quality API rejected the caller's
+	// credentials (401).
+	ErrDQUnauthenticated = errors.New("not authenticated to the data quality service")
+	// ErrDQServiceError means the data quality API failed on its side (5xx), so
+	// whether a write took effect is unknown.
+	ErrDQServiceError = errors.New("data quality service error")
 )
 
 // DQRuleTemplateWriteRequest is the create/update payload for a rule template
@@ -65,7 +71,7 @@ func CreateDQRuleTemplate(ctx context.Context, client *http.Client, request DQRu
 		case http.StatusForbidden:
 			return nil, fmt.Errorf("%s: missing permission to manage rule templates: %s", op, string(respBody))
 		default:
-			return nil, fmt.Errorf("%s: unexpected status %d: %s", op, status, string(respBody))
+			return nil, dqStatusError(op, status, respBody)
 		}
 	}
 	var created DQRuleTemplate
@@ -105,7 +111,7 @@ func UpdateDQRuleTemplate(ctx context.Context, client *http.Client, ruleTemplate
 		case http.StatusForbidden:
 			return nil, fmt.Errorf("%s: missing permission to manage rule templates: %s", op, string(respBody))
 		default:
-			return nil, fmt.Errorf("%s: unexpected status %d: %s", op, status, string(respBody))
+			return nil, dqStatusError(op, status, respBody)
 		}
 	}
 	var result DQRuleTemplateUpdateResult
@@ -138,6 +144,20 @@ func DeleteDQRuleTemplate(ctx context.Context, client *http.Client, ruleTemplate
 		return fmt.Errorf("%s: %w: %q: %s", op, ErrDQRuleTemplateReadOnly, ruleTemplateName, string(respBody))
 	case http.StatusForbidden:
 		return fmt.Errorf("%s: missing permission to manage rule templates: %s", op, string(respBody))
+	default:
+		return dqStatusError(op, status, respBody)
+	}
+}
+
+// dqStatusError describes a status the caller has no specific branch for. 401 and
+// 5xx wrap a sentinel so tools can give targeted guidance; the "status N" text is
+// kept in every case because tools match on it (e.g. "status 422").
+func dqStatusError(op string, status int, respBody []byte) error {
+	switch {
+	case status == http.StatusUnauthorized:
+		return fmt.Errorf("%s: %w (status %d): %s", op, ErrDQUnauthenticated, status, string(respBody))
+	case status >= http.StatusInternalServerError:
+		return fmt.Errorf("%s: %w (status %d): %s", op, ErrDQServiceError, status, string(respBody))
 	default:
 		return fmt.Errorf("%s: unexpected status %d: %s", op, status, string(respBody))
 	}
