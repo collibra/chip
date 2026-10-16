@@ -6,13 +6,14 @@ type frontmatter struct {
 	description string
 	related     []string
 	shared      []string
+	requires    []string
 }
 
 // parseFrontmatter extracts a minimal YAML-like header delimited by `---`
 // lines at the top of the document. Recognized keys: description, related,
-// shared (the latter two comma-separated). Anything after the closing `---`
-// is returned as the body verbatim. If no frontmatter is present, the whole
-// input is the body.
+// shared, requires (the last three comma-separated). Anything after the
+// closing `---` is returned as the body verbatim. If no frontmatter is
+// present, the whole input is the body.
 func parseFrontmatter(raw string) (frontmatter, string) {
 	lines := strings.SplitN(raw, "\n", 2)
 	if len(lines) < 2 || strings.TrimSpace(lines[0]) != "---" {
@@ -42,6 +43,8 @@ func parseFrontmatter(raw string) (frontmatter, string) {
 			meta.related = splitCSV(value)
 		case "shared":
 			meta.shared = splitCSV(value)
+		case "requires":
+			meta.requires = splitCSV(value)
 		}
 	}
 	return meta, body

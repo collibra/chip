@@ -253,6 +253,36 @@ func TestGetScopedAssignment_DirectTraitShadowsAncestorTrait(t *testing.T) {
 	}
 }
 
+func TestEmitAssignmentCharacteristics_ReadOnlyTraitCopyMarksAttributeReadOnly(t *testing.T) {
+	scoreRef := func(min int, readOnly bool) rawAssignedCharacteristicTypeReference {
+		return rawAssignedCharacteristicTypeReference{
+			AssignedResourceReference: rawAssignmentResourceRef{
+				ID: "attr-score", Name: "AI Trust Score", ResourceDiscriminator: "NumericAttributeType",
+			},
+			MinimumOccurrences: min,
+			ReadOnly:           readOnly,
+		}
+	}
+	got := emitAssignmentCharacteristics(rawScopedAssignment{
+		ID:                                   "assignment-1",
+		AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{scoreRef(1, false)},
+		TraitAssignmentInheritances: []rawTraitAssignmentInheritance{{
+			AssignedCharacteristicTypeReferences: []rawAssignedCharacteristicTypeReference{scoreRef(0, true)},
+		}},
+	})
+
+	if n := attrCount(got.Attributes, "AI Trust Score"); n != 1 {
+		t.Fatalf("expected the duplicate to be merged into one slot, got %d", n)
+	}
+	score, _ := attrByName(got.Attributes, "AI Trust Score")
+	if !score.ReadOnly {
+		t.Errorf("a read-only trait copy must make the attribute read-only, got %+v", score)
+	}
+	if score.Min != 1 {
+		t.Errorf("the direct reference must still win the other fields (Min=1), got Min=%d", score.Min)
+	}
+}
+
 func TestGetScopedAssignment_BidirectionalRelation_BothDirectionsKept(t *testing.T) {
 	h := newScenarioHarness(t, "characteristic_emit")
 
