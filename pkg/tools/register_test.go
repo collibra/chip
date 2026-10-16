@@ -53,6 +53,7 @@ var dataQualityToolNames = []string{
 	"dq_search_job_runs",
 	"get_data_quality_job_run_profile",
 	"get_data_quality_job_run_monitors",
+	"update_data_quality_job_run_monitors",
 }
 
 func TestRegisterAll_DataQualityToolsHiddenByDefault(t *testing.T) {

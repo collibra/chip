@@ -59,6 +59,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
+	"github.com/collibra/chip/pkg/tools/update_dq_job_run_monitors"
 	"github.com/collibra/chip/pkg/tools/validate_dq_rule"
 )
 
@@ -140,6 +141,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 		toolRegister(server, toolConfig, search_dq_job_runs.NewTool(client))
 		toolRegister(server, toolConfig, get_dq_job_run_profile.NewTool(client))
 		toolRegister(server, toolConfig, get_dq_job_run_monitors.NewTool(client))
+		toolRegister(server, toolConfig, update_dq_job_run_monitors.NewTool(client))
 	}
 	if toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature) {
 		toolRegister(server, toolConfig, list_context_specifications.NewTool(client))

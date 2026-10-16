@@ -763,6 +763,38 @@ func GetDqJobRunMonitors(ctx context.Context, collibraHttpClient *http.Client, j
 	return &result, code, nil
 }
 
+// DqMonitorOperation is one entry of JobRunMonitorOperationsRequest: the operation to apply to a
+// single monitor result of a run. monitorName is the name exactly as GetDqJobRunMonitors returns it.
+type DqMonitorOperation struct {
+	MonitorName string `json:"monitorName"`
+	Operation   string `json:"operation"`
+}
+
+// DqMonitorOperationSuppress is the SUPPRESS operation: the monitor result is excluded from the
+// run's score, and an adaptive monitor is retrained.
+const DqMonitorOperationSuppress = "SUPPRESS"
+
+// UpdateDqJobRunMonitors applies operations to monitor results of a job run via the PUBLIC
+// PUT /rest/dq/1.0/jobRuns/{jobRunId}/monitors (updateJobRunMonitors). The service validates every
+// operation before writing and applies them in one transaction, so the batch either succeeds whole
+// (204) or is rejected whole. The HTTP status is returned alongside the error so callers can map it
+// to actionable guidance.
+func UpdateDqJobRunMonitors(ctx context.Context, collibraHttpClient *http.Client, jobRunID string, operations []DqMonitorOperation) (int, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Applying %d monitor operation(s) to DQ job run '%s'", len(operations), jobRunID))
+	endpoint := "/rest/dq/1.0/jobRuns/" + url.PathEscape(jobRunID) + "/monitors"
+	body := struct {
+		Operations []DqMonitorOperation `json:"operations"`
+	}{Operations: operations}
+	respBody, code, err := dqDo(ctx, collibraHttpClient, http.MethodPut, endpoint, body)
+	if err != nil {
+		return code, err
+	}
+	if code < 200 || code >= 300 {
+		return code, fmt.Errorf("HTTP %d: %s", code, string(respBody))
+	}
+	return code, nil
+}
+
 func SearchCancellableDqJobRuns(ctx context.Context, collibraHttpClient *http.Client, jobName string) ([]DqJobRun, int, error) {
 	return searchDqJobRunsByName(ctx, collibraHttpClient, jobName, DqCancellableRunStates)
 }
