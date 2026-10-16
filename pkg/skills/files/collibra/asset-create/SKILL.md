@@ -80,6 +80,11 @@ A `ready` response carries the resolved schema. Each `attributeSchema` entry and
   `shared/rich-text-markdown.md`.
 - An unknown attribute name returns `validation_error` with a list of valid names — self-
   correct using that list.
+- Attributes the assignment marks read-only (values Collibra calculates, such as a trust
+  score) can't be supplied: `create_asset` returns `validation_error` naming the attribute.
+  They never need to be supplied, even when marked required, and `prepare_create_asset`
+  flags them with `"readOnly": true`.
+  Tell the user the value is calculated rather than retrying with it.
 
 ## Edits, not creates
 
