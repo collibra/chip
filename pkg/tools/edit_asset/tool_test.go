@@ -125,6 +125,29 @@ func newStub() *stub {
 	}
 }
 
+// markReadOnly flags the given attribute types as read-only in the served
+// assignment.
+func (s *stub) markReadOnly(attrTypeIDs ...string) {
+	for _, id := range attrTypeIDs {
+		at := s.attrTypesByID[id]
+		at.ReadOnly = true
+		s.attrTypesByID[id] = at
+	}
+}
+
+// attributeWrites counts every attribute create, patch and delete the
+// stub received, individual or bulk.
+func (s *stub) attributeWrites() int {
+	n := len(s.patchedAttrs) + len(s.createdAttrs) + len(s.deletedAttrIDs)
+	for _, batch := range s.bulkCreatedAttrs {
+		n += len(batch)
+	}
+	for _, batch := range s.bulkPatchedAttrs {
+		n += len(batch)
+	}
+	return n
+}
+
 func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 	t.Helper()
 
@@ -224,6 +247,7 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 			refs = append(refs, map[string]any{
 				"id":                 "attr-line-" + v.ID,
 				"minimumOccurrences": 0,
+				"readOnly":           v.ReadOnly,
 				"assignedResourceReference": map[string]any{
 					"id":                    v.ID,
 					"name":                  v.Name,
@@ -337,18 +361,19 @@ func (s *stub) install(mux *http.ServeMux, t *testing.T) {
 		})
 	})
 
-	// The real /rest/2.0/users endpoint only supports a loose `name` filter
-	// (partial match over username/first/last) and silently ignores unknown
-	// params such as `emailAddress`. The mock mirrors that so the resolver's
-	// client-side validation is actually exercised.
+	// The real /rest/2.0/users endpoint only supports a loose `name` filter: a
+	// partial, case-insensitive match over the fields named by
+	// `nameSearchFields`, whose defaults — sent explicitly by the client — are
+	// USERNAME, FIRSTNAME, LASTNAME, FIRSTNAME_LASTNAME and LASTNAME_FIRSTNAME.
+	// The last two match the concatenated display name, which is what makes a
+	// two-word name resolvable at all. It silently ignores unknown params such
+	// as `emailAddress`. The mock mirrors both so the resolver's own precedence
+	// and its client-side validation are actually exercised.
 	mux.HandleFunc("GET /rest/2.0/users", func(w http.ResponseWriter, r *http.Request) {
 		name := strings.ToLower(r.URL.Query().Get("name"))
 		var matches []clients.EditAssetUser
 		for _, u := range s.users {
-			if name == "" ||
-				strings.Contains(strings.ToLower(u.UserName), name) ||
-				strings.Contains(strings.ToLower(u.FirstName), name) ||
-				strings.Contains(strings.ToLower(u.LastName), name) {
+			if name == "" || matchesUserNameSearch(u, name) {
 				matches = append(matches, u)
 			}
 		}
@@ -881,6 +906,149 @@ func TestEditAsset_UnknownAttributeName(t *testing.T) {
 	}
 }
 
+func TestEditAsset_SetAttribute_ReadOnlyRejected(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetAttribute, AttributeName: "Definition", Value: "new def",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected error, got %q", out.Status)
+	}
+	want := `attribute "Definition" is read-only for asset type "Business Term" and cannot be changed: Collibra sets its value. Drop this operation; other attributes can still be edited.`
+	if out.Results[0].Status != "error" || out.Results[0].Error != want {
+		t.Fatalf("expected read-only error %q, got %+v", want, out.Results[0])
+	}
+	if len(s.patchedAttrs) != 0 || len(s.createdAttrs) != 0 {
+		t.Fatalf("expected no writes, got patched=%+v created=%+v", s.patchedAttrs, s.createdAttrs)
+	}
+}
+
+func TestEditAsset_UpdateAttribute_ReadOnlyRejected(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpUpdateAttribute, AttributeName: "Definition", Value: "new def",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.Results[0].Error, "is read-only for asset type") {
+		t.Fatalf("expected read-only error, got %+v", out.Results[0])
+	}
+	if len(s.patchedAttrs) != 0 {
+		t.Fatalf("expected no PATCH, got %+v", s.patchedAttrs)
+	}
+}
+
+func TestEditAsset_AddAttribute_ReadOnlyRejected(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(noteAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddAttribute, AttributeName: "Note", Value: "Reviewed",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected error, got %q", out.Status)
+	}
+	if !strings.Contains(out.Results[0].Error, "is read-only for asset type") {
+		t.Fatalf("expected read-only error, got %+v", out.Results[0])
+	}
+	if len(s.createdAttrs) != 0 {
+		t.Fatalf("expected no POST /attributes, got %+v", s.createdAttrs)
+	}
+}
+
+func TestEditAsset_RemoveAttribute_ReadOnlyRejected(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpRemoveAttribute, AttributeName: "Definition",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected error, got %q", out.Status)
+	}
+	if !strings.Contains(out.Results[0].Error, "is read-only for asset type") {
+		t.Fatalf("expected read-only error, got %+v", out.Results[0])
+	}
+	if len(s.deletedAttrIDs) != 0 {
+		t.Fatalf("expected no DELETE, got %+v", s.deletedAttrIDs)
+	}
+}
+
+func TestEditAsset_ReadOnlyExcludedFromBulk(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID, acrAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpSetAttribute, AttributeName: "Definition", Value: "new def"},
+			{Type: edit_asset.OpSetAttribute, AttributeName: "Acronym", Value: "CHR"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected error, got %q", out.Status)
+	}
+	for i, r := range out.Results {
+		if r.Status != "error" || !strings.Contains(r.Error, "is read-only for asset type") {
+			t.Fatalf("op %d: expected read-only error, got %+v", i, r)
+		}
+	}
+	if n := s.attributeWrites(); n != 0 {
+		t.Fatalf("expected no attribute writes, got %d", n)
+	}
+}
+
+func TestEditAsset_ReadOnlyAlongsideWritable_PartialSuccess(t *testing.T) {
+	s := newStub()
+	s.markReadOnly(defAttrTypeID)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpSetAttribute, AttributeName: "Definition", Value: "new def"},
+			{Type: edit_asset.OpSetAttribute, AttributeName: "Acronym", Value: "CHR"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusPartialSuccess {
+		t.Fatalf("expected partial_success, got %q", out.Status)
+	}
+	if !strings.Contains(out.Results[0].Error, "is read-only for asset type") {
+		t.Fatalf("expected read-only error on Definition, got %+v", out.Results[0])
+	}
+	if out.Results[1].Status != "success" {
+		t.Fatalf("expected Acronym to succeed, got %+v", out.Results[1])
+	}
+	if s.attributeWrites() != 1 || s.patchedAttrs[acrInstanceID] != "CHR" {
+		t.Fatalf("expected a single PATCH of Acronym, got patched=%+v", s.patchedAttrs)
+	}
+}
+
 func TestEditAsset_AmbiguousAttributeName(t *testing.T) {
 	s := newStub()
 	// Two Note instances on the asset
@@ -1280,7 +1448,7 @@ func TestEditAsset_SetResponsibility_UnknownUserName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user found") {
+	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user matching") {
 		t.Fatalf("expected no-user-found error, got %+v", out)
 	}
 }
@@ -1307,7 +1475,7 @@ func TestEditAsset_SetResponsibility_NoMatchDoesNotBindWrongUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%s] unexpected error: %v", identifier, err)
 		}
-		if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user found") {
+		if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "no user matching") {
 			t.Fatalf("[%s] expected no-user-found error, got %+v", identifier, out)
 		}
 		if len(s.createdResponsibilities) != 0 {
@@ -1424,6 +1592,61 @@ func TestEditAsset_SetResponsibility_ResolvesByEmail(t *testing.T) {
 	}
 	if s.createdResponsibilities[0].OwnerID != testUserID {
 		t.Fatalf("expected email to resolve to %s, got %s", testUserID, s.createdResponsibilities[0].OwnerID)
+	}
+}
+
+// A person's full name resolves like a username or an email address does — the
+// display name is what a user actually says out loud.
+func TestEditAsset_SetResponsibility_ResolvesByFullName(t *testing.T) {
+	s := newStub()
+	s.users[0].FirstName, s.users[0].LastName = "Jane", "Smith"
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetResponsibility, Role: "Steward", UserID: "Jane Smith",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if s.createdResponsibilities[0].OwnerID != testUserID {
+		t.Fatalf("expected full name to resolve to %s, got %s", testUserID, s.createdResponsibilities[0].OwnerID)
+	}
+}
+
+// A full name two people share must come back as the candidate list and bind
+// nobody — picking one would assign the role to the wrong person.
+func TestEditAsset_SetResponsibility_AmbiguousFullNameWritesNothing(t *testing.T) {
+	s := newStub()
+	s.users[0].FirstName, s.users[0].LastName = "Jane", "Smith"
+	s.users = append(s.users, clients.EditAssetUser{
+		ID:        "5e000000-0000-0000-0000-000000000003",
+		UserName:  "jsmith2",
+		FirstName: "Jane",
+		LastName:  "Smith",
+	})
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpSetResponsibility, Role: "Steward", UserID: "Jane Smith",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError {
+		t.Fatalf("expected an ambiguity error, got %q, results=%+v", out.Status, out.Results)
+	}
+	for _, want := range []string{"ambiguous", testUserID, "5e000000-0000-0000-0000-000000000003", "jsmith2"} {
+		if !strings.Contains(out.Results[0].Error, want) {
+			t.Fatalf("error %q does not mention %q", out.Results[0].Error, want)
+		}
+	}
+	if len(s.createdResponsibilities) != 0 {
+		t.Fatalf("expected no responsibility created, got %+v", s.createdResponsibilities)
 	}
 }
 
@@ -1788,4 +2011,21 @@ func TestEditAsset_MultipleValidOperations(t *testing.T) {
 		t.Fatalf("unexpected call distribution: patched=%d created=%d deleted=%d patchedAsset=%d",
 			len(s.patchedAttrs), len(s.createdAttrs), len(s.deletedAttrIDs), len(s.patchedAssets))
 	}
+}
+
+// matchesUserNameSearch mirrors the /rest/2.0/users nameSearchFields semantics:
+// a substring match over USERNAME, FIRSTNAME, LASTNAME and both concatenations
+// of first and last name (FIRSTNAME_LASTNAME, LASTNAME_FIRSTNAME).
+func matchesUserNameSearch(u clients.EditAssetUser, needle string) bool {
+	first, last := strings.TrimSpace(u.FirstName), strings.TrimSpace(u.LastName)
+	for _, field := range []string{
+		u.UserName, first, last,
+		strings.TrimSpace(first + " " + last),
+		strings.TrimSpace(last + " " + first),
+	} {
+		if field != "" && strings.Contains(strings.ToLower(field), needle) {
+			return true
+		}
+	}
+	return false
 }

@@ -7,7 +7,16 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/collibra/chip/pkg/chip"
 )
+
+// testConfig is a server config with every capability a skill can require
+// switched on, for the fixtures that do not exercise `requires:` gating.
+// capability_test.go covers the gating itself.
+func testConfig() *chip.ServerToolConfig {
+	return &chip.ServerToolConfig{DataQuality: true}
+}
 
 func TestLoadFromFS_parsesFrontmatterAndResources(t *testing.T) {
 	fsys := fstest.MapFS{
@@ -25,7 +34,7 @@ content
 		"files/collibra/index/SKILL.md":                       &fstest.MapFile{Data: []byte("---\ndescription: Navigator.\n---\n\n# Index\n")},
 	}
 
-	cat, err := loadFromFS(fsys, "files")
+	cat, err := loadFromFS(fsys, "files", testConfig())
 	if err != nil {
 		t.Fatalf("loadFromFS: %v", err)
 	}
@@ -66,7 +75,7 @@ func TestCatalogSearch_filtersByQuery(t *testing.T) {
 		"files/collibra/discovery/SKILL.md": &fstest.MapFile{Data: []byte("---\ndescription: Find assets.\n---\n\nbody")},
 		"files/collibra/index/SKILL.md":     &fstest.MapFile{Data: []byte("---\ndescription: Navigator.\n---\n\nbody")},
 	}
-	cat, err := loadFromFS(fsys, "files")
+	cat, err := loadFromFS(fsys, "files", testConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +110,7 @@ func TestLoadFromFS_sharedResourcesAttachedDeclaratively(t *testing.T) {
 			"---\ndescription: Search.\n---\n\nbody")},
 	}
 
-	cat, err := loadFromFS(fsys, "files")
+	cat, err := loadFromFS(fsys, "files", testConfig())
 	if err != nil {
 		t.Fatalf("loadFromFS: %v", err)
 	}
@@ -131,7 +140,7 @@ func TestLoadFromFS_missingSharedResourceIsError(t *testing.T) {
 		"files/collibra/asset-create/SKILL.md": &fstest.MapFile{Data: []byte(
 			"---\ndescription: Create.\nshared: nope.md\n---\n\nbody")},
 	}
-	if _, err := loadFromFS(fsys, "files"); err == nil {
+	if _, err := loadFromFS(fsys, "files", testConfig()); err == nil {
 		t.Fatal("expected error for missing shared resource")
 	}
 }
@@ -140,7 +149,7 @@ func TestLoadFromFS_skillWithoutFrontmatter(t *testing.T) {
 	fsys := fstest.MapFS{
 		"files/collibra/raw/SKILL.md": &fstest.MapFile{Data: []byte("# No frontmatter\nbody")},
 	}
-	cat, err := loadFromFS(fsys, "files")
+	cat, err := loadFromFS(fsys, "files", testConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +166,7 @@ func TestLoadFromFS_skillWithoutFrontmatter(t *testing.T) {
 }
 
 func TestEmbeddedCatalog_loads(t *testing.T) {
-	cat, err := Load()
+	cat, err := Load(testConfig())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -185,16 +194,16 @@ func TestEmbeddedCatalog_loads(t *testing.T) {
 }
 
 func TestLoadWith_emptyDirReturnsEmbeddedOnly(t *testing.T) {
-	withDir, err := LoadWith("")
+	withDir, err := LoadWith("", testConfig())
 	if err != nil {
-		t.Fatalf("LoadWith(\"\"): %v", err)
+		t.Fatalf("LoadWith(\"\", testConfig()): %v", err)
 	}
-	embedded, err := Load()
+	embedded, err := Load(testConfig())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if !slices.Equal(names(withDir.List()), names(embedded.List())) {
-		t.Errorf("LoadWith(\"\") differs from Load()")
+		t.Errorf("LoadWith(\"\", testConfig()) differs from Load()")
 	}
 }
 
@@ -202,7 +211,7 @@ func TestLoadWith_externalSkillIsAdded(t *testing.T) {
 	dir := t.TempDir()
 	writeSkill(t, dir, "acme/internal-policy", "---\ndescription: ACME policy.\n---\n\n# ACME body\n")
 
-	cat, err := LoadWith(dir)
+	cat, err := LoadWith(dir, testConfig())
 	if err != nil {
 		t.Fatalf("LoadWith: %v", err)
 	}
@@ -226,7 +235,7 @@ func TestLoadWith_externalOverridesEmbedded(t *testing.T) {
 	writeSkill(t, dir, "collibra/lineage", "---\ndescription: Overridden lineage.\nrelated: collibra/index\n---\n\n# Custom lineage body\n")
 	writeFile(t, dir, "collibra/lineage/references/custom-note.md", "# Custom note")
 
-	cat, err := LoadWith(dir)
+	cat, err := LoadWith(dir, testConfig())
 	if err != nil {
 		t.Fatalf("LoadWith: %v", err)
 	}
@@ -253,7 +262,7 @@ func TestLoadWith_externalOverridesEmbedded(t *testing.T) {
 }
 
 func TestLoadWith_missingDirIsError(t *testing.T) {
-	_, err := LoadWith("/nope/does/not/exist/skills")
+	_, err := LoadWith("/nope/does/not/exist/skills", testConfig())
 	if err == nil {
 		t.Fatal("expected error for missing dir")
 	}
@@ -271,11 +280,11 @@ func TestMerge_orderStaysSorted(t *testing.T) {
 		"collibra/b/SKILL.md": &fstest.MapFile{Data: []byte("---\ndescription: B.\n---\n\nbody")},
 		"collibra/a/SKILL.md": &fstest.MapFile{Data: []byte("---\ndescription: A2.\n---\n\nbody")},
 	}
-	cat, err := loadFromFS(base, "files")
+	cat, err := loadFromFS(base, "files", testConfig())
 	if err != nil {
 		t.Fatalf("base load: %v", err)
 	}
-	ext, err := loadFromFS(overlay, ".")
+	ext, err := loadFromFS(overlay, ".", testConfig())
 	if err != nil {
 		t.Fatalf("overlay load: %v", err)
 	}
