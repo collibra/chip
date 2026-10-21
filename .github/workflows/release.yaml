@@ -117,6 +117,23 @@ jobs:
           fi
           echo "KMS_SIGNING_KEY_ARN=${{ secrets.KMS_SIGNING_KEY_ARN }}" >> $GITHUB_ENV
 
+      # Tags are created on every merge to main but only some are published.
+      # Diff the changelog against the last published release below this tag,
+      # not the previous git tag, so skipped versions are included.
+      - name: Find previous published release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          # Separate assignment so a gh failure fails the step instead of silently
+          # falling back to GoReleaser's default previous tag.
+          RELEASES=$(gh release list --exclude-drafts --exclude-pre-releases --limit 100 --json tagName --jq '.[].tagName')
+          PREV=$(printf '%s\n' "$RELEASES" \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "$TAG" | { cat; echo "$TAG"; } \
+            | sort -V | awk -v t="$TAG" '$0==t{print prev; exit} {prev=$0}')
+          echo "Previous published release: ${PREV:-none}"
+          echo "GORELEASER_PREVIOUS_TAG=${PREV}" >> "$GITHUB_ENV"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a  # v6
         with:
