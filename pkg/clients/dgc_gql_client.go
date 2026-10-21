@@ -84,6 +84,12 @@ query GetAssetDetails(%s) {
         name
       }
     }
+    multiValueAttributes(limit: $attributesLimit) {
+      stringValues
+      type {
+        name
+      }
+    }
     %s {
       type {
         id
@@ -158,18 +164,19 @@ type AssetQueryData struct {
 }
 
 type Asset struct {
-	ID                string             `json:"id"`
-	DisplayName       string             `json:"displayName"`
-	Type              *AssetType         `json:"type,omitempty"`
-	Domain            *Domain            `json:"domain,omitempty"`
-	Status            *Status            `json:"status,omitempty"`
-	StringAttributes  []StringAttribute  `json:"stringAttributes,omitempty"`
-	NumericAttributes []NumericAttribute `json:"numericAttributes,omitempty"`
-	BooleanAttributes []BooleanAttribute `json:"booleanAttributes,omitempty"`
-	DateAttributes    []DateAttribute    `json:"dateAttributes,omitempty"`
-	OutgoingRelations []OutgoingRelation `json:"outgoingRelations,omitempty"`
-	IncomingRelations []IncomingRelation `json:"incomingRelations,omitempty"`
-	Tags              []Tag              `json:"tags,omitempty"`
+	ID                   string                `json:"id"`
+	DisplayName          string                `json:"displayName"`
+	Type                 *AssetType            `json:"type,omitempty"`
+	Domain               *Domain               `json:"domain,omitempty"`
+	Status               *Status               `json:"status,omitempty"`
+	StringAttributes     []StringAttribute     `json:"stringAttributes,omitempty"`
+	NumericAttributes    []NumericAttribute    `json:"numericAttributes,omitempty"`
+	BooleanAttributes    []BooleanAttribute    `json:"booleanAttributes,omitempty"`
+	DateAttributes       []DateAttribute       `json:"dateAttributes,omitempty"`
+	MultiValueAttributes []MultiValueAttribute `json:"multiValueAttributes,omitempty"`
+	OutgoingRelations    []OutgoingRelation    `json:"outgoingRelations,omitempty"`
+	IncomingRelations    []IncomingRelation    `json:"incomingRelations,omitempty"`
+	Tags                 []Tag                 `json:"tags,omitempty"`
 }
 
 type Tag struct {
@@ -207,6 +214,13 @@ type BooleanAttribute struct {
 type DateAttribute struct {
 	Value string         `json:"dateValue"`
 	Type  *AttributeType `json:"type,omitempty"`
+}
+
+// MultiValueAttribute is a multiple-selection attribute. StringValues holds
+// the selected values as a semicolon-separated string (e.g. "optionA;optionB").
+type MultiValueAttribute struct {
+	StringValues string         `json:"stringValues"`
+	Type         *AttributeType `json:"type,omitempty"`
 }
 
 type AttributeType struct {
