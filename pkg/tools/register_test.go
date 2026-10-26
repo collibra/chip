@@ -97,6 +97,28 @@ func TestRegisterAll_DataQualityFlagOnlyMovesDataQualityTools(t *testing.T) {
 	}
 }
 
+// The agent scanner tools have no capability flag: they are registered with
+// an empty config, and an operator can only narrow them with enabled-tools /
+// disabled-tools.
+func TestRegisterAll_AgentScannerToolsVisibleWithEmptyConfig(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range []string{"publish_agent_scan", "list_scanned_agents", "get_latest_agent_scan"} {
+		if !slices.Contains(names, name) {
+			t.Errorf("expected %q to be registered with an empty config", name)
+		}
+	}
+}
+
+func TestRegisterAll_AgentScannerToolsCanBeNarrowedByDisabledTools(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{DisabledTools: []string{"publish_agent_scan"}})
+	if slices.Contains(names, "publish_agent_scan") {
+		t.Error("expected publish_agent_scan to be absent when listed in disabled-tools")
+	}
+	if !slices.Contains(names, "list_scanned_agents") {
+		t.Error("disabling publish_agent_scan must not remove list_scanned_agents")
+	}
+}
+
 // search_catalog_columns sits among the DQ registrations but is a Knowledge
 // Graph search over catalog Column assets; it is not gated.
 func TestRegisterAll_SearchCatalogColumnsIsNotGated(t *testing.T) {
@@ -176,6 +198,16 @@ func TestServedSkillsOnlyNameRegisteredTools(t *testing.T) {
 						dataQuality, skill.Name, name)
 				}
 			}
+		}
+	}
+}
+
+// The agent contract tools are always on in this build: no capability flag.
+func TestRegisterAll_AgentContractToolsVisibleWithEmptyConfig(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range []string{"list_governance_domains", "list_agent_contracts", "get_agent_contract", "get_agent_contract_rules", "create_agent_contract", "update_agent_contract_rules"} {
+		if !slices.Contains(names, name) {
+			t.Errorf("expected %q to be registered with an empty config", name)
 		}
 	}
 }

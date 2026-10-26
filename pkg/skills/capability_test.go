@@ -18,6 +18,8 @@ var dataQualitySkills = []string{"collibra/dq-rule-workbench", "collibra/dq-rule
 // capabilityFreeSkills are the embedded skills that require no capability and
 // are therefore served in every configuration.
 var capabilityFreeSkills = []string{
+	"collibra/agent-contract",
+	"collibra/agent-scanner",
 	"collibra/asset-create",
 	"collibra/asset-edit",
 	"collibra/context",
@@ -63,6 +65,33 @@ func TestEmbeddedCatalog_dataQualitySkillsServedWhenCapabilityOn(t *testing.T) {
 	}
 	if got := names(cat.List()); !slices.Equal(got, want) {
 		t.Errorf("catalog with DataQuality=true = %v, want %v", got, want)
+	}
+}
+
+// The skill's stage and reference files are loaded one by one through
+// load_collibra_skill, so every path SKILL.md names must exist as a bundled
+// resource, and the skill must carry nothing else the loader would drop.
+func TestEmbeddedCatalog_agentScannerSkillReferencesResolve(t *testing.T) {
+	cat, err := Load(&chip.ServerToolConfig{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	skill := cat.Get("collibra/agent-scanner")
+	if skill == nil {
+		t.Fatal("collibra/agent-scanner not served")
+	}
+	refPath := regexp.MustCompile("references/[a-z0-9-]+\\.md")
+	for _, ref := range refPath.FindAllString(skill.Body, -1) {
+		if skill.Resource(ref) == nil {
+			t.Errorf("SKILL.md names %s, which is not a bundled resource (have %v)", ref, skill.ResourcePaths())
+		}
+	}
+	for _, r := range skill.Resources {
+		for _, ref := range refPath.FindAllString(r.Content, -1) {
+			if skill.Resource(ref) == nil {
+				t.Errorf("%s names %s, which is not a bundled resource", r.Path, ref)
+			}
+		}
 	}
 }
 
@@ -135,10 +164,10 @@ var skillRefPattern = regexp.MustCompile("`(collibra/[a-z0-9]+(?:-[a-z0-9]+)*)`"
 // markdown, so every `collibra/*` reference in a served skill's body or
 // `related:` header must resolve to a skill that is also served.
 func TestEmbeddedCatalog_crossReferencesResolveInEveryState(t *testing.T) {
-	for _, dataQuality := range []bool{false, true} {
-		cat, err := Load(&chip.ServerToolConfig{DataQuality: dataQuality})
+	for _, cfg := range []chip.ServerToolConfig{{}, {DataQuality: true}} {
+		cat, err := Load(&cfg)
 		if err != nil {
-			t.Fatalf("Load (DataQuality=%v): %v", dataQuality, err)
+			t.Fatalf("Load (%+v): %v", cfg, err)
 		}
 		for _, skill := range cat.List() {
 			refs := append([]string{}, skill.Related...)
@@ -150,8 +179,8 @@ func TestEmbeddedCatalog_crossReferencesResolveInEveryState(t *testing.T) {
 					continue
 				}
 				if cat.Get(ref) == nil {
-					t.Errorf("DataQuality=%v: skill %q references %q, which is not served",
-						dataQuality, skill.Name, ref)
+					t.Errorf("%+v: skill %q references %q, which is not served",
+						cfg, skill.Name, ref)
 				}
 			}
 		}

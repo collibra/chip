@@ -28,7 +28,7 @@ The server can be configured using the following environment variables:
 - `COLLIBRA_MCP_ENABLE_DEBUG_TOOLS` - Register debug tools (e.g. `get_debug_mcp_init_request`) that are hidden by default. Set to `true` to enable. Off by default.
 - `COLLIBRA_MCP_DATA_QUALITY` - Register the data quality tools (data quality jobs, rules and rule templates), which are not registered by default. Set to `true` to enable. Off by default. Not an experimental feature: see [the README](../README.md#data-quality-tools)
 - `COLLIBRA_MCP_EXPERIMENTAL` - Comma-separated list of opt-in experimental features to enable. Off by default; unknown names log a warning but do not fail startup. Currently known: `context-specifications` and `skills` (see [SKILLS.md](../SKILLS.md))
-- `COLLIBRA_MCP_SKILLS_DIR` - Optional path to an external skills directory. When set, its skills are merged on top of the embedded catalog and same-named skills (e.g. `collibra/lineage`) fully replace the embedded entry. Requires the `skills` experimental feature. `~` and `~user` are expanded. A skill may declare `requires: <capability>` in its frontmatter to be served only when that capability is on (`data-quality` is the only one today); an unrecognized value fails catalog load and the server does not start, so a capability rename is a breaking change for such a skill.
+- `COLLIBRA_MCP_SKILLS_DIR` - Optional path to an external skills directory. When set, its skills are merged on top of the embedded catalog and same-named skills (e.g. `collibra/lineage`) fully replace the embedded entry. Requires the `skills` experimental feature. `~` and `~user` are expanded. A skill may declare `requires: <capability>` in its frontmatter to be served only when that capability is on (`data-quality` today); an unrecognized value fails catalog load and the server does not start, so a capability rename is a breaking change for such a skill.
 
 ## Configuration File
 
@@ -104,12 +104,14 @@ Configure credentials at the server level. All API requests will use these crede
 - Set `COLLIBRA_MCP_API_USR` and `COLLIBRA_MCP_API_PWD` environment variables
 - Or configure `username` and `password` in the config file
 - **Warning**: This approach attributes all actions to a single service account
+- `publish_agent_scan` adds no credentials of its own, so with this approach every scan is recorded as that one account. Its endpoint is documented with bearer-token security, so basic auth may be refused with HTTP 401; the tool reports that as a sign-in problem and does not retry
 
 ### Client-provided Authentication (Recommended)
 Let MCP clients provide Basic Auth headers with each request:
 - Use this when running over the http transport
 - Omit `username` and `password` from server configuration
 - MCP clients include `Authorization: Basic <credentials>` headers in requests
+- `publish_agent_scan` runs as that acting user; a bearer `Authorization` header is the form its endpoint is documented to accept
 - **Benefit**: Proper attribution of actions to individual users
 - **Note**: Only works with HTTP transport modes, not stdio mode.
 

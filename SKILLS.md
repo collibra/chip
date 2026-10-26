@@ -17,6 +17,8 @@ those tools. Skill content lives in [`pkg/skills/files/collibra/`](pkg/skills/fi
 | `collibra/lineage` | Technical lineage; DGC UUID ↔ lineage entity ID bridge; column-level workaround |
 | `collibra/asset-create` | `create_asset` workflow; RICH_TEXT Markdown handling; duplicate gating |
 | `collibra/asset-edit` | `edit_asset` operation types |
+| `collibra/agent-contract` | Author a Guardian agent contract (plain-language rules for one or all AI agents) and save it with `create_agent_contract` / `update_agent_contract_rules`; its stages load as `references/*.md` resources |
+| `collibra/agent-scanner` | Fingerprint an AI agent from its code and send it with `publish_agent_scan`. Its stages load as `references/*.md` resources |
 
 Each skill is one `SKILL.md` per directory, with frontmatter (`description`, `related`, `shared`,
 `requires`) and an optional `references/` directory for bundled reference documents.

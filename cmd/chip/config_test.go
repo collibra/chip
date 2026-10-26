@@ -62,6 +62,7 @@ func TestDataQualityConfigPrecedence(t *testing.T) {
 	if got := dataQualityFromConfig(t); !got {
 		t.Error("--data-quality=true should override COLLIBRA_MCP_DATA_QUALITY=false")
 	}
+
 }
 
 func dataQualityFromConfig(t *testing.T) bool {

@@ -8,6 +8,7 @@ import (
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/cancel_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/create_agent_contract"
 	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
@@ -21,6 +22,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/edit_asset"
 	"github.com/collibra/chip/pkg/tools/find_dq_rules"
 	"github.com/collibra/chip/pkg/tools/generate_dq_rule_sql"
+	"github.com/collibra/chip/pkg/tools/get_agent_contract"
+	"github.com/collibra/chip/pkg/tools/get_agent_contract_rules"
 	"github.com/collibra/chip/pkg/tools/get_assessment"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
@@ -32,6 +35,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_dq_rule"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_results"
 	"github.com/collibra/chip/pkg/tools/get_dq_rule_template"
+	"github.com/collibra/chip/pkg/tools/get_latest_agent_scan"
 	"github.com/collibra/chip/pkg/tools/get_lineage_downstream"
 	"github.com/collibra/chip/pkg/tools/get_lineage_entity"
 	"github.com/collibra/chip/pkg/tools/get_lineage_transformation"
@@ -40,11 +44,15 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_table_semantics"
 	"github.com/collibra/chip/pkg/tools/get_user_id_by_name"
 	"github.com/collibra/chip/pkg/tools/init_data_contract"
+	"github.com/collibra/chip/pkg/tools/list_agent_contracts"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
 	"github.com/collibra/chip/pkg/tools/list_context_specifications"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
 	"github.com/collibra/chip/pkg/tools/list_dq_rule_templates"
+	"github.com/collibra/chip/pkg/tools/list_governance_domains"
+	"github.com/collibra/chip/pkg/tools/list_scanned_agents"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
+	"github.com/collibra/chip/pkg/tools/publish_agent_scan"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
@@ -56,6 +64,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_dq_jobs"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/tools/update_agent_contract_rules"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
 	"github.com/collibra/chip/pkg/tools/validate_dq_rule"
 )
@@ -110,6 +119,19 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
 	toolRegister(server, toolConfig, search_catalog_columns.NewTool(client))
+	// The agent contract tools are registered WITHOUT a capability flag: this is
+	// a custom build for the Guardian agent private preview, so they are always on.
+	toolRegister(server, toolConfig, list_governance_domains.NewTool(client))
+	toolRegister(server, toolConfig, list_agent_contracts.NewTool(client))
+	toolRegister(server, toolConfig, get_agent_contract.NewTool(client))
+	toolRegister(server, toolConfig, get_agent_contract_rules.NewTool(client))
+	toolRegister(server, toolConfig, create_agent_contract.NewTool(client))
+	toolRegister(server, toolConfig, update_agent_contract_rules.NewTool(client))
+	// The agent scanner tools are registered WITHOUT a capability flag, like
+	// the agent contract tools above: there is no --agent-scanner switch.
+	toolRegister(server, toolConfig, publish_agent_scan.NewTool(client))
+	toolRegister(server, toolConfig, list_scanned_agents.NewTool(client))
+	toolRegister(server, toolConfig, get_latest_agent_scan.NewTool(client))
 	// The data quality tools are gated as one block behind the data-quality
 	// capability flag (--data-quality), not behind an experimental feature
 	// name: they are generally available, but several write to Collibra and
