@@ -1,6 +1,6 @@
 # Template — Global baseline contract
 
-Applies to every agent the organisation governs with Guardian. Rules are written in terms of **kinds of action**, never a specific agent's tools. Keep it short: a global contract is the floor, not the whole policy. Agent-specific rules and exceptions go in specialised contracts.
+Applies to every agent the organisation governs with Guardian. Rules are written in terms of **kinds of action**, never a specific agent's tools. Keep it short: a global contract is the floor, not the whole policy. Agent-specific rules go in specialised contracts. Those can make a rule here stricter but never relax it, so write each rule at the level every agent must meet.
 
 Placeholders in `<angle brackets>` must be filled from the customer's context or left marked "needs your input". Expected mark is a prediction; Stage 06 decides.
 

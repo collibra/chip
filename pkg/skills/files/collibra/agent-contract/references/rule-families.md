@@ -226,7 +226,7 @@ Pattern:
 Pattern:
 - The agent must not settle or decline <a medical claim> on a finding <the medical evidence reviewer> did not report. (📋)
 
-Explain delegation once (wording in `references/template-delegation-addendum.md`).
+Explain delegation once (wording in `templates/delegation-addendum.md`).
 
 ---
 

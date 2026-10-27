@@ -123,8 +123,8 @@ This is for choices woven into a sentence. Menus already presented as their own 
 ## Formatting the contract for review
 
 ```
-Contract: <name>   Scope: Global | Specialised → <agent / use case>
-Status: Draft (not yet in Collibra) | Editing <name> (published <date>)
+Contract: <name>   Scope: Global | Specialised · checked against <agent(s) | no particular agent>
+State: Draft (not yet in Collibra) | Editing <name> (current version saved <date>)
 
  #  | Rule                                                              | Check | Source
 ----|-------------------------------------------------------------------|-------|----------
@@ -134,6 +134,6 @@ Status: Draft (not yet in Collibra) | Editing <name> (published <date>)
  4  | The agent must not justify a decision with language that …        | 🟡    | customer
 ```
 
-Stage 05 drafts add a `Relates to` column. Stage 07 edits use the four-section UNCHANGED / CHANGED / RETIRED / ADDED format instead.
+Stage 05 drafts add a `Relates to` column. Stage 07 edits show the new version, then UNCHANGED / REWORDED / REMOVED / ADDED, instead.
 
 Legend the customer sees: ✅ enforceable · 🟡 partly enforceable · 📋 policy-only · ⚠️ needs a change · ➖ not about this agent.

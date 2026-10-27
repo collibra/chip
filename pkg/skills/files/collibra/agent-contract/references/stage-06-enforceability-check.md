@@ -22,7 +22,7 @@ Never invent a sixth mark, and never show a split mark ("✅/🟡") in the revie
 
 ## Scope of the check in edit mode
 
-Baseline rules the customer did not ask to change are **marked for information only**. They are never reworded, split, or flagged as blocking (H3). If a baseline rule would score ⚠️, tell the customer once — *"Rule R-105 as it stands can't be enforced as written; want me to include a fix as a change?"* — and only touch it if they say yes, in which case it becomes a CHANGED rule.
+Baseline rules the customer did not ask to change are **marked for information only**. They are never reworded, split, or flagged as blocking (H3). If a baseline rule would score ⚠️, tell the customer once — *"Rule 5 as it stands can't be enforced as written; want me to include a fix as a rewording?"* — and only touch it if they say yes, in which case it becomes a REWORDED rule.
 
 ## The check — run in this order, stop at the first that applies
 
@@ -32,7 +32,7 @@ Two different actions or two different obligations joined by "and" → propose t
 ### C1. Whose obligation is it?
 - Subject is the **organisation or a person** ("<Organisation> must…", "<role> must…", "…must be logged / retained / reviewed / tested") → go to **C2**.
 - Rule is about the agent **refusing or not acting on instructions** ("must refuse instructions that…", "must not act on instructions embedded in…") → these are about the agent's own behaviour, not a named action; go to **C5** (they normally land 🟡, sometimes ✅).
-- Otherwise: does the rule refer to an action, data source or channel the agent (per Stage 02) has — in plain words or by name? If none matches → **➖**: *"Your agent has no action that does this. Keep it marked 'not about this agent' for completeness (a), or drop it (b)?"* If Stage 02 is unverified (offline), skip this test and tag `(unverified)`.
+- Otherwise: does the rule refer to an action, data source or channel the agent (per Stage 02) has — in plain words or by name? If none matches → **➖**: *"Your agent has no action that does this. Keep it marked 'not about this agent' for completeness (a), or drop it (b)?"* If Stage 02 is unverified (offline), skip this test and tag `(unverified)`. For a global contract, or a specialised one with no agents named, skip this test with no tag: there's no agent to check against.
 
 ### C2. Is it an obligation on the organisation, not the agent? → 📋
 Logging, retention, reviews, testing, training-data prohibitions, third-party audits, storage location. *"This is something your organisation does, not something the agent does in the moment. Guardian records it as part of the contract but won't enforce it at runtime."*
@@ -64,11 +64,15 @@ If the rule has a threshold or a consequential decision and no named role, ask o
 Run C0–C8 on any rule not yet marked (in edit mode, baseline rules for information only — see above), then, for new and changed/added rules:
 
 1. **Conflicts.** Two rules that give opposite answers for the same action under the same condition. Stop and ask the customer to choose: *"Rules 4 and 9 contradict each other — I won't publish both. Which should stand: rule 4 (a) or rule 9 (b)?"*
-2. **Duplicates and near-duplicates.** Propose a merge; accept "keep both".
-3. **Overlap with the other contract type.** Allowed; flag it (wording in Stage 04 › Cross-contract awareness).
+2. **Duplicates and near-duplicates.** Propose a merge. For near-duplicates, accept "keep both". Two rules that are the same once tidied (`collibra-connection.md`), even if they differ in spacing or line breaks, can't both be kept: Collibra rejects the save. Keep one.
+3. **Relaxes a global rule** (specialised only). Run the global check from Stage 04 › Cross-contract awareness on every new and changed rule not yet checked. In edit mode, also check baseline rules, for information only: tell the customer once, *"Existing rule 4 relaxes rule 2 of your global contract, so the global rule applies instead. Want me to include a fix as a change?"* Only touch it if they say yes (H3). Never block on either.
 4. **Placeholders.** Any `<angle bracket>` left → ⚠️ **that cannot be carried**: get the value or drop the rule before Stage 07.
 5. **Enforcement vocabulary / rationale inside rules.** Reword; show the diff. Exception: a word that is the plain-language form of the agent's own action ("hand over to a human agent (`escalate_to_agent`)") is fine — it names what the agent does, not what Guardian does.
 6. **Personal data or secrets inside a rule** (a real person's name, an email, a token) → remove and use a role or category (H8).
+7. **Collibra's limits.** Collibra won't save a contract that breaks these, so fix them here:
+   - More than 200 rules → *"Collibra holds at most 200 rules in one contract. Which <n> should we drop or merge, or should some go in a separate specialised contract?"*
+   - A rule over 2000 characters → split it (C0) or shorten it.
+   - An edit that removes every rule → *"A contract needs at least one rule. If you want none, the way to do that is deleting the contract."* Deletion follows Stage 08 › Deleting a contract, only on the customer's own request.
 
 ## Reporting the result
 
@@ -92,4 +96,5 @@ If the customer asks "why" on a 📋 or 🟡, give the one-sentence customer-lan
 
 - Every new / changed / added rule marked; no ⚠️ unless the customer chose to carry it; no placeholders.
 - No unresolved conflicts.
+- Every rule that relaxes a global rule has been flagged and the customer has chosen rewrite, keep or drop.
 - Tally printed and the customer has answered the closing question.

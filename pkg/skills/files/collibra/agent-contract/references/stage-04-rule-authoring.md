@@ -7,12 +7,12 @@ Turn what the customer wants into rules Guardian can enforce, one at a time, wit
 ## Entry criteria
 
 - Stage 01 done: you know whether this is a new or existing contract, and whether it is global or specialised.
-- Stage 02 done: you have the agent's list of actions (or an explicit "unverified — offline" marker) and the use-case summary.
+- Stage 02 done: you have the named agents' lists of actions (or an explicit "unverified — offline" marker) and the use-case summary, or, with no agents named, the kinds of agents the rules are about.
 - Stage 03 done: you have the raw material — the customer's typed intent, extracted candidate rules from a document, or a starter draft from Stage 05.
 
 ## What you produce
 
-A **working contract**: a numbered list of rules in the review format from `statement-guide.md`, each with a provisional check mark from Stage 06. After a single change show only the changed row; re-print the full contract at the end of each family, every five rules, and at stage exit. New rules are numbered `1..n`; Collibra assigns permanent ids at publish. In edit mode keep the baseline's `R-<id>` for existing rules and tag each item change / retire / add.
+A **working contract**: a numbered list of rules in the review format from `statement-guide.md`, each with a provisional check mark from Stage 06. After a single change show only the changed row; re-print the full contract at the end of each family, every five rules, and at stage exit. New rules are numbered `1..n`; Collibra assigns rule ids when it saves. In edit mode number existing rules by their position in the baseline and tag each item reword / remove / add.
 
 ## The loop — for each candidate rule
 
@@ -29,8 +29,9 @@ Every rule must name something the agent actually does. Use the Stage 02 action 
 - If the customer's rule clearly maps to one action, name it in plain words (not the internal tool identifier unless the customer uses it) and confirm.
 - If it maps to several actions (e.g. the agent has three ways to message a customer), ask whether the rule covers all of them; default to all.
 - If it maps to none, say so and point at what the agent actually does: *"Your agent doesn't have an action that does this — it can't send email, for instance. It can \<name 2–3 real actions from the Stage 02 list\>, if one of those is what you meant. Otherwise I can keep this marked 'not about this agent' for completeness (a), or drop it (b). Which?"* Always fill in real actions from Stage 02, never invent one.
-- Retire (edit mode): no action to name — record the customer's one-line reason and move on.
+- Remove (edit mode): no action to name. Record the customer's one-line reason and move on.
 - If Stage 02 is offline/unverified, write the rule anyway and tag it `(action unverified)`; Stage 08 re-checks before publish.
+- Global contract, or specialised with no agents named: there's no action list. Name the kind of action in plain words ("send a message to a customer"), as Stage 02 explained.
 
 ### 3. Sharpen
 Apply the seven properties (P1–P7 in `statement-guide.md`) in order. Ask only the questions whose answer would change the wording or the mark, and put the questions one rule needs into **one message (at most three)** rather than one per turn:
@@ -54,12 +55,39 @@ Pick the one or two most relevant robustness prompts from `statement-guide.md` (
 Run the Stage 06 check on the rule and record the mark (✅ 🟡 📋 ⚠️ ➖). Show the glyph next to every proposed rule from the first time you propose it — a rule described as "needs a change" in prose without its ⚠️ is not marked. If ⚠️, propose the fix and loop back to step 3. If 📋 or 🟡, tell the customer what that means in one sentence and let them choose to keep, rewrite, or drop.
 
 ### 6. Place
-Add the rule to the working contract. If it is near-identical to an existing rule (new or already published), say so and propose a merge. If it **contradicts** another rule in the same contract (one allows what the other forbids for the same action and condition), stop: *"Rules 4 and 9 contradict each other — I won't publish both. Which should stand: rule 4 (a) or rule 9 (b)?"* Never resolve a conflict silently.
+Add the rule to the working contract. If it is near-identical to an existing rule (new or already published), say so and propose a merge. If it **contradicts** another rule in the same contract (one allows what the other forbids for the same action and condition), stop: *"Rules 4 and 9 contradict each other — I won't publish both. Which should stand: rule 4 (a) or rule 9 (b)?"* Never resolve a conflict silently. For a specialised contract, also run the global check below.
 
 ## Cross-contract awareness
 
-- **Specialised contract, and a global one exists:** if a new rule overlaps with a global rule, tell the customer plainly: *"Your global contract already says X. A specialised rule takes precedence where they overlap. Want this agent to have an exception to X? Put it here. Want X to apply as-is? No need to repeat it."* Say the precedence sentence **once** in the session (Stage 01 already explained it); for later overlaps just name the global rule and ask exception-or-drop.
-- **Global contract:** remind the customer once that every rule here applies to every agent it governs, and that agent-specific exceptions go in that agent's specialised contract.
+### Specialised contract: the global check
+
+The global contract always applies, and a specialised rule can't relax it. Compare each new or changed rule with every global rule that covers the same action. Sort it into one of four outcomes:
+
+| Outcome | What it looks like | Do |
+|---|---|---|
+| **Stricter or new** | Lower threshold, fewer recipients or destinations, an extra condition, a person added; or nothing in the global contract covers it | Nothing to say. Keep going. |
+| **Fills in a global rule** | The global rule leaves a detail to the agent's own contract ("unless that agent's contract permits it", "a person named in that agent's contract", "approved systems") and this rule supplies it | Not a contradiction. Keep going. |
+| **Repeats a global rule** | Same obligation, same scope | *"Your global contract already says this, so it applies to this agent anyway. Keep a copy here (a), or drop it (b)?"* |
+| **Relaxes a global rule** | Allows what the global rule forbids, raises its threshold, widens its recipients or destinations, or removes a person it requires, for the same action and condition | Flag it, as below. |
+
+Flag a relaxing rule like this:
+
+> *"Rule 5 relaxes rule 2 of your global contract: "<global statement>". The global contract always applies, so that rule still holds for this agent and rule 5 can't loosen it. A version that stays within it: "<rewrite>". Use the rewrite (a), keep your wording (b), or drop rule 5 (c)?"*
+
+- Write the rewrite from the customer's intent: the strictest part of what they asked for that still sits inside the global rule. Mark it with the Stage 06 check like any other rule.
+- No such version (the rule only exists to reverse the global one) → drop option (a) and say: *"Only a change to the global contract can relax that rule. That's a separate session."*
+- Never block. If the customer keeps their wording, the rule stays with its usual mark, and Stage 07 lists it under the relaxed-global note. Do not argue a second time.
+- Say "the global contract always applies" **once** in the session. For later rules, name the global rule and offer the choices.
+- Judging "same action and condition" is your reading of two plain-language rules. When you're unsure whether a rule relaxes a global one, ask rather than flag: *"Does rule 5 cover the same emails as global rule 2?"*
+- `global check: not possible` (Stage 02) → skip the check; Stage 07 says it wasn't done.
+
+### Specialised contract: other specialised contracts
+
+When the customer named agents in Stage 01 and other specialised contracts govern them, check new rules against those contracts too. With no agents named, skip this check; Stage 07 says so. A contradiction with one of them is handled like a contradiction inside this contract (step 6), naming the other contract.
+
+### Global contract
+
+Remind the customer once that every rule here applies to every agent it governs, and no specialised contract can relax it. If a rule should be looser for some agents, write the global rule at the level every agent must meet, and put stricter versions in those agents' specialised contracts.
 
 ## Walking the families (when the customer has no list of their own, or their list is short)
 

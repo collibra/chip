@@ -12,31 +12,39 @@ Stage 06 whole-contract pass complete: every rule marked, no unresolved conflict
 
 ```
 Contract:   <name>
-Kind:       Global | Specialised → <agent> (<use case>)
-Mode:       New | Edit (baseline: <n> rules, status <status>, last changed <date>)
+Kind:       Global | Specialised
+Checked against: all agents (global) | <agent(s)> (<use case>) | no particular agent
+Mode:       New, in domain <domain> | Edit (baseline: <n> rules, version <v> saved <date>)
 Connection: read ✓/✗ · write ✓/✗ · existence check ✓/✗
 ```
 
-If `existence check ✗`: ask, in its own message, *"I couldn't verify whether a contract already exists for this scope. Have you checked in Collibra? If one exists, we should be editing it, not creating another."* Wait. "Not checked" or "one exists" → do not continue; return to Stage 01 Step 5. "Checked, none" → continue.
+If `existence check ✗`: ask, in its own message, *"I couldn't verify whether a contract already exists for this scope. Have you checked in Collibra? If one exists, we should be editing it, not creating another."* Wait. "Not checked" or "one exists" → do not continue; return to Stage 01 Step 6. "Checked, none" → continue.
 
 ## Step 2 — Show the full contract
 
 **New contract:** the review table in full — number, statement, mark, source tag.
 
-**Edit:** three sections, each complete, never abbreviated with "…and others":
+**Edit, no changes:** if the new version has exactly the baseline's rules in the baseline's order, there is nothing to save. Say *"This is the same as the current version, so there's nothing to save."* Don't show the table or ask the consent question. Offer to keep editing.
+
+**Edit:** the new version in full, in the order it will be saved, then the changes against the current version. Every section is complete, never abbreviated with "…and others":
 
 ```
+NEW VERSION (<n> rules, in this order)
+  1. "<statement>"   <mark>
+  ...
 UNCHANGED (<n>)          — listed in full, statements verbatim from baseline
-CHANGED (<n>)
-  R-<id>  before: "<old statement>"
-          after:  "<new statement>"        <mark>
-RETIRED (<n>)
-  R-<id>  "<statement>"   — reason the customer gave
+REWORDED (<n>)
+  current <#>  before: "<old statement>"
+  new <#>      after:  "<new statement>"   <mark>
+REMOVED (<n>)
+  current <#>  "<statement>"   — reason the customer gave
 ADDED (<n>)
-  <#>     "<statement>"   <mark>  <source>
+  new <#>      "<statement>"   <mark>  <source>
 ```
 
-Anything in UNCHANGED must be byte-identical to the baseline from Stage 01. If the baseline was customer-supplied, head the diff "against the rules you pasted (unverified)" and note that Stage 08 re-reads Collibra before writing.
+Number rules by position, not by id. Anything in UNCHANGED must be byte-identical to the baseline from Stage 01. If UNCHANGED rules moved position, say so in one line.
+
+Say once, the first time a REWORDED rule appears: *"Collibra saves a reworded rule as a new rule. The old wording stays in the contract's history."*
 
 ## Step 3 — Notes the customer must see
 
@@ -45,12 +53,19 @@ Print only those that apply:
 - **Policy-only rules** (📋): *"Rules <n> are recorded in the contract but not enforced at runtime."*
 - **Partly enforceable** (🟡): *"Rules <n> have a precise part that's enforced and a judgement part that's recorded."*
 - **Carried ⚠️**: *"Rules <n> can't be enforced as written; you chose to keep them. They'll be recorded, not enforced, until reworded."*
-- **Large retirement** (edit only, more than half the baseline rules retired): *"This retires <n> of <m> existing rules. Once saved, those rules no longer apply to <agent / all agents>."*
+- **Large removal** (edit only, more than half the baseline rules removed or reworded): *"This removes <n> of <m> existing rules. Once saved, those rules no longer apply to <agent(s) / all agents>."*
 - **Unverified actions**: *"Rules <n> refer to actions I couldn't verify against Collibra. I'll re-check before saving; if an action doesn't exist, I'll stop and show you."*
-- **Overlaps with the global contract** (specialised only): *"Rules <n> overlap global rules <ids>. Your specialised rules take precedence for this agent — an exception, if that's what you intend."*
+- **Relaxes a global rule** (specialised only, rules the customer kept as written, including baseline rules left unchanged): *"Rules <n> relax global rules <numbers>. The global rules still apply to this agent, so these can't loosen them."*
+- **Global check not done** (specialised only, `global check: not possible`): *"I couldn't check these rules against your global contract. If any of them relaxes a global rule, the global rule still applies."*
+- **No domain** (new only, `domain: none`): *"There's no Governance Asset domain you can save into yet, so saving will fail until someone with admin rights in Collibra sets one up or gives you access."*
+- **Checked against** (specialised only, always):
+  - Agents named: *"I checked these rules against what <agents> can do and against their other contracts. If the contract is linked to other agents, I haven't checked those."* Add, for `contracts check: partial`: *"Some contracts on <agent> I can't see, so I couldn't check against them."*
+  - No agents named: *"You didn't name particular agents, so I checked these rules by their wording and against the global contract only."*
+- **Linking** (new specialised only): *"Saving doesn't link the contract to any agent. Once it's saved, link it to the agents it should govern, on the contract in Collibra. Until then it governs no agent."*
+- **Owner** (new specialised only): *"If Collibra hasn't already made you the Owner of the new contract, I'll also assign you as its Owner when I save it."*
 - **Global impact** (global only): *"These rules will apply to every agent governed by Guardian in your organisation, including <examples if known>."*
 - **Not about this agent** (➖): *"Rules <n> refer to actions this agent doesn't have; you chose to keep them for completeness. They're saved with the contract and not enforced."*
-- **What happens after saving**: *"Saving puts the contract into Collibra. Collibra applies your organisation's permissions and any review or approval process it has configured — I don't control that. I'll report back exactly what Collibra returns."* The skill never asks about, triggers, or describes an approval step; that is Collibra's.
+- **What happens after saving**: *"Saving makes this the contract's current version in Collibra, replacing the one in effect now. Earlier versions stay in its history. Collibra checks that you have permission to save; I'll report back exactly what it returns."* Never ask about, trigger, or describe a review or approval step.
 - **Nothing has been saved yet.** Always.
 
 ## Step 4 — The consent question

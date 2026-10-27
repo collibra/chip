@@ -10,11 +10,11 @@ Stage 01 and Stage 02 complete (contract chosen; context fetched or explicitly u
 
 ## Edit mode — ask this instead
 
-Show the baseline numbered by its rule ids, then:
+Show the baseline numbered by position, in Collibra's order, then:
 
-> What do you want to change? Tell me the rules to **change**, **retire** or **add** — or give me a document, or ask me to draft additions.
+> What do you want to change? Tell me the rules to **reword**, **remove** or **add** — or give me a document, or ask me to draft additions.
 
-Tag every candidate `change R-<id>` / `retire R-<id>` / `add`. A retire needs the customer's one-line reason (shown in Stage 07). Document and draft paths below still apply; their candidates are compared with the baseline in Stage 04 step 6.
+Tag every candidate `reword <#>` / `remove <#>` / `add`. A removal needs the customer's one-line reason (shown in Stage 07). A removed rule drops out of the new version and stays in the contract's history. Document and draft paths below still apply; their candidates are compared with the baseline in Stage 04 step 6.
 
 ## New contract — ask the one question
 
@@ -99,4 +99,4 @@ Merge candidate lists before Stage 04. Keep the `source` tag on each rule; it he
 
 - **Path 1 / Path 2 → Stage 04:** a source-tagged candidate list exists (possibly empty for Path 1, in which case Stage 04 walks the families) and the customer has confirmed it is a fair starting point.
 - **Path 3 → Stage 05:** use-case summary confirmed and (specialised) one or two profiles chosen. The candidate list is produced in Stage 05.
-- **Edit mode:** every candidate tagged change / retire / add.
+- **Edit mode:** every candidate tagged reword / remove / add.
