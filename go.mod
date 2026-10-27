@@ -1,6 +1,6 @@
 module github.com/collibra/chip
 
-go 1.25.0
+go 1.26.10
 
 require (
 	github.com/google/go-querystring v1.2.0
