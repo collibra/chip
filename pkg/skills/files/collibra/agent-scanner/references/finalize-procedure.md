@@ -374,7 +374,7 @@ Expected hashes:
 |---|---|
 | agent `triage_agent` | `006d726e0127bdfec3eecf519e3f17872720c20b6cdc69f6bad9ac960cb871c1` |
 | tool `search_kb` | `a5803c8312657afe9d0aab91c502ce8573e4d90b2ab2af9661e8f25e16c430a4` |
-| document `contentHash` | `a53720296887565a12cdeb786f2867e11f9eb2fff07908c8adf6892209c5defc` |
+| document `contentHash` | `f6fa138efb728fc823820440ad621f6f571215ff9dfc32251ae50cb289c8cfdd` |
 
 ### Expected document for V7
 
@@ -385,7 +385,7 @@ Expected hashes:
     "version": "skill-0.1",
     "llmProvider": "CUSTOMER"
   },
-  "contentHash": "a53720296887565a12cdeb786f2867e11f9eb2fff07908c8adf6892209c5defc",
+  "contentHash": "f6fa138efb728fc823820440ad621f6f571215ff9dfc32251ae50cb289c8cfdd",
   "agents": [
     {
       "name": "triage_agent",
