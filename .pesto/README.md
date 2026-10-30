@@ -22,8 +22,9 @@ smaller packs.
   Jira), `BASE_BRANCH`, `BRANCH_PREFIX`, `TASK_LABEL`, `PR_TITLE`. The acceptance criteria
   themselves are the submit's `acceptance_criteria`, rendered into validate-ac.
 - **Conventions the prompts carry.** Commit subjects are Conventional Commits
-  (CONTRIBUTING.md) prefixed with the Jira key, the form the latest merged commits use; the PR
-  body follows
+  (CONTRIBUTING.md, `.githooks/commit-message-check`) with the Jira key at the end,
+  `<type>(<scope>): <description> <key>`, never key first (the repository hook rejects it). The
+  PR body follows
   `.github/pull_request_template.md`; review checks `docs/TOOL_CONTRIBUTION_STANDARDS.md`,
   `SKILLS.md` and AGENTS.md's stepdown rule. Pods run `go build ./...` and
   `go test -count=1 -p 2 ./...` (`files/go-tests.sh`); `-race` and golangci-lint run only in CI's
@@ -32,6 +33,8 @@ smaller packs.
   `docker-sandbox.repository.collibra.io/chip-binary:<run tag>-amd64`; its result's digest-pinned
   `CHIP_IMAGE` fills the shared spec, and validate-ac checks the copilot pod runs that digest
   before it judges anything.
+- **`validate-ac` always runs**, so a failed build or provision still yields a verdict: code-level
+  criteria judged from the branch, runtime criteria not met as environment faults.
 - **`teardown-env` always runs**, after validate-ac, with `ALLOW_FAILED_DEPLOYMENTS: "true"` so a
   failed provision does not also fail the teardown.
 

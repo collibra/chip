@@ -43,7 +43,7 @@ nodes:
       - Comments say what the code does or why, in terms that stay true: no Jira keys, pull request numbers, names, or what the code used to be. That belongs in the commit message.
       - Do not edit anything under .github/: PESTO's GitHub App has no Workflows: write, so a push touching a workflow is refused and takes every other change in it along.
 
-    COMMITS. Subjects on this repository are Conventional Commits, `<Jira key> <type>(<optional scope>): <imperative description>`, the form the latest merged commits use, one line under 72 characters, type one of feat, fix, docs, style, refactor, test, chore, ci (.githooks/commit-message-check; sample `git log --oneline -20`). The key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not rebase a branch that is already pushed.
+    COMMITS. Subjects on this repository are Conventional Commits as CONTRIBUTING.md and .githooks/commit-message-check define them, carrying the Jira key at the end: `<type>(<optional scope>): <imperative description> <Jira key>`, e.g. `feat(dq): gate data quality tools behind --data-quality <key>`; the description after `: ` under 72 characters, type one of feat, fix, docs, style, refactor, test, chore, ci (sample `git log --oneline -25`). PESTO's commit hook shows recent subjects before your first commit and asks you to re-run it: re-run with this same form; do not move the key to the front, which the repository hook rejects. The key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not rebase a branch that is already pushed.
 
     NAME THE BRANCH AFTER THE TICKET, with the verb: `pesto sandbox branch-name feat/<jira key in lower case>-<short-description>` (`fix/` for a defect). Only that call counts: a file you write instead is discarded, and a branch made with `git checkout -b` is not the one that gets pushed.
 
@@ -84,7 +84,7 @@ nodes:
       - SKILLS.md for any skill under pkg/skills/files/collibra/.
       - AGENTS.md's stepdown rule; Go idiom matching the surrounding package.
       - tests: every behaviour a criterion names has a unit test that would fail without the change; no test reaches a live network.
-      - comments carry no Jira keys, pull request numbers, names or history; commit subjects are Conventional Commits prefixed with the Jira key; nothing under .github/ is touched.
+      - comments carry no Jira keys, pull request numbers, names or history; commit subjects are Conventional Commits (`<type>(<scope>): <description> <Jira key>`); nothing under .github/ is touched.
     Run `go build ./...` and `go test -count=1 -p 2 ./...` (no -race: this pod has no cgo) and report a failure as a MUST HAVE.
 
     Write `.pesto/artifacts/review_findings` as JSON `{"findings": [...]}`, each finding `{"id", "tag", "lens", "path", "lines", "rationale", "citation", "current_code", "proposed_fix"}`, tag one of MUST HAVE, SHOULD HAVE, NITPICK, QUESTION and lens one of spec, standards, skills, stepdown, tests, conventions. No findings is `{"findings": []}`.
@@ -114,7 +114,7 @@ nodes:
 
     CONVENTIONS: AGENTS.md's stepdown rule, docs/TOOL_CONTRIBUTION_STANDARDS.md, SKILLS.md. Comments say what the code does or why, with no Jira keys, pull request numbers, names or history. Do not edit anything under .github/.
 
-    COMMITS. Conventional Commits, `<Jira key> <type>(<optional scope>): <imperative description>`, the form the latest merged commits use, one line under 72 characters; the key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not open a pull request: open-pr does that once, after the last round.
+    COMMITS. Conventional Commits per CONTRIBUTING.md and .githooks/commit-message-check, the Jira key at the end: `<type>(<optional scope>): <imperative description> <Jira key>`, the description under 72 characters; the key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not open a pull request: open-pr does that once, after the last round.
 
     YOUR BRANCH IS WHAT THE RUNTIME TIER VALIDATES: build-chip compiles it and validate-ac judges it, so a commit you leave out of it is one nothing downstream ever tests.
 
@@ -190,7 +190,7 @@ nodes:
 
     Everything downstream of you is expensive: build-chip compiles this branch next and a DGC is provisioned on it, so a fix you push here is what gets validated. Do not paper over a failure to move the run along.
 
-    COMMITS. Conventional Commits, `<Jira key> <type>(<optional scope>): <imperative description>`, the form the latest merged commits use, one line under 72 characters; the key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not rebase or force-push, and do not change the pull request's title or description.
+    COMMITS. Conventional Commits per CONTRIBUTING.md and .githooks/commit-message-check, the Jira key at the end: `<type>(<optional scope>): <imperative description> <Jira key>`, the description under 72 characters; the key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not rebase or force-push, and do not change the pull request's title or description.
 
     You are running headless: there is no human in this session, nothing can answer a question, and stopping to ask one ends the task having produced nothing. Where something is ambiguous, choose the option most consistent with the surrounding code, record the assumption, and carry on.
 - name: build-chip
@@ -237,6 +237,7 @@ nodes:
   description: 'Deterministic: runs collibra/dq''s provision-env through run-dq-step.sh with the shared spec dgc-ai-copilot.magneto.yaml (read from collibra/ai-evals), its placeholders filled for this stack: a seeded OAuth DGC (auth-service, AI Governance, Maestro) pinned to the spec''s version, Postgres, Elasticsearch and ai-copilot on copilot-service 0.24.1 behind the browser front door, with chip in binary mode on port 9900 running exactly the digest build-chip pushed (SPEC_VARS_FROM). clone_repos names magneto and dq for their credentials and dq''s script.'
 - name: validate-ac
   title: Prove the acceptance criteria against the deployed chip
+  always_run: true
   depends_on:
   - provision-env
   - build-chip
@@ -260,6 +261,8 @@ nodes:
     SPEC: '<<SPEC - everything a judge of the work needs from the ticket, verbatim: story, acceptance criteria, design notes. Review and validate-ac cannot read Jira>>'
   description: |
     You are a FRESH session: you did not write this change and owe it nothing. Prove each acceptance criterion against the RUNNING stack provision-env deployed, whose ai-copilot pod runs chip in binary mode from the image build-chip published, and against this branch of collibra/chip. Record the branch head you tested (`git rev-parse HEAD`).
+
+    WHEN THE STACK NEVER CAME UP. You run even if build-chip or provision-env failed. If .pesto/inputs/result/build-chip or .pesto/inputs/result/provision-env is missing or reports a failure, quote what it says (or that it is missing), judge the code-level criteria from this branch, mark every runtime criterion not met with kind environment, and still write post_review, review_findings and result.
 
     THE CRITERIA are rendered into this prompt with their ids. Read each one VERBATIM: a criterion states its own bar in plain language, and you hold the work to exactly that bar. SPEC (`printenv SPEC`) is the ticket, for context; the criteria decide.
 
