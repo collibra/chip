@@ -29,9 +29,20 @@ Ask together; accept partial answers and follow up.
 
 If the customer says "I'm not sure whether one exists", that is the normal case: go to Step 4 and show them what exists.
 
+### When the customer opens with Collibra's prompt
+
+Collibra gives the customer a prompt to copy into their assistant. It comes in two forms, and each already answers question 1:
+
+- `Create agent contract using the Collibra MCP connection.` → **new**. Ask question 2 only.
+- `Update agent contract "<name>" (ID: <id>) using the Collibra MCP connection.` → **edit**, and the customer has picked the contract. Skip both questions and go to Step 4 with that id.
+
+The prompt's second line asks you to use this skill. Don't comment on it or repeat it back. If the customer's later messages contradict the prompt ("actually, I want a new one"), follow the later message.
+
 ## Step 4 — Pick the contract (edit only)
 
-`GET /agentContracts`. List every contract the customer can see, the global one first: name, kind, rule count, version and date saved, and how many agents it governs ("all agents" for global; "not linked to any agent yet" for 0). Ask which one. If the customer already named a contract, show the list with that one marked and ask them to confirm.
+**The customer's prompt gives a contract id:** `GET /agentContracts/{id}` instead of listing. Found → confirm: *"You want to edit **<name>**: <kind>, <n> rules, version <v> saved <date>, governing <agents>. That one?"* Use the name Collibra returns. If it differs from the name in the prompt, say once: *"Collibra now calls it **<name>**."* Not found → *"I can't find that contract in Collibra. It may have been deleted, or you may not have access to it."* Then list as below. If `GET /agentContracts/{id}` is missing, list as below with the contract whose id matches marked.
+
+**Otherwise:** `GET /agentContracts`. List every contract the customer can see, the global one first: name, kind, rule count, version and date saved, and how many agents it governs ("all agents" for global; "not linked to any agent yet" for 0). Ask which one. If the customer already named a contract, show the list with that one marked and ask them to confirm.
 
 - More than about 20 contracts → ask for part of the name and filter with `name=` instead of printing them all.
 - Empty list → *"I can't see any contracts in Collibra. Create a new one?"*
@@ -89,13 +100,39 @@ Ask for the organisation's name if you don't have it from the customer — it is
 
 Accept the customer's alternative. Keep it under 2000 characters.
 
-Collibra stores the contract in a Governance Asset domain. `find_governance_domain()`:
+### Is the name used in another domain?
+
+Once the customer settles on a name, `GET /agentContracts` with `name=<name>`. The filter matches names that contain the text, so keep only contracts with exactly this name. For each, `get_contract_domain(contract id)`.
+
+Collibra's list of Agent Contracts shows names only, so two contracts with the same name look identical there, even in different domains. Warn, never block:
+
+- One match → *"There's already a contract called **<name>**, in **<domain>**. In Collibra's list of contracts, the two would look identical. How about **<suggested name>** (a), or do you want to keep **<name>** (b)?"*
+- Several → name every domain they're in, then the same question.
+- Domain can't be read → *"…, in a domain I can't see."*
+
+Build the suggested name from what sets this contract apart: what the rules cover, the team, the region. Never an agent's name. If the customer keeps the name, go on and don't raise it again. If they pick another name, check that one the same way.
+
+No match, or no way to list contracts → say nothing and go on.
+
+### Pick the domain
+
+Collibra stores the contract in a Governance Asset domain. `find_governance_domain()` gives the domains the customer can save to.
+
 - One domain → propose it: *"I'll save it in **<domain>** (<community>). OK?"*
-- Several → list name and community; ask which.
+- Several → keep the new contract with the existing ones unless the customer wants otherwise. Take the contracts from `GET /agentContracts` (reuse the list if you already have it). `get_contract_domain` for each; with more than 20, read the 20 saved most recently. Count them per domain, leaving out domains the customer can't save to.
+  - All in one domain → *"Your other contracts are in **<domain>** (<community>), so I'll save this one there too. OK, or do you want a different domain?"*
+  - Spread over several → propose the one with the most: *"Most of your contracts (<n> of <m>) are in **<domain>** (<community>), so I'll save this one there too. OK? The others are in <domains>."* On a tie, list the tied domains first and ask which.
+  - No existing contracts, their domains can't be read, or none of them is a domain the customer can save to → list name and community; ask which. If the other contracts are all in a domain the customer can't save to, say so in one line.
 - None → *"I can't see a Governance Asset domain you can use. Someone with admin rights in Collibra has to create one or give you access before the contract can be saved. We can keep drafting meanwhile."* Record `domain: none`; Stage 07 says it once more.
 - Capability missing or offline → ask for the domain's name or Collibra link and record it as given.
 
-The name must be unique in that domain, among all its assets. You can't check that from here, so if the name is taken, Stage 08 asks for another.
+`get_contract_domain` returns the domain's name. Match it to the domains `find_governance_domain()` returned by name; if two of those share the name, show both with their community.
+
+### Is the name taken in that domain?
+
+The name must be unique in its domain, among all its assets. If the name check above found a contract with this name in the chosen domain, say so now: *"**<domain>** already has a contract called **<name>**, and Collibra won't save two with the same name in one domain. Do you want a different name (a), or a different domain (b)?"* Go back to whichever they change.
+
+Other kinds of assets in the domain can have the name too, and you can't see those from here. If one does, Stage 08 asks for another name.
 
 ## Step 8 — Record the session frame
 
@@ -115,9 +152,10 @@ This frame is re-printed at the top of Stage 07.
 
 - Never create anything. Stage 01 is read-only.
 - Never assume "new" when a contract exists, or "edit" when none does.
-- Never find the contract to edit through an agent. Pick it from the list.
+- Never find the contract to edit through an agent. Pick it from the list, or take the one Collibra's prompt names by id.
 - Never treat an agent the customer didn't confirm as one the rules are checked against.
 - Never guess which of several agents or contracts the customer meant.
+- Never refuse a name because a contract in another domain has it. Warn once and follow the customer's choice.
 
 ## Exit criteria → Stage 02
 
