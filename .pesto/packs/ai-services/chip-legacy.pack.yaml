@@ -1,0 +1,359 @@
+team: ai-services
+name: chip-legacy
+description: |
+  collibra/chip (deprecated, binary sidecar) implement -> review <-> remediate-review (one round, raisable) -> PR, ledger, CI -> build this branch's chip -> provision a copilot stack running it -> validate-ac calls chip's tools directly. Kept until chip is retired; there is no ladder of smaller packs.
+
+  Use when: a change to collibra/chip needs proving against a RUNNING ai-copilot whose chip sidecar is this branch's binary - a tool's MCP input schema or output as a real DGC answers it, a capability flag that registers or hides tools, an error a live Collibra API returns. The implementer writes the change from STORY, a fresh reviewer reads it against SPEC and docs/TOOL_CONTRIBUTION_STANDARDS.md, the implementer fixes the findings, the PR opens ready for review with a findings ledger and reconcile-ci gets the `build` check green. build-chip then compiles the reconciled branch into a chip-binary image under the run tag, provision-env stands up an OAuth DGC with ai-copilot (browser front door, chip in binary mode on that digest) from the shared spec, and validate-ac, a fresh session, calls chip's tools through /rest/mcp with no model in the loop and posts per-criterion evidence. It validates only: an unmet criterion is reported for a human, never fixed. BASE_BRANCH is where the branch is cut from and where the PR opens. One review round by default; raise review-round's count at submit for more.
+
+  Cannot settle:
+  - anything about the race detector: the pod pins CGO_ENABLED=0 with no C compiler, so `go test -race` runs only in CI, which reconcile-ci reads as a red build
+  - golangci-lint's verdict in the pod: the linter is not installed here, so reconcile-ci reads it from CI's `build` check
+  - the release pipeline - goreleaser, the signed Windows binaries, the darwin and arm64 builds; build-chip makes one linux/amd64 binary
+  - what a model does with chip's tools (tool choice, answer quality): validate-ac calls the tools directly. Use an ai-evals verifyAC pack for scored agent runs
+  - anything the shared spec does not stand up: no Edge, no DQ services, no chip-service; the DGC is pinned to the spec's version, not latest gold
+defaults:
+  target_branch: '<<BASE_BRANCH - the branch to cut from, review against and open the PR against: main, or the feature branch this story merges into>>'
+nodes:
+- name: implement
+  title: <<TASK_LABEL - becomes the task title>>
+  branch_prefix: <<BRANCH_PREFIX - 'feat/' or 'fix/', then the Jira key in lower case and a hyphen. MUST contain the key>>
+  source_branch: '<<BASE_BRANCH - the branch to cut from, review against and open the PR against: main, or the feature branch this story merges into>>'
+  model_preference: sonnet
+  cost_budget_usd: 30
+  timeout_seconds: 7200
+  required_artifacts:
+  - push_branch
+  task_env:
+    JIRA_KEY: <<JIRA_KEY - the ticket key this work is for; it starts every commit subject and appears in the pull request title>>
+    STORY: <<STORY - the story as written on the ticket, plus any comments the engineer chose. The implementer cannot read Jira>>
+  post_script: 'bash -c "${GO_TESTS_SH:?go-tests.sh is not bound}"
+
+    '
+  description: |
+    YOUR STORY is in the environment variable STORY, not in this prompt: read it first with `printenv STORY`. It is the whole task, verbatim from the ticket, and the acceptance criteria below are what it is judged on - by a fresh session that did not write it, against a running ai-copilot whose chip sidecar is the binary built from your branch.
+
+    Make the change on your working branch in collibra/chip and commit locally. A reviewer reads that branch next; remediate-review acts on the review afterwards.
+
+    BUILDING AND TESTING IN THIS POD. collibra/chip is a Go module (go.mod pins the toolchain); the binary is ./cmd/chip. CI (.github/workflows/build.yaml, job `build`) runs `go mod download`, `go test -race -v ./...`, `go build -v ./...` and golangci-lint v2.15.0. Here run `go build ./...` and `go test -count=1 -p 2 ./...`: -race needs cgo, and this image pins CGO_ENABLED=0 with no C compiler, so a race is CI's to find. Your post_script runs exactly those two commands and fails the node when they fail. golangci-lint is not installed in the pod; run `go vet ./...` and leave the linter to CI.
+
+    CONVENTIONS (a reviewer checks every one). Read AGENTS.md, CONTRIBUTING.md, SKILLS.md and docs/TOOL_CONTRIBUTION_STANDARDS.md before writing code.
+      - The stepdown rule (AGENTS.md): code reads top-down, each function followed by the ones it calls.
+      - A tool follows docs/TOOL_CONTRIBUTION_STANDARDS.md: one tool per user-facing capability, the narrowest surface, no live customer data returned to the model, gated by one experimental feature or one capability flag (never both), annotation hints set.
+      - A skill under pkg/skills/files/collibra/ follows SKILLS.md, `requires:` naming any capability flag its tools sit behind.
+      - Comments say what the code does or why, in terms that stay true: no Jira keys, pull request numbers, names, or what the code used to be. That belongs in the commit message.
+      - Do not edit anything under .github/: PESTO's GitHub App has no Workflows: write, so a push touching a workflow is refused and takes every other change in it along.
+
+    COMMITS. Subjects on this repository are Conventional Commits, `<Jira key> <type>(<optional scope>): <imperative description>`, the form the latest merged commits use, one line under 72 characters, type one of feat, fix, docs, style, refactor, test, chore, ci (.githooks/commit-message-check; sample `git log --oneline -20`). The key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not rebase a branch that is already pushed.
+
+    NAME THE BRANCH AFTER THE TICKET, with the verb: `pesto sandbox branch-name feat/<jira key in lower case>-<short-description>` (`fix/` for a defect). Only that call counts: a file you write instead is discarded, and a branch made with `git checkout -b` is not the one that gets pushed.
+
+    You are running headless: there is no human in this session, nothing can answer a question, and stopping to ask one ends the task having produced nothing. Where something is ambiguous, choose the option most consistent with the surrounding code, record the assumption, and carry on.
+- name: review
+  title: Review the change
+  depends_on:
+  - implement
+  source_branch: $implement.branch
+  model_preference: opus
+  cost_budget_usd: 20
+  timeout_seconds: 5400
+  max_retries: 1
+  required_artifacts:
+  - review_findings
+  task_env:
+    JIRA_KEY: <<JIRA_KEY - the ticket key this work is for; it starts every commit subject and appears in the pull request title>>
+    SPEC: '<<SPEC - everything a judge of the work needs from the ticket, verbatim: story, acceptance criteria, design notes. Review and validate-ac cannot read Jira>>'
+    BASE_BRANCH: '<<BASE_BRANCH - the branch to cut from, review against and open the PR against: main, or the feature branch this story merges into>>'
+  description: |
+    You are a FRESH reviewer: you did not write this change. This review runs once per review round (one by default; the submit can raise it). Review the branch as it stands now; report findings, change no code.
+
+    FIRST, find the diff. Your clone is shallow; fetch the base and deepen until there is a merge-base:
+
+        git fetch -q --depth=50 origin "+$BASE_BRANCH:refs/remotes/origin/base"
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          git merge-base origin/base HEAD >/dev/null && break
+          git fetch -q --deepen=200 origin "+$BASE_BRANCH:refs/remotes/origin/base"
+        done
+
+    If there is still no merge-base, stop and say so. Then check `git log --oneline origin/base..HEAD` lists only this story's commits; if it carries commits from elsewhere the base is wrong, so stop and say so. Review `git diff origin/base...HEAD`.
+
+    THE TICKET is in SPEC (`printenv SPEC`); this pod has no Jira access, so if SPEC is too thin to judge a criterion, report that as a finding.
+
+    WHAT THIS REPOSITORY'S REVIEWER CHECKS:
+      - SPEC: does the change do what every acceptance criterion asks, and nothing it does not?
+      - docs/TOOL_CONTRIBUTION_STANDARDS.md, section by section, for every tool added or changed: one tool per capability, narrowest surface, no live customer data returned to the model, the right gate (one experimental feature or one capability flag, never both), annotation hints, descriptions an LLM with no domain knowledge can act on, error handling.
+      - SKILLS.md for any skill under pkg/skills/files/collibra/.
+      - AGENTS.md's stepdown rule; Go idiom matching the surrounding package.
+      - tests: every behaviour a criterion names has a unit test that would fail without the change; no test reaches a live network.
+      - comments carry no Jira keys, pull request numbers, names or history; commit subjects are Conventional Commits prefixed with the Jira key; nothing under .github/ is touched.
+    Run `go build ./...` and `go test -count=1 -p 2 ./...` (no -race: this pod has no cgo) and report a failure as a MUST HAVE.
+
+    Write `.pesto/artifacts/review_findings` as JSON `{"findings": [...]}`, each finding `{"id", "tag", "lens", "path", "lines", "rationale", "citation", "current_code", "proposed_fix"}`, tag one of MUST HAVE, SHOULD HAVE, NITPICK, QUESTION and lens one of spec, standards, skills, stepdown, tests, conventions. No findings is `{"findings": []}`.
+- name: remediate-review
+  title: Fix the review findings
+  depends_on:
+  - review
+  resume_session: implement
+  model_preference: sonnet
+  cost_budget_usd: 20
+  timeout_seconds: 7200
+  required_artifacts:
+  - push_branch
+  task_env:
+    JIRA_KEY: <<JIRA_KEY - the ticket key this work is for; it starts every commit subject and appears in the pull request title>>
+  post_script: 'bash -c "${GO_TESTS_SH:?go-tests.sh is not bound}"
+
+    '
+  description: |
+    Act on the review findings delivered at .pesto/inputs/review_findings/review: `{"findings": [...]}`, each finding with a lens and a tag. This is one review round; if the submit raised the round count, a fresh review reads the branch after you, so fix this round's findings only.
+
+    WHAT TO FIX. Every MUST HAVE and every SHOULD HAVE. A NITPICK when it is cheap. A QUESTION needs no code; answer it in the ledger.
+
+    LEFT FOR YOU is for these reasons only: it needs something this pod lacks (a live stack, cgo for -race, golangci-lint); it would change the behaviour of a tool this story does not touch and no option avoids that; or fixing it would contradict an acceptance criterion. "Would widen the diff" is not a reason. If a SHOULD HAVE or NITPICK fix breaks the build or tests and you cannot repair it, revert that one fix and leave it, giving the failure as the reason.
+
+    BUILDING AND TESTING IN THIS POD. collibra/chip is a Go module; the binary is ./cmd/chip. CI (.github/workflows/build.yaml, job `build`) runs `go test -race -v ./...`, `go build -v ./...` and golangci-lint v2.15.0. Here run `go build ./...`, `go vet ./...` and `go test -count=1 -p 2 ./...`; no -race (no cgo in this image). Your post_script runs the build and tests and fails the node when they fail.
+
+    CONVENTIONS: AGENTS.md's stepdown rule, docs/TOOL_CONTRIBUTION_STANDARDS.md, SKILLS.md. Comments say what the code does or why, with no Jira keys, pull request numbers, names or history. Do not edit anything under .github/.
+
+    COMMITS. Conventional Commits, `<Jira key> <type>(<optional scope>): <imperative description>`, the form the latest merged commits use, one line under 72 characters; the key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not open a pull request: open-pr does that once, after the last round.
+
+    YOUR BRANCH IS WHAT THE RUNTIME TIER VALIDATES: build-chip compiles it and validate-ac judges it, so a commit you leave out of it is one nothing downstream ever tests.
+
+    You are running headless: there is no human in this session, nothing can answer a question, and stopping to ask one ends the task having produced nothing. Where something is ambiguous, choose the option most consistent with the surrounding code, record the assumption, and carry on.
+- name: open-pr
+  title: <<PR_TITLE - becomes the pull request title verbatim; a Conventional Commits subject carrying the Jira key>>
+  depends_on:
+  - remediate-review
+  resume_session: remediate-review
+  model_preference: sonnet
+  cost_budget_usd: 8
+  timeout_seconds: 1800
+  required_artifacts:
+  - open_pr
+  pr_draft: false
+  task_env:
+    JIRA_KEY: <<JIRA_KEY - the ticket key this work is for; it starts every commit subject and appears in the pull request title>>
+  description: |
+    The review rounds are done and your branch is final. Open the pull request; change no code. It opens READY FOR REVIEW, not as a draft.
+
+    WRITE TWO DOCUMENTS, and they are different things.
+
+      THE DESCRIPTION - write it to `.pesto/artifacts/open_pr`. That kind is named for what it produces, so the file IS the description; `pr_description` and `PR_BODY` are wrong and the runner would publish your task prompt instead. Write it as a TL;DR about OUTCOME: what changed and why, in the few sentences a reviewer reads before opening the diff. No implementation detail, no narration of how you worked, no list of files. Use this repository's template, .github/pull_request_template.md: its `## 🎯 What does this PR do?` section first, carrying the summary and JIRA_KEY, then `## ✅ Checklist` with every box ticked that is true. Leave no HTML comment in it. No AI-attribution footer.
+
+      THE TITLE - one line in `.pesto/pr-title`, a SIBLING of `.pesto/artifacts/`. When the task title you were given is a real title, use it verbatim; otherwise a Conventional Commits subject carrying JIRA_KEY, like the commits.
+- name: publish-ledger
+  title: Publish the review outcome ledger
+  depends_on:
+  - open-pr
+  - review
+  resume_session: open-pr
+  model_preference: sonnet
+  cost_budget_usd: 8
+  timeout_seconds: 1800
+  max_retries: 1
+  required_artifacts:
+  - post_comment
+  description: |
+    Publish the outcome ledger for the last review round you acted on. You are the session that made those decisions; do not re-derive them from the diff. The review report is at .pesto/inputs/review_findings/review.
+
+    Write the ledger to `.pesto/artifacts/post_comment`; the runner posts it to the pull request.
+
+    It is a COMPLETE account of the review: EVERY finding appears exactly once, with the tag and lens the report gave it, and exactly one outcome:
+      FIXED         - one line on what you changed, so a human can find it in the diff.
+      LEFT FOR YOU  - one line naming the allowed reason (needs what this pod lacks, would change a tool this story does not touch, contradicts an acceptance criterion, or the fix broke the build or tests and was reverted); under it, everything the report gave the finding, verbatim, code in a collapsed <details> block.
+      NOT A DEFECT  - why the reviewer is wrong.
+
+    Order by tag: MUST HAVE, QUESTION, SHOULD HAVE, NITPICK; within a tag, LEFT FOR YOU and NOT A DEFECT above FIXED. Open with "Covers the last review round; earlier rounds' fixes are in the commit history.", then a one-line count whose parts add up to the review's total. If the review reported no findings, say exactly that after the opening line. Change no code, push nothing.
+- name: reconcile-ci
+  title: Get the pipeline green before chip is built from this branch
+  depends_on:
+  - open-pr
+  resume_session: open-pr
+  ci_watch: true
+  max_ci_attempts: 2
+  max_retries: 1
+  model_preference: sonnet
+  cost_budget_usd: 10
+  timeout_seconds: 3600
+  required_artifacts:
+  - push_branch
+  task_env:
+    JIRA_KEY: <<JIRA_KEY - the ticket key this work is for; it starts every commit subject and appears in the pull request title>>
+  post_script: 'bash -c "${GO_TESTS_SH:?go-tests.sh is not bound}"
+
+    '
+  description: |
+    CI on this pull request has failed. Diagnose the failing check and push a fix: commit locally and the runner updates the pull request.
+
+    CI is GitHub Actions. Expect on the head: build.yaml's `build` check-run (`go test -race -v ./...`, `go build -v ./...`, golangci-lint v2.15.0), its `tag` check-run (skipped on a pull request), and two Snyk commit statuses, security/snyk and license/snyk. A head without the `build` check-run means nothing was tested. The failing job's console log is staged under .pesto/ci - read it rather than deriving a job path.
+
+    Fix the CODE so the existing pipeline passes; never edit .github/. A -race failure cannot be reproduced here (no cgo): read the race report in the log, fix the code it names, and say in the commit message that the fix is unverified locally. A lint failure: fix what the log names; golangci-lint is not installed in the pod. Re-run `go build ./...`, `go vet ./...` and `go test -count=1 -p 2 ./...`; your post_script runs the build and tests. Escalate rather than guessing when the failure cannot have come from this branch.
+
+    Everything downstream of you is expensive: build-chip compiles this branch next and a DGC is provisioned on it, so a fix you push here is what gets validated. Do not paper over a failure to move the run along.
+
+    COMMITS. Conventional Commits, `<Jira key> <type>(<optional scope>): <imperative description>`, the form the latest merged commits use, one line under 72 characters; the key is in JIRA_KEY. Commit locally and let the runner push: never push, never open a pull request yourself. Do not rebase or force-push, and do not change the pull request's title or description.
+
+    You are running headless: there is no human in this session, nothing can answer a question, and stopping to ask one ends the task having produced nothing. Where something is ambiguous, choose the option most consistent with the surrounding code, record the assumption, and carry on.
+- name: build-chip
+  title: Build this branch's chip into the chip-binary image
+  depends_on:
+  - reconcile-ci
+  source_branch: $implement.branch
+  timeout_seconds: 2700
+  max_retries: 1
+  required_artifacts:
+  - result
+  - test_report
+  secrets:
+  - jfrog-cloud
+  task_env:
+    CHIP_SOURCE: source
+    CHIP_ARCH: amd64
+  description: 'Deterministic: compiles the reconciled branch head (CGO_ENABLED=0 go build ./cmd/chip, linux/amd64, version pr-<12-char sha>), crane-appends it onto distroless and pushes it to docker-sandbox chip-binary:<run tag>-amd64. Its result carries CHIP_IMAGE (digest-pinned) for provision-env''s spec, plus image, digest, source_sha and version for validate-ac. wait-for-ci-image.sh is bound for CHIP_SOURCE=ci, which needs CI_IMAGE_REPO: collibra/chip''s CI publishes no image today, so source is the default.'
+- name: provision-env
+  title: Provision a DGC with ai-copilot running this branch's chip
+  depends_on:
+  - build-chip
+  clone_repos:
+  - https://github.com/collibra/magneto
+  - https://github.com/collibra/dq
+  timeout_seconds: 3600
+  max_retries: 1
+  required_artifacts:
+  - result
+  secrets:
+  - jfrog-cloud
+  task_env:
+    DQ_STEP: provision-env
+    CONTEXT_RESOURCE: k8s-dgc
+    SPEC_VAR_STACK: dgc-chip-legacy
+    SPEC_VARS_FROM: build-chip
+    SPEC_VAR_CHIP_MODE: binary
+    SPEC_VAR_VERTEX_LOCATION: global
+    SPEC_BLOCK_DGC_AUTH: 'authServiceEnabled: true'
+    SPEC_BLOCK_COPILOT: |
+      frontDoor: true
+      image: {repository: docker-delivery.repository.collibra.io/copilot-service, tag: 0.24.1, migrateTag: 0.24.1, migrateRepository: docker-delivery.repository.collibra.io/copilot-service-migrate}
+      disabledTools: [list_asset_types]
+  description: 'Deterministic: runs collibra/dq''s provision-env through run-dq-step.sh with the shared spec dgc-ai-copilot.magneto.yaml (read from collibra/ai-evals), its placeholders filled for this stack: a seeded OAuth DGC (auth-service, AI Governance, Maestro) pinned to the spec''s version, Postgres, Elasticsearch and ai-copilot on copilot-service 0.24.1 behind the browser front door, with chip in binary mode on port 9900 running exactly the digest build-chip pushed (SPEC_VARS_FROM). clone_repos names magneto and dq for their credentials and dq''s script.'
+- name: validate-ac
+  title: Prove the acceptance criteria against the deployed chip
+  depends_on:
+  - provision-env
+  - build-chip
+  - reconcile-ci
+  - open-pr
+  source_branch: $implement.branch
+  model_preference: opus
+  cost_budget_usd: 30
+  timeout_seconds: 5400
+  max_retries: 1
+  required_artifacts:
+  - post_review
+  - review_findings
+  - result
+  tools:
+  - magneto
+  secrets:
+  - jfrog-cloud
+  task_env:
+    JIRA_KEY: <<JIRA_KEY - the ticket key this work is for; it starts every commit subject and appears in the pull request title>>
+    SPEC: '<<SPEC - everything a judge of the work needs from the ticket, verbatim: story, acceptance criteria, design notes. Review and validate-ac cannot read Jira>>'
+  description: |
+    You are a FRESH session: you did not write this change and owe it nothing. Prove each acceptance criterion against the RUNNING stack provision-env deployed, whose ai-copilot pod runs chip in binary mode from the image build-chip published, and against this branch of collibra/chip. Record the branch head you tested (`git rev-parse HEAD`).
+
+    THE CRITERIA are rendered into this prompt with their ids. Read each one VERBATIM: a criterion states its own bar in plain language, and you hold the work to exactly that bar. SPEC (`printenv SPEC`) is the ticket, for context; the criteria decide.
+
+    FIRST, record which bytes you are testing. build-chip's result is at .pesto/inputs/result/build-chip and carries image, digest, source_sha and version; source_sha must equal your HEAD. With the magneto tool, read the copilot pod's spec and status and find the container or init container whose image is that image; confirm its imageID resolves to that digest. If either check fails, say so plainly and mark every runtime criterion unmet: a verdict against the wrong chip is worse than no verdict.
+
+    THE STACK RUNS IN OAUTH MODE. The DGC url, username and password are at .resources["k8s-dgc"].dgcEndpointDetails in .pesto/inputs/result/provision-env; never print the password. Authenticate the way a browser does, through the copilot Service, which is the front door: POST /rest/2.0/auth/sessions with that username and password, keep the JSESSIONID cookie, and send it with the X-CSRF-Token header set to the csrfToken from that response on every call. /rest/2.0 and /rest/mcp answer on that host. Do NOT hand-patch copilot-nginx-config.
+
+    CALL CHIP'S TOOLS DIRECTLY, with no model in the loop: MCP JSON-RPC tools/list, then tools/call for whichever tools the criteria name. Try /rest/mcp on the front door first. If it does not reach chip's tools, call chip on port 9900 inside the copilot pod through the magneto tool instead. Record which path you used and the raw request and response for every call. A path that does not exist is an ENVIRONMENT fault to record, not a defect in the change. The spec disables list_asset_types on this stack.
+
+    DATA: create whatever fixtures the criteria need yourself through /rest/2.0, and delete nothing you did not create. The seeded DGC carries AI Governance, so AI Use Case (asset type 00000000-0000-0000-0000-000000031401) exists and its AI Trust Score is readOnly in the assignment.
+
+    CODE-LEVEL criteria (the ones a test settles) are checked from this branch: run `go build ./...` and `go test -count=1 -p 2 ./...` (no -race: no cgo here) and read the tests that prove each one.
+
+    THE ENVIRONMENT IS RECLAIMED when this run ends, so anything worth keeping must be IN YOUR ARTIFACTS. Record every fixture you created, with its id and name, and every cluster-side change you made.
+
+    DELIVERABLE. Record each criterion with `pesto sandbox ac-result <id> --met|--not-met --evidence "..."`; the session cannot end until every id has an outcome. Per-criterion evidence goes to .pesto/artifacts/post_review, written for a human reviewer of the pull request, and the verdict to .pesto/artifacts/result as VALID JSON: {"all_met": true|false, "environment": "<the DGC url you tested>", "chip_image": "<image@digest>", "chip_commit": "<HEAD>", "path": "front door /rest/mcp | pod port 9900", "criteria": [{"id": "<criterion id>", "met": true|false, "kind": "defect|environment|n/a", "evidence": "<what you called and what came back>"}]}. Set all_met true only when every criterion is met. Nothing downstream fixes an unmet criterion; say plainly which are unmet, whether each is a DEFECT or an ENVIRONMENT fault, and mark one you could not test as not tested rather than met.
+
+    You are running headless: there is no human in this session, nothing can answer a question, and stopping to ask one ends the task having produced nothing.
+- name: teardown-env
+  title: Reclaim the environment
+  always_run: true
+  depends_on:
+  - provision-env
+  - validate-ac
+  clone_repos:
+  - https://github.com/collibra/magneto
+  - https://github.com/collibra/dq
+  timeout_seconds: 1800
+  max_retries: 1
+  required_artifacts:
+  - result
+  secrets:
+  - jfrog-cloud
+  task_env:
+    DQ_STEP: teardown-env
+    ALLOW_FAILED_DEPLOYMENTS: 'true'
+    REQUIRE_SESSION: 'false'
+  description: 'Deterministic: runs collibra/dq''s teardown-env through run-dq-step.sh, destroying every deployment and the session this run provisioned. always_run, so it reclaims the stack whether or not anything before it failed; ALLOW_FAILED_DEPLOYMENTS lets it reclaim a deployment whose provision failed instead of failing too, and REQUIRE_SESSION false lets a run that never provisioned end cleanly.'
+repeat_groups:
+- count: 1
+  name: review-round
+  nodes:
+  - review
+  - remediate-review
+files:
+- path: go-tests.sh
+  git:
+    path: .pesto/packs/ai-services/files/go-tests.sh
+- path: build-chip-binary.sh
+  git:
+    path: .pesto/packs/ai-services/files/build-chip-binary.sh
+- path: wait-for-ci-image.sh
+  git:
+    repo: collibra/ai-evals
+    path: .pesto/packs/ai-services/files/wait-for-ci-image.sh
+    ref: main
+- path: dgc-ai-copilot.magneto.yaml
+  git:
+    repo: collibra/ai-evals
+    path: .pesto/packs/ai-services/files/dgc-ai-copilot.magneto.yaml
+    ref: main
+- path: run-dq-step.sh
+  git:
+    repo: collibra/ai-evals
+    path: .pesto/packs/ai-services/files/run-dq-step.sh
+    ref: main
+bindings:
+- file: go-tests.sh
+  node: implement
+  destination: task_env
+  key: GO_TESTS_SH
+- file: go-tests.sh
+  node: remediate-review
+  destination: task_env
+  key: GO_TESTS_SH
+- file: go-tests.sh
+  node: reconcile-ci
+  destination: task_env
+  key: GO_TESTS_SH
+- file: wait-for-ci-image.sh
+  node: build-chip
+  destination: task_env
+  key: WAIT_FOR_CI_IMAGE_SH
+- file: build-chip-binary.sh
+  node: build-chip
+  destination: script
+- file: dgc-ai-copilot.magneto.yaml
+  node: provision-env
+  destination: task_env
+  key: SPEC_B64
+  encoding: base64
+- file: run-dq-step.sh
+  node: provision-env
+  destination: script
+- file: run-dq-step.sh
+  node: teardown-env
+  destination: script
