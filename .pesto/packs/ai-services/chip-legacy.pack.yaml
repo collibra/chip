@@ -12,6 +12,7 @@ description: |
   - what a model does with chip's tools (tool choice, answer quality): validate-ac calls the tools directly. Use an ai-evals verifyAC pack for scored agent runs
   - anything the shared spec does not stand up: no Edge, no DQ services, no chip-service; the DGC is pinned to the spec's version, not latest gold
 defaults:
+  repo_url: https://github.com/collibra/chip
   target_branch: '<<BASE_BRANCH - the branch to cut from, review against and open the PR against: main, or the feature branch this story merges into>>'
 nodes:
 - name: implement
@@ -170,7 +171,7 @@ nodes:
   resume_session: open-pr
   ci_watch: true
   max_ci_attempts: 2
-  max_retries: 1
+  max_retries: 0
   model_preference: sonnet
   cost_budget_usd: 10
   timeout_seconds: 3600
@@ -234,7 +235,7 @@ nodes:
       frontDoor: true
       image: {repository: docker-delivery.repository.collibra.io/copilot-service, tag: 0.24.1, migrateTag: 0.24.1, migrateRepository: docker-delivery.repository.collibra.io/copilot-service-migrate}
       disabledTools: [list_asset_types]
-  description: 'Deterministic: runs collibra/dq''s provision-env through run-dq-step.sh with the shared spec dgc-ai-copilot.magneto.yaml (read from collibra/ai-evals), its placeholders filled for this stack: a seeded OAuth DGC (auth-service, AI Governance, Maestro) pinned to the spec''s version, Postgres, Elasticsearch and ai-copilot on copilot-service 0.24.1 behind the browser front door, with chip in binary mode on port 9900 running exactly the digest build-chip pushed (SPEC_VARS_FROM). clone_repos names magneto and dq for their credentials and dq''s script.'
+  description: 'Deterministic: runs collibra/dq''s provision-env through run-env-step.sh with the shared spec dgc-ai-copilot.magneto.yaml (read from collibra/ai-evals), its placeholders filled for this stack: a seeded OAuth DGC (auth-service, AI Governance, Maestro) pinned to the spec''s version, Postgres, Elasticsearch and ai-copilot on copilot-service 0.24.1 behind the browser front door, with chip in binary mode on port 9900 running exactly the digest build-chip pushed (SPEC_VARS_FROM). clone_repos names magneto and dq for their credentials and dq''s script.'
 - name: validate-ac
   title: Prove the acceptance criteria against the deployed chip
   always_run: true
@@ -300,7 +301,7 @@ nodes:
     DQ_STEP: teardown-env
     ALLOW_FAILED_DEPLOYMENTS: 'true'
     REQUIRE_SESSION: 'false'
-  description: 'Deterministic: runs collibra/dq''s teardown-env through run-dq-step.sh, destroying every deployment and the session this run provisioned. always_run, so it reclaims the stack whether or not anything before it failed; ALLOW_FAILED_DEPLOYMENTS lets it reclaim a deployment whose provision failed instead of failing too, and REQUIRE_SESSION false lets a run that never provisioned end cleanly.'
+  description: 'Deterministic: runs collibra/dq''s teardown-env through run-env-step.sh, destroying every deployment and the session this run provisioned. always_run, so it reclaims the stack whether or not anything before it failed; ALLOW_FAILED_DEPLOYMENTS lets it reclaim a deployment whose provision failed instead of failing too, and REQUIRE_SESSION false lets a run that never provisioned end cleanly.'
 repeat_groups:
 - count: 1
   name: review-round
@@ -324,10 +325,10 @@ files:
     repo: collibra/ai-evals
     path: .pesto/packs/ai-services/files/dgc-ai-copilot.magneto.yaml
     ref: main
-- path: run-dq-step.sh
+- path: run-env-step.sh
   git:
     repo: collibra/ai-evals
-    path: .pesto/packs/ai-services/files/run-dq-step.sh
+    path: .pesto/packs/ai-services/files/run-env-step.sh
     ref: main
 bindings:
 - file: go-tests.sh
@@ -354,9 +355,9 @@ bindings:
   destination: task_env
   key: SPEC_B64
   encoding: base64
-- file: run-dq-step.sh
+- file: run-env-step.sh
   node: provision-env
   destination: script
-- file: run-dq-step.sh
+- file: run-env-step.sh
   node: teardown-env
   destination: script

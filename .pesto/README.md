@@ -46,7 +46,7 @@ smaller packs.
 | `files/build-chip-binary.sh` | here | compiles `./cmd/chip` from the branch head and publishes it as the chip-binary image (`CHIP_SOURCE=source`); `CHIP_SOURCE=ci` waits for a CI image instead, which needs `CI_IMAGE_REPO` because chip's CI publishes none | build-chip |
 | `wait-for-ci-image.sh` | collibra/ai-evals | polls a registry until CI's `<version>-sha-<short commit>` tag exists; bound to every `build-*` node as task_env `WAIT_FOR_CI_IMAGE_SH` | build-chip |
 | `dgc-ai-copilot.magneto.yaml` | collibra/ai-evals | the ONE magneto spec every AI Services pack provisions, bound as task_env `SPEC_B64`; this pack fills it for an OAuth stack with the front door and chip in binary mode | provision-env |
-| `run-dq-step.sh` | collibra/ai-evals | runs collibra/dq's `provision-env.sh` / `teardown-env.sh` (`DQ_STEP`) after filling the spec's placeholders | provision-env, teardown-env |
+| `run-env-step.sh` | collibra/ai-evals | runs collibra/dq's `provision-env.sh` / `teardown-env.sh` (`DQ_STEP`) after filling the spec's placeholders | provision-env, teardown-env |
 
 The shared files are referenced, never copied: `files: [{path: ..., git: {repo: collibra/ai-evals,
 path: .pesto/packs/ai-services/files/<file>, ref: main}}]`. Their documentation is collibra/ai-evals'
