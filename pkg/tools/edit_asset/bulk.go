@@ -144,9 +144,13 @@ func executeBulkUpdateAttributes(ctx context.Context, client *http.Client, plans
 func executeBulkAddRelations(ctx context.Context, client *http.Client, ec *editContext, plans []opPlan, indices []int) {
 	reqs := make([]clients.EditAssetCreateRelationRequest, len(indices))
 	for j, idx := range indices {
+		sourceID, targetID := ec.asset.ID, plans[idx].op.TargetAssetID
+		if plans[idx].relationReversed {
+			sourceID, targetID = targetID, sourceID
+		}
 		reqs[j] = clients.EditAssetCreateRelationRequest{
-			SourceID: ec.asset.ID,
-			TargetID: plans[idx].op.TargetAssetID,
+			SourceID: sourceID,
+			TargetID: targetID,
 			TypeID:   plans[idx].relationTypeID,
 		}
 	}
@@ -160,6 +164,7 @@ func executeBulkAddRelations(ctx context.Context, client *http.Client, ec *editC
 	}
 	for j, idx := range indices {
 		res := newSuccessResult(plans[idx].op)
+		res.RelationTypeID = plans[idx].relationTypeID
 		if j < len(created) {
 			res.RelationID = created[j].ID
 		}

@@ -284,34 +284,115 @@ func previousAndNewProperty(before, after *clients.EditAssetCore, field string) 
 
 func validateAddRelation(ec *editContext, plan opPlan) opPlan {
 	op := plan.op
-	if strings.TrimSpace(op.RelationType) == "" {
-		plan.result = newErrorResult(op, "relationType is required for add_relation")
+	if strings.TrimSpace(op.RelationTypeID) == "" && strings.TrimSpace(op.RelationType) == "" {
+		plan.result = newErrorResult(op, "relationTypeId or relationType is required for add_relation")
 		return plan
 	}
 	if err := validation.UUID("targetAssetId", op.TargetAssetID); err != nil {
 		plan.result = newErrorResult(op, err.Error())
 		return plan
 	}
-	rt, ok := ec.relationTypeByRole[normalize(op.RelationType)]
-	if !ok {
-		// Check whether the name matches an inverse (CoRole) instead. If it
-		// does, we can still create the relation — just with source and target
-		// flipped. This lets an agent author from either end of a relation.
-		if rt, ok = ec.relationTypeByCoRole[normalize(op.RelationType)]; ok {
-			plan.relationTypeID = rt.ID
-			plan.relationReversed = true
-			plan.result = newSuccessResult(op)
-			return plan
-		}
-		plan.result = newErrorResult(op, fmt.Sprintf(
-			"relation type %q is not valid for asset type %q in this domain.%s",
-			op.RelationType, ec.asset.Type.Name,
-			resolve.SuggestionSuffix("Relation roles", ec.availableRelationRoles(), 25)))
+
+	var (
+		rt       clients.EditAssetAssignmentRelationType
+		reversed bool
+		problem  string
+	)
+	if strings.TrimSpace(op.RelationTypeID) != "" {
+		rt, reversed, problem = relationTypeByID(ec, strings.TrimSpace(op.RelationTypeID))
+	} else {
+		rt, reversed, problem = relationTypeByRoleName(ec, op.RelationType)
+	}
+	if problem != "" {
+		plan.result = newErrorResult(op, problem)
 		return plan
 	}
 	plan.relationTypeID = rt.ID
+	// reversed: the edited asset is the tail, so source and target flip on execute.
+	plan.relationReversed = reversed
 	plan.result = newSuccessResult(op)
 	return plan
+}
+
+// relationTypeByID finds an explicitly given relation type in the asset's
+// assignment. The side it is assigned on sets the direction; when it is
+// assigned on both sides (a relation between two assets of the same type),
+// the edited asset is the source.
+func relationTypeByID(ec *editContext, id string) (clients.EditAssetAssignmentRelationType, bool, string) {
+	if err := validation.UUID("relationTypeId", id); err != nil {
+		return clients.EditAssetAssignmentRelationType{}, false, err.Error()
+	}
+	var inverse *clients.EditAssetAssignmentRelationType
+	for i, rt := range ec.assignment.RelationTypes {
+		if !strings.EqualFold(rt.ID, id) {
+			continue
+		}
+		if !rt.Reversed {
+			return rt, false, ""
+		}
+		inverse = &ec.assignment.RelationTypes[i]
+	}
+	if inverse != nil {
+		return *inverse, true, ""
+	}
+	return clients.EditAssetAssignmentRelationType{}, false, fmt.Sprintf(
+		"relationTypeId %q is not assigned to asset type %q in this domain, on either side, so the relation cannot be added to this asset.%s",
+		id, ec.asset.Type.Name, resolve.SuggestionSuffix("Relation types", ec.availableRelationTypes(), 25))
+}
+
+// relationTypeByRoleName resolves a role name: a forward role first, then a
+// co-role assigned in the inverse direction. A name shared by several
+// relation types on the same side is refused with the candidates listed, so
+// the caller picks one by relationTypeId instead of getting whichever came last.
+func relationTypeByRoleName(ec *editContext, name string) (clients.EditAssetAssignmentRelationType, bool, string) {
+	key := normalize(name)
+	for _, side := range []struct {
+		matches  []clients.EditAssetAssignmentRelationType
+		reversed bool
+	}{
+		{ec.relationTypesByRole[key], false},
+		{ec.relationTypesByCoRole[key], true},
+	} {
+		switch len(side.matches) {
+		case 0:
+			continue
+		case 1:
+			return side.matches[0], side.reversed, ""
+		default:
+			return clients.EditAssetAssignmentRelationType{}, false, fmt.Sprintf(
+				"relationType %q matches %d relation types on asset type %q: %s. Call again with relationTypeId set to the one you mean.",
+				name, len(side.matches), ec.asset.Type.Name, describeRelationTypes(side.matches, side.reversed))
+		}
+	}
+	return clients.EditAssetAssignmentRelationType{}, false, fmt.Sprintf(
+		"relation type %q is not valid for asset type %q in this domain.%s",
+		name, ec.asset.Type.Name,
+		resolve.SuggestionSuffix("Relation roles", ec.availableRelationRoles(), 25))
+}
+
+// describeRelationTypes lists relation types as "role (to Target Type) id",
+// seen from the edited asset.
+func describeRelationTypes(rts []clients.EditAssetAssignmentRelationType, reversed bool) string {
+	parts := make([]string, 0, len(rts))
+	for _, rt := range rts {
+		parts = append(parts, describeRelationType(rt, reversed))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func describeRelationType(rt clients.EditAssetAssignmentRelationType, reversed bool) string {
+	role, other := rt.Role, rt.TargetType
+	if reversed {
+		role, other = rt.CoRole, rt.SourceType
+	}
+	description := "relationTypeId " + rt.ID
+	if other != nil && other.Name != "" {
+		description = fmt.Sprintf("to %s (%s)", other.Name, description)
+	}
+	if role != "" {
+		description = fmt.Sprintf("'%s' %s", role, description)
+	}
+	return description
 }
 
 func executeAddRelation(ctx context.Context, client *http.Client, ec *editContext, plan opPlan) opPlan {
@@ -332,6 +413,7 @@ func executeAddRelation(ctx context.Context, client *http.Client, ec *editContex
 	}
 	res := newSuccessResult(plan.op)
 	res.RelationID = created.ID
+	res.RelationTypeID = plan.relationTypeID
 	plan.result = res
 	return plan
 }
