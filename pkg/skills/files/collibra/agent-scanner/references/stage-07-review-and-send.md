@@ -73,3 +73,5 @@ State clearly that nothing was sent.
 ## Exit criteria
 
 Either the result of the send has been reported, or the handoff has been given. Offer one last thing: rerunning the scan later (the same agent id keeps the history together).
+
+If the scan was sent and this run did not come from Guardian Onboarding, ask: "Do you want to set up Guardian for this agent now?" On a yes, load `collibra/guardian-onboarding` with `load_collibra_skill`. If the run came from Guardian Onboarding, go back to it instead.

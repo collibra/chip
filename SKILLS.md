@@ -19,6 +19,7 @@ those tools. Skill content lives in [`pkg/skills/files/collibra/`](pkg/skills/fi
 | `collibra/asset-edit` | `edit_asset` operation types |
 | `collibra/agent-contract` | Author a Guardian agent contract (plain-language rules for one or all AI agents) and save it with `create_agent_contract` / `update_agent_contract_rules`; its stages load as `references/*.md` resources |
 | `collibra/agent-scanner` | Fingerprint an AI agent from its code and send it with `publish_agent_scan`. Its stages load as `references/*.md` resources |
+| `collibra/guardian-onboarding` | Set up Collibra Guardian for an AI agent from start to finish: the Guardian SDK, the scan and the contracts (through the two skills above), an optional AI use case, `apply_latest_rules`, the rules file from `get_agent_rules_file`, and the activity check with `get_agent_guardian_status`. Its stages load as `references/*.md` resources |
 
 Each skill is one `SKILL.md` per directory, with frontmatter (`description`, `related`, `shared`,
 `requires`) and an optional `references/` directory for bundled reference documents.

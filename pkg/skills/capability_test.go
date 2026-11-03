@@ -25,6 +25,7 @@ var capabilityFreeSkills = []string{
 	"collibra/context",
 	"collibra/data-product-create",
 	"collibra/discovery",
+	"collibra/guardian-onboarding",
 	"collibra/index",
 	"collibra/lineage",
 }

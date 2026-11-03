@@ -88,6 +88,7 @@ Link:    <Collibra link if the capability returned one>
 Then, in plain words:
 - What happens next: *"This is now the contract's current version in Collibra. The previous version stays in its history."* For a new specialised contract, add: *"Next, link it to the agents it should govern, on the contract in Collibra. Until then it doesn't govern any agent."* Do not describe what Collibra does with it beyond that.
 - What the customer might do next: enrich the use case if it was thin; register an agent the customer named that isn't in Collibra yet; review policy-only rules with their compliance team.
+- If this contract was written while setting up Guardian for an agent, offer to go back to Guardian Onboarding (`collibra/guardian-onboarding`), which links the contract to the agent and applies the rules.
 - Offer: *"Want me to output a copy of the published contract for your records?"*
 
 ## Failed save

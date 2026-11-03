@@ -109,6 +109,37 @@ func TestRegisterAll_AgentScannerToolsVisibleWithEmptyConfig(t *testing.T) {
 	}
 }
 
+// The Guardian setup tools have no capability flag either, like the agent
+// scanner tools: they are registered with an empty config.
+var guardianSetupToolNames = []string{"get_agent_guardian_status", "apply_latest_rules", "get_agent_rules_report", "get_agent_rules_file"}
+
+func TestRegisterAll_GuardianSetupToolsVisibleWithEmptyConfig(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range guardianSetupToolNames {
+		if !slices.Contains(names, name) {
+			t.Errorf("expected %q to be registered with an empty config", name)
+		}
+	}
+}
+
+func TestRegisterAll_GuardianSetupToolAnnotations(t *testing.T) {
+	byName := map[string]*mcp.Tool{}
+	for _, tool := range listTools(t, &chip.ServerToolConfig{}) {
+		byName[tool.Name] = tool
+	}
+	for _, name := range guardianSetupToolNames {
+		tool, ok := byName[name]
+		if !ok {
+			t.Fatalf("%q is not registered", name)
+		}
+		a := tool.Annotations
+		write := name == "apply_latest_rules"
+		if a.ReadOnlyHint == write || a.IdempotentHint == write || *a.DestructiveHint {
+			t.Errorf("%q annotations: readOnly=%v idempotent=%v destructive=%v", name, a.ReadOnlyHint, a.IdempotentHint, *a.DestructiveHint)
+		}
+	}
+}
+
 func TestRegisterAll_AgentScannerToolsCanBeNarrowedByDisabledTools(t *testing.T) {
 	names := listToolNames(t, &chip.ServerToolConfig{DisabledTools: []string{"publish_agent_scan"}})
 	if slices.Contains(names, "publish_agent_scan") {

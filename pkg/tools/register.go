@@ -7,6 +7,7 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/apply_latest_rules"
 	"github.com/collibra/chip/pkg/tools/cancel_dq_job_run"
 	"github.com/collibra/chip/pkg/tools/create_agent_contract"
 	"github.com/collibra/chip/pkg/tools/create_assessment"
@@ -24,6 +25,9 @@ import (
 	"github.com/collibra/chip/pkg/tools/generate_dq_rule_sql"
 	"github.com/collibra/chip/pkg/tools/get_agent_contract"
 	"github.com/collibra/chip/pkg/tools/get_agent_contract_rules"
+	"github.com/collibra/chip/pkg/tools/get_agent_guardian_status"
+	"github.com/collibra/chip/pkg/tools/get_agent_rules_file"
+	"github.com/collibra/chip/pkg/tools/get_agent_rules_report"
 	"github.com/collibra/chip/pkg/tools/get_assessment"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
@@ -132,6 +136,12 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, publish_agent_scan.NewTool(client))
 	toolRegister(server, toolConfig, list_scanned_agents.NewTool(client))
 	toolRegister(server, toolConfig, get_latest_agent_scan.NewTool(client))
+	// The Guardian setup tools are registered WITHOUT a capability flag too,
+	// for the same private preview; gating is decided before they reach main.
+	toolRegister(server, toolConfig, get_agent_guardian_status.NewTool(client))
+	toolRegister(server, toolConfig, apply_latest_rules.NewTool(client))
+	toolRegister(server, toolConfig, get_agent_rules_report.NewTool(client))
+	toolRegister(server, toolConfig, get_agent_rules_file.NewTool(client))
 	// The data quality tools are gated as one block behind the data-quality
 	// capability flag (--data-quality), not behind an experimental feature
 	// name: they are generally available, but several write to Collibra and
