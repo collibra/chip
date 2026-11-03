@@ -7,3 +7,6 @@ build
 mcp.yaml
 oas/**
 mise.toml
+evals/.venv/
+evals/logs/
+__pycache__/
