@@ -2,25 +2,26 @@
 
 Say "Guardian is set up for `<agent>`." when it is, or what is still missing when it isn't, then the summary. Read everything again from Collibra first (`get_agent_guardian_status`); show only what a tool returned in this conversation.
 
-Every item has a clickable markdown link (`[name](url)`). Leave out an item you don't have; never invent one.
+Every item is a clickable markdown link (`[name](url)`) with a real address. Take the addresses from the tools, never write `<instance>` or build one yourself: the `links` that `get_agent_guardian_status` just returned (agent, agentVersion, each contract, contractTab, guardianTab, guardianAgents), and `get_asset_details`' `link` for the use case (call it with the use case's id). Leave out an item you don't have a link for; never invent one.
 
-```text
-Agent:           <name>, <link>
-Version:         <name>, <link>
-Use case:        <name>, <link> | none
-Agent contracts: <name> (<n> rules), <link>, one line each
-Rules:           <n> of <total> checked while the agent runs; details on the Contract tab: <instance>/asset/<aiAgentId>?tabbar=Contract
-Rules file:      <path in the project>, checked
-Mode:            Monitor (record only) | Enforce (stop it), from enforcement_mode in <settings file>
-Activity:        <read by Collibra | waiting for the connection | waiting for the deploy>
-Issues:          the Guardian tab: <instance>/asset/<aiAgentId>?tabbar=Guardian
-All agents:      <instance>/ai-governance/guardian-agents
-Endpoint:        <the App or the serving endpoint in Databricks, linked>, where you can check the deployed agent
-```
+Write it as a list, so the links can be clicked (not inside a code block):
+
+- **Agent:** [`<name>`](`links.agent`)
+- **Version:** [`<name>`](`links.agentVersion`)
+- **Use case:** [`<name>`](`<get_asset_details link>`), or none
+- **Agent contracts:** [`<name>`](`links.contracts[].url`) (`<n>` rules), one per contract
+- **Rules:** `<n>` of `<total>` checked while the agent runs, [see them on the Contract tab](`links.contractTab`)
+- **Rules file:** `<path in the project>`, checked
+- **Mode:** Monitor (record only) or Enforce (stop it), from `enforcement_mode` in `<settings file>`
+- **Activity:** read by Collibra, waiting for the connection, or waiting for the deploy
+- **Issues:** [the Guardian tab](`links.guardianTab`)
+- **All agents:** [Guardian agents](`links.guardianAgents`)
+- **Endpoint:** [`<the App or the serving endpoint>`](`<platform link>`), where you can check the deployed agent
 
 The endpoint line appears only when the workspace address and the name are both known from the code, the scan or a read-only look-up; never guess one. A Databricks App: `https://<workspace host>/apps/<app name>`. Model Serving: `https://<workspace host>/ml/endpoints/<endpoint name>`.
 
-Links: any asset (AI Agent, AI Agent Version, AI Use Case, AI Endpoint) is `<instance>/asset/<id>`; a contract is `<instance>/ai-governance/agent-contracts/<contractId>`.
+Never show `<instance>` or any other placeholder to the customer: an item without a real link is written without one.
+
 
 If the rules file isn't in place yet, or the agent hasn't been deployed with it: "Until your agent starts with the rules file, Guardian lets everything through."
 
