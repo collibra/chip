@@ -43,6 +43,7 @@ type Output struct {
 	Compilation  *clients.GuardianCompilationOverview `json:"compilation,omitempty" jsonschema:"Whether the agent's rules file (enforcement bundle, the rules compiled for the agent to apply at runtime) is current. status: NOT_COMPILED, IN_PROGRESS, FAILED, STALE (staleBecause says why: CONTRACT_VERSION_CHANGED, GOVERNING_SET_CHANGED, FINGERPRINT_CHANGED) or UP_TO_DATE. latestJob is the latest run (state PENDING, RUNNING, COMPLETED or FAILED, with failureMessage on failure; bundleId when it made a rules file); latestBundle is the newest rules file."`
 	Enforcement  *clients.GuardianEnforcementOverview `json:"enforcement,omitempty" jsonschema:"What the agent's activity shows it runs. status: NOT_OBSERVED (no activity seen yet), UP_TO_DATE, or STALE (the deployment does not run the newest rules file). observedBundle is the rules file seen in the latest issue."`
 	Collection   *clients.GuardianCollectionOverview  `json:"collection,omitempty" jsonschema:"Whether Collibra reads the agent's activity. status: OK, NOT_COLLECTED (reason: NO_CONNECTION, SOURCE_NOT_CONNECTED or AGENT_NOT_FOUND), FAILING or LAGGING. Absent for an agent with no rules file yet, or whose platform's activity Collibra does not collect."`
+	Links        *Links                               `json:"links,omitempty" jsonschema:"Ready-made links to the agent's pages in Collibra, to give the customer as clickable links. Use them as they are; never build a link yourself. Absent when the Collibra address is not known."`
 	AbsentBlocks []string                             `json:"absentBlocks,omitempty" jsonschema:"The blocks Collibra did not return. An older Collibra may not send every block; collection is also absent for an agent that has no rules file yet."`
 }
 
@@ -64,6 +65,23 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	}
 }
 
+// Links are the pages in Collibra the customer can open for this agent.
+type Links struct {
+	Agent          string         `json:"agent,omitempty" jsonschema:"The AI Agent's page."`
+	AgentVersion   string         `json:"agentVersion,omitempty" jsonschema:"The page of the agent's newest version."`
+	ContractTab    string         `json:"contractTab,omitempty" jsonschema:"The agent's Contract tab: the rules that apply and the latest rules file."`
+	GuardianTab    string         `json:"guardianTab,omitempty" jsonschema:"The agent's Guardian tab: the issues Guardian recorded."`
+	Contracts      []ContractLink `json:"contracts,omitempty" jsonschema:"One link per agent contract that governs the agent."`
+	AllContracts   string         `json:"allContracts,omitempty" jsonschema:"The page listing every agent contract."`
+	GuardianAgents string         `json:"guardianAgents,omitempty" jsonschema:"The page listing every agent Guardian governs."`
+}
+
+// ContractLink is the page of one agent contract.
+type ContractLink struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
 func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 	return func(ctx context.Context, input Input) (Output, error) {
 		aiAgentID := strings.TrimSpace(input.AIAgentID)
@@ -78,7 +96,11 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		if err != nil {
 			return failure(err), nil
 		}
-		return success(overview), nil
+		out := success(overview)
+		if host, ok := chip.GetCollibraHost(ctx); ok && strings.TrimSpace(host) != "" {
+			out.Links = links(strings.TrimSuffix(strings.TrimSpace(host), "/"), aiAgentID, overview)
+		}
+		return out, nil
 	}
 }
 
@@ -98,6 +120,25 @@ func success(overview *clients.AgentGuardianOverview) Output {
 		out.Message += fmt.Sprintf(" Collibra did not return: %s.", strings.Join(out.AbsentBlocks, ", "))
 	}
 	return out
+}
+
+func links(host, aiAgentID string, overview *clients.AgentGuardianOverview) *Links {
+	l := &Links{
+		Agent:          host + "/asset/" + aiAgentID,
+		ContractTab:    host + "/asset/" + aiAgentID + "?tabbar=Contract",
+		GuardianTab:    host + "/asset/" + aiAgentID + "?tabbar=Guardian",
+		AllContracts:   host + "/ai-governance/agent-contracts",
+		GuardianAgents: host + "/ai-governance/guardian-agents",
+	}
+	if overview.Fingerprint != nil && overview.Fingerprint.AIAgentVersion != nil && overview.Fingerprint.AIAgentVersion.ID != "" {
+		l.AgentVersion = host + "/asset/" + overview.Fingerprint.AIAgentVersion.ID
+	}
+	if overview.Contracts != nil {
+		for _, c := range *overview.Contracts {
+			l.Contracts = append(l.Contracts, ContractLink{Name: c.Name, URL: host + "/ai-governance/agent-contracts/" + c.ID})
+		}
+	}
+	return l
 }
 
 func absentBlocks(overview *clients.AgentGuardianOverview) []string {

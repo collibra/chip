@@ -26,7 +26,10 @@ One answer to "where is this agent in its Guardian setup?".
   - `compilation {status: NOT_COMPILED | IN_PROGRESS | FAILED | STALE | UP_TO_DATE, staleBecause [CONTRACT_VERSION_CHANGED | GOVERNING_SET_CHANGED | FINGERPRINT_CHANGED], latestJob {state, createdOn, failureMessage}, latestBundle {id, version, compiledAt, agentVersionId, agentFingerprintId, contractVersionIds}}`;
   - `enforcement {status: NOT_OBSERVED | UP_TO_DATE | STALE, observedBundle}`;
   - `collection {status: OK | NOT_COLLECTED | FAILING | LAGGING, reason: NO_CONNECTION | SOURCE_NOT_CONNECTED | AGENT_NOT_FOUND, lastCollectedOn}`.
-  The job's id is left out, as in `apply_latest_rules`. Any block may be missing on an older instance; return what's there and say which blocks were absent.
+  The job's id is left out, as in `apply_latest_rules`. Plus `links`: ready-made links to the agent, its newest version, its Contract and Guardian tabs, each governing
+  contract, all contracts and all Guardian agents, built from the connection's Collibra address (absent when the address
+  isn't known). The skill takes links from here and from `get_asset_details`' `link`, never building its own.
+  Any block may be missing on an older instance; return what's there and say which blocks were absent.
 - **Errors:** 403 `accessDenied`, 404 `aiAgentNotFound` (say: the agent may still be importing, or the id is wrong),
   503 `agentContractsUnavailable` (transient).
 - **Annotations:** read-only, idempotent.

@@ -328,6 +328,11 @@ changing what Guardian does when a rule is broken.
 
 ## Links
 
+The assistant doesn't know the Collibra address, so it takes every Collibra link from a tool result: `links` from
+`get_agent_guardian_status`, and `link` from `get_asset_details` after creating or linking an asset. The patterns below
+say which page each link opens.
+
+
 Every status line ends with markdown links (`[name](url)`) to what the step found, created or deployed: the changed
 files (stage 02), the agent and its version (03), each contract and the new link (04), the use case (05), the agent's
 Contract tab (06), the rules file and the deployed agent (07), the Guardian tab (08), and the full summary (09). Build
