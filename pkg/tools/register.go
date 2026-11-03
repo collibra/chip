@@ -19,6 +19,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_assessment"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
+	"github.com/collibra/chip/pkg/tools/edit_community"
+	"github.com/collibra/chip/pkg/tools/edit_domain"
 	"github.com/collibra/chip/pkg/tools/find_dq_rules"
 	"github.com/collibra/chip/pkg/tools/generate_dq_rule_sql"
 	"github.com/collibra/chip/pkg/tools/get_assessment"
@@ -99,6 +101,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
+	toolRegister(server, toolConfig, edit_domain.NewTool(client))
+	toolRegister(server, toolConfig, edit_community.NewTool(client))
 	// Registered WITHOUT an experimental flag, deviating from
 	// docs/TOOL_CONTRIBUTION_STANDARDS.md 3.1: this resolver only feeds the
 	// user-valued parameters of tools that are themselves ungated (the

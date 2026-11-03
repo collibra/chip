@@ -66,6 +66,14 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
     - `set_owner` - set the owner by user UUID, email, username, or full name
     - `set_assignees` - replace the assignee list with the given users (UUID, email, username, or full name) and groups (UUID)
     - `set_visibility` - set whether the assessment is visible to everyone
+- [`edit_community`](pkg/tools/edit_community/) - Edit an existing community (identified by name or UUID) via a list of typed operations, each validated and applied independently (`success` / `partial_success` / `error`):
+    - `set_name`, `set_description` - rename the community or change its description
+    - `set_parent` - move the community under another parent (name or UUID), or `makeTopLevel: true` to remove the parent; exactly one of the two is required, and the result is verified against the response
+    - `set_responsibility`, `remove_responsibility` - assign or unassign a user or group on a resource role (e.g. `Steward`); only directly-assigned responsibilities can be removed
+- [`edit_domain`](pkg/tools/edit_domain/) - Edit an existing domain (identified by name or UUID) via a list of typed operations, each validated and applied independently (`success` / `partial_success` / `error`):
+    - `set_name`, `set_description` - rename the domain or change its description
+    - `set_community` - move the domain to a different community (name or UUID)
+    - `set_responsibility`, `remove_responsibility` - assign or unassign a user or group on a resource role (e.g. `Steward`); only directly-assigned responsibilities can be removed
 - [`edit_asset`](pkg/tools/edit_asset/) - Edit an existing asset via a list of typed operations:
     - `set_attribute`, `add_attribute`, `remove_attribute` - set an attribute value (creates if empty, updates if present), append an extra value to a multi-valued attribute, or clear one (e.g. `Definition`, `Note`)
     - `update_property` - rename the asset (`name`), change its `displayName`, or change its `statusId` (status name or UUID accepted)
