@@ -102,6 +102,7 @@ Two switches, and one option, on **Settings > AI Command Center > Guardian and c
 | Situation | Wording |
 |---|---|
 | A step only the customer can do | "`<what to do>`. When it's done, type "continue" and I'll pick up from here." |
+| Waiting for the rules to apply | One line per check: "Applying your `<n>` rules: `<minutes>` of about `<typical>` minutes so far." No rule count or percentage: Collibra reports none until the run ends. |
 | A quiet retry | Nothing, if it works. After a second failure: "Collibra didn't respond, so I've stopped here. Nothing was changed." |
 | No permission | "Your Collibra account doesn't have permission to `<action>`. Here's a message for your Collibra administrator: `<message>`" The message names the role from the documentation's roles table that covers the action: AI Producer for agents, AI Business User for writing agent contracts, AI Governance Admin for settings. |
 | Framework version outside the tested range | "Your agent uses `<LangChain 2.1>`, and Guardian is tested with `<1.2 up to 2.0>`. As it is, your agent wouldn't start with Guardian. I can (a) set your project to a tested version, or (b) let it start anyway and only log a warning. Which would you like?" |

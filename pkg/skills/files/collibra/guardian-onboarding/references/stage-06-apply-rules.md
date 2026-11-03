@@ -28,7 +28,7 @@ The result has a state and a time, never an id. Don't mention a job or any id to
 
 Check `get_agent_guardian_status` about once a minute until `compilation.status` is `UP_TO_DATE`, `NOT_COMPILED` or `FAILED`. The state of the latest run alone isn't enough: a run with no usable rules also ends as completed. Typical time: about five minutes for 20 rules.
 
-Between checks, if you can run commands, wait in the shell (`sleep 60`) rather than calling again straight away. While waiting, prepare the next step (read the project's settings file, work out where the rules file goes) and give at most one short update a minute. After 15 minutes still in progress, follow `references/verify-and-diagnose.md`.
+Between checks, if you can run commands, wait with one `sleep 60` in the foreground, never in the background and never two at once. Before the first wait, prepare the next step (read the project's settings file, work out where the rules file goes). After each check, one line in this form: "Applying your `<n>` rules: `<minutes since the run started>` of about `<typical minutes>` minutes so far." Collibra doesn't report how many rules are done while it works, so never show a rule count or a percentage until the report is in. After 15 minutes still in progress, follow `references/verify-and-diagnose.md`.
 
 ## Step 4: Check
 

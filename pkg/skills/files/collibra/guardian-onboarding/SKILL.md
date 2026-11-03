@@ -29,7 +29,7 @@ The customer pays for every word you read and write, so keep both small:
 
 - Load one stage file at a time, when you reach it, and never load a file again that is still in this conversation. Load the helper files below only when the moment needs them.
 - Never paste whole tool results, the fingerprint, the rules report or code back to the customer. Summarise (for example the rule outcome counts) and give details only when asked.
-- While waiting for Collibra, if you can run commands, wait in the shell between checks (for example `sleep 60`, checking about once a minute) instead of making many quick status calls. Give at most one short update a minute.
+- While waiting for Collibra, if you can run commands, wait in the shell between checks with one `sleep 60` in the foreground, checking about once a minute, instead of making many quick status calls. Never start a wait in the background and never run two at once. After each check, one short line at most.
 - Read only the project files a step needs, never the whole repository.
 - Keep messages short: the status line and one question.
 
