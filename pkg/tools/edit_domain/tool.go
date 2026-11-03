@@ -31,7 +31,7 @@ const (
 
 // Input is the tool's typed input.
 type Input struct {
-	Domain     string      `json:"domain" jsonschema:"Required. The domain to edit — its UUID or its name (an exact, case-insensitive match; an ambiguous name returns the candidates with their UUIDs)."`
+	Domain     string      `json:"domain" jsonschema:"Required. The domain to edit (the folder inside a community that holds assets) — its UUID or its name (an exact, case-insensitive match; an ambiguous name returns the candidates with their UUIDs), e.g. 'Employee Wellness'."`
 	Operations []Operation `json:"operations" jsonschema:"Required. Non-empty list of operations to apply. Each operation is validated and applied independently. Each operation's type selects which additional fields are used (see Operation)."`
 }
 
@@ -44,7 +44,7 @@ type Operation struct {
 
 	Community string `json:"community,omitempty" jsonschema:"For set_community: the community to move the domain into, given as its UUID or name."`
 
-	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility and remove_responsibility: the resource role name, e.g. 'Steward' or 'Owner'."`
+	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility and remove_responsibility: the resource role name (a named duty a person or group holds on the resource, matched case-insensitively), e.g. 'Steward' or 'Owner'; an unknown name returns the available roles."`
 	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility and remove_responsibility: the user or group, given as a UUID, email address, username, or full name such as 'Jane Smith'. A full name shared by several users returns a per-operation error listing the candidates."`
 }
 
@@ -87,15 +87,21 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "edit_domain",
 		Title: "Edit Domain",
-		Description: "Edit an existing Collibra domain (identified by UUID or name) by submitting a list of typed operations. " +
-			"Supported operations: " +
+		Description: "Edit an existing Collibra domain (a domain is the folder inside a community that holds assets such as business terms or tables; communities are the top-level folders that group domains) identified by its UUID or name. " +
+			"Use this to rename a domain, change its description, move it to a different community, or manage who is responsible for it. " +
+			"To edit the assets inside a domain use edit_asset; to edit a community itself use edit_community; this tool cannot create or delete domains. " +
+			"The domain must already exist; look up its UUID or exact name first if you only have a vague reference. " +
+			"Submit a list of typed operations: " +
 			"set_name (rename the domain); " +
 			"set_description (change the description; an empty value clears it); " +
-			"set_community (move the domain to a different community, given as a UUID or name); " +
-			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be a UUID, username, email address, or full name such as 'Jane Smith'); " +
+			"set_community (move the domain into a different community, given as a UUID or name); " +
+			"set_responsibility (assign a user or group to a resource role, a named duty such as 'Steward' or 'Owner'; the user can be a UUID, username, email address, or full name such as 'Jane Smith'); " +
 			"remove_responsibility (unassign a user or group from a role; removes only a responsibility assigned directly on the domain, not one inherited from its community). " +
 			"Each operation is validated independently and applied on its own: invalid or failing operations return per-operation errors while valid siblings still apply, yielding status=success, partial_success, or error. " +
-			"On completion the response includes the domain's state after the edits.",
+			"set_community verifies the result, so a request Collibra accepts without moving the domain is reported as an error. " +
+			"On completion the response includes the domain's state after the edits. " +
+			"This tool writes to Collibra immediately and requires permission to edit the domain. " +
+			"Example requests: 'Rename the Employee Wellness domain to Staff Wellness', 'Move the Churn Metrics domain into the Marketing community', 'Make Jane Smith the Steward of the HR Glossary domain', 'Update the description of the Customer Data domain'.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(true), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},

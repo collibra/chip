@@ -32,7 +32,7 @@ const (
 
 // Input is the tool's typed input.
 type Input struct {
-	Community  string      `json:"community" jsonschema:"Required. The community to edit — its UUID or its name (an exact, case-insensitive match; an ambiguous name returns the candidates with their UUIDs)."`
+	Community  string      `json:"community" jsonschema:"Required. The community to edit (a folder that groups domains and other communities) — its UUID or its name (an exact, case-insensitive match; an ambiguous name returns the candidates with their UUIDs), e.g. 'Finance'."`
 	Operations []Operation `json:"operations" jsonschema:"Required. Non-empty list of operations to apply. Each operation is validated and applied independently. Each operation's type selects which additional fields are used (see Operation)."`
 }
 
@@ -46,7 +46,7 @@ type Operation struct {
 	Parent       string `json:"parent,omitempty" jsonschema:"For set_parent: the community to move this one under, given as its UUID or name. Provide exactly one of parent or makeTopLevel."`
 	MakeTopLevel bool   `json:"makeTopLevel,omitempty" jsonschema:"For set_parent: true to remove the parent and make the community top-level. Provide exactly one of parent or makeTopLevel."`
 
-	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility and remove_responsibility: the resource role name, e.g. 'Steward' or 'Owner'."`
+	Role   string `json:"role,omitempty" jsonschema:"For set_responsibility and remove_responsibility: the resource role name (a named duty a person or group holds on the resource, matched case-insensitively), e.g. 'Steward' or 'Owner'; an unknown name returns the available roles."`
 	UserID string `json:"userId,omitempty" jsonschema:"For set_responsibility and remove_responsibility: the user or group, given as a UUID, email address, username, or full name such as 'Jane Smith'. A full name shared by several users returns a per-operation error listing the candidates."`
 }
 
@@ -89,16 +89,21 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "edit_community",
 		Title: "Edit Community",
-		Description: "Edit an existing Collibra community (identified by UUID or name) by submitting a list of typed operations. " +
-			"Supported operations: " +
+		Description: "Edit an existing Collibra community (a community is a top-level or nested folder that groups domains and other communities, for example a business unit or program) identified by its UUID or name. " +
+			"Use this to rename a community, change its description, move it under a different parent community or to the top level, or manage who is responsible for it. " +
+			"To edit a domain (the folder inside a community that holds assets) use edit_domain; to edit assets use edit_asset; this tool cannot create or delete communities. " +
+			"The community must already exist; look up its UUID or exact name first if you only have a vague reference. " +
+			"Submit a list of typed operations: " +
 			"set_name (rename the community); " +
 			"set_description (change the description; an empty value clears it); " +
 			"set_parent (move the community under a different parent community given as a UUID or name via 'parent', or pass makeTopLevel=true to remove the parent — exactly one of the two is required, neither is a validation error); " +
-			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be a UUID, username, email address, or full name such as 'Jane Smith'); " +
+			"set_responsibility (assign a user or group to a resource role, a named duty such as 'Steward' or 'Owner'; the user can be a UUID, username, email address, or full name such as 'Jane Smith'); " +
 			"remove_responsibility (unassign a user or group from a role; removes only a responsibility assigned directly on the community, not one inherited from a parent). " +
 			"Each operation is validated independently and applied on its own: invalid or failing operations return per-operation errors while valid siblings still apply, yielding status=success, partial_success, or error. " +
 			"set_parent verifies the result: if Collibra reports success but the parent did not change, the operation is reported as an error. " +
-			"On completion the response includes the community's state after the edits.",
+			"On completion the response includes the community's state after the edits. " +
+			"This tool writes to Collibra immediately and requires permission to edit the community. " +
+			"Example requests: 'Rename the People community to Staff', 'Move the Wellness community under the HR community', 'Make the Wellness community top-level', 'Make Jane Smith the Owner of the Finance community'.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(true), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
