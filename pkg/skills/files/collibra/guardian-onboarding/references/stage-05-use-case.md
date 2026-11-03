@@ -27,7 +27,7 @@ An existing use case is never linked without being shown.
 
 ## Step 3: Link an existing one
 
-"I'll link `<use case>` to `<agent>`. Reply "yes, link" to go ahead." After a clear "yes, link": `edit_asset` on the **AI Use Case** with one `add_relation` operation, `relationTypeId` `00000000-0000-0000-0000-000000007109` (AI Use Case uses AI Agent), and the AI Agent's id as `targetAssetId`.
+"I'll link `<use case>` to `<agent>`. Shall I go ahead?" After the customer's clear yes: `edit_asset` on the **AI Use Case** with one `add_relation` operation, `relationTypeId` `00000000-0000-0000-0000-000000007109` (AI Use Case uses AI Agent), and the AI Agent's id as `targetAssetId`.
 
 Always pass this id. Never pass the role name "uses": an AI Use Case has several relation types with that role (to AI Agent, AI Base Model, AI Project and AI Model Version), and the AI Agent's co-role "is used by" also matches another relation type.
 
@@ -36,8 +36,8 @@ Always pass this id. Never pass the role name "uses": an AI Use Case has several
 1. Draft a **name and a description** from the scan: what the agent is for, who uses it, in plain words. Add other attributes only where the code shows them; never guess a risk or an owner.
 2. Show the draft and let the customer edit it. Show it again after every change.
 3. `prepare_create_asset` for an AI Use Case in the AI Use Cases domain (the customer confirms the domain if there is more than one). It also returns the `relationTypeId` of each relation slot.
-4. Ask, word for word: "Ready to create this AI use case and link it to `<agent>`? Reply "yes, create" to proceed."
-5. After a clear "yes, create": `create_asset` with exactly the name and description shown, then link it as in step 3 (the same consent covers this link, because it was part of the question).
+4. Ask, word for word: "Shall I create this AI use case and link it to `<agent>`?"
+5. After the customer's clear yes: `create_asset` with exactly the name and description shown, then link it as in step 3 (the same consent covers this link, because it was part of the question).
 
 ## Step 5: Check
 
@@ -47,7 +47,7 @@ If the rules were already applied to this agent: linking a use case doesn't mark
 
 ## Exit
 
-- Linked: "Step 4 of 8 done: `<agent>` is linked to the AI use case `<name>`. `<link>`"
-- Skipped: "Step 4 of 8 skipped: you can link an AI use case later from the agent's page."
+- Linked: "Step 4 of 8 done: `<agent>` is linked to the AI use case [`<name>`](<instance>/asset/<useCaseId>)."
+- Skipped: "Step 4 of 8 skipped: you can link an AI use case later from [the agent's page](<instance>/asset/<aiAgentId>)."
 
 Exit when the use case is linked, or skipped. Keep its id for the summary and the support details; on resuming, read it again from the agent's relations.

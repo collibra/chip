@@ -10,7 +10,7 @@ Skip this stage when the client can't run code or the customer has no code (the 
 
 Never block on this. Find out, confirm in plain words, ask only if still unsure.
 
-1. **Find out, read-only, without asking:** `app.yaml` (a Databricks App); `databricks.yml` (an asset bundle naming apps, serving endpoints and jobs); `mlflow.pyfunc.log_model(...)` or `agents.deploy(...)` (Model Serving); a `ResponsesAgent` or `ChatAgent` class; a CI workflow running `databricks bundle deploy` or `databricks apps deploy` (a pipeline); a Dockerfile or Kubernetes files (another platform); an AI Agent or AI Endpoint Collibra already has for this agent. A live look-up on the platform (`databricks apps list`, `databricks serving-endpoints list`) needs the platform tool: follow `shared/platform-prerequisites.md` first, and only if the clues aren't enough.
+1. **Find out, read-only, without asking,** opening only the files that show it, never the whole repository: `app.yaml` (a Databricks App); `databricks.yml` (an asset bundle naming apps, serving endpoints and jobs); `mlflow.pyfunc.log_model(...)` or `agents.deploy(...)` (Model Serving); a `ResponsesAgent` or `ChatAgent` class; a CI workflow running `databricks bundle deploy` or `databricks apps deploy` (a pipeline); a Dockerfile or Kubernetes files (another platform); an AI Agent or AI Endpoint Collibra already has for this agent. A live look-up on the platform (`databricks apps list`, `databricks serving-endpoints list`) needs the platform tool: follow `shared/platform-prerequisites.md` first, and only if the clues aren't enough.
 2. **Confirm** (header `Deployment`): "It looks like your agent runs as `<a Databricks App called X | a Model Serving endpoint called X>`. I found `<the clues>`. Is that right?" **Yes (default)** / **No, it runs differently** / **I'm not sure**.
 3. **If still unsure, ask about use, not deployment** (header `Agent use`): "How do people use this agent today?" **In a chat app in Databricks** / **Other systems call it through an endpoint** / **Only when someone runs it from code or a notebook** / **I don't know**. Then (header `Deploys`): "Who deploys changes to it?" **I do** / **A colleague** / **An automated pipeline** / **I don't know**.
 4. **When nobody knows:** carry on with everything that doesn't depend on the deployment (this step, the scan, contracts, use case, applying the rules, saving the rules file), and step 6 ends with a hand-off note for whoever deploys. Outside the private preview platforms, recognise the clues, do the same platform-independent setup, and write the same note.
@@ -27,7 +27,7 @@ Ask: "Where did you save the Guardian SDK files from the private preview portal?
 
 ## Step 3: Python and the agent framework
 
-- **Python:** the project's environment must be Python 3.12 or later. If not, help, as `shared/platform-prerequisites.md` "Python 3.12 or later" says: "Your project uses Python `<version>`, and the Guardian SDK needs 3.12 or later." Then, when a newer Python is already on the computer: "Python `<3.12>` is already installed. I'll set up your project's environment with it as part of the changes." When none is: "I can install Python 3.12 with `<command>`. Reply "yes, install" to go ahead, or I can write a message for your IT team." Go on with the step only when the project has Python 3.12 or later.
+- **Python:** the project's environment must be Python 3.12 or later. If not, help, as `shared/platform-prerequisites.md` "Python 3.12 or later" says: "Your project uses Python `<version>`, and the Guardian SDK needs 3.12 or later." Then, when a newer Python is already on the computer: "Python `<3.12>` is already installed. I'll set up your project's environment with it as part of the changes." When none is: "I can install Python 3.12 with `<command>`, or write a message for your IT team. Shall I install it?" Go on with the step only when the project has Python 3.12 or later.
 - **Framework versions:** compare the project's LangChain and LangGraph versions with the tested range on the supported frameworks page (`references/documentation.md`). If you can't open the page, use the range the `collibra_sdk` wheel declares for its `guardian-langchain` extra and say where the range came from; never guess one. Outside the range, before showing any change: "Your agent uses `<LangChain 2.1>`, and Guardian is tested with `<1.2 up to 2.0>`. As it is, your agent wouldn't start with Guardian. I can (a) set your project to a tested version, or (b) let it start anyway and only log a warning. Which would you like?" (a) changes the version in the requirements; (b) adds `framework_version_policy = "permissive"` to the settings file. Both are part of the changes shown in step 5.
 - **How the agent is built:** `create_agent` (LangChain) or Deep Agents use the default below. A hand-built LangGraph `StateGraph` isn't covered by it: offer the graph wrappers instead (`guard_graph` and node wrappers), and say they will probably show up in the agent's scan.
 
@@ -75,11 +75,11 @@ pip install --find-links <the SDK folder> "collibra-sdk[guardian-langchain,guard
 
 For a Git repository copied read-only in Stage 01, prepare the same changes as a patch file for its owner instead.
 
-Ask, word for word: "Ready to install the Guardian SDK and make these changes to your project? Reply "yes, change my code" to proceed. Anything else and I'll change nothing."
+Ask, word for word: "Shall I install the Guardian SDK and make these changes to your project? I'll change nothing until you say yes."
 
 ## Step 6: Make the changes and check them
 
-After a clear "yes, change my code", for exactly what was shown: make the changes, run the install, write the state file. Then check (`references/verify-and-diagnose.md`):
+After the customer's clear yes to that question, for exactly what was shown: make the changes, run the install, write the state file. Then check (`references/verify-and-diagnose.md`):
 
 - the changes on disk are exactly the diff shown;
 - the packages import in the project's environment (`python -c "import collibra_sdk.guardian.injection"`), without importing the agent;
@@ -88,6 +88,6 @@ After a clear "yes, change my code", for exactly what was shown: make the change
 
 ## Exit
 
-"Step 1 of 8 done: the Guardian SDK `<version, from the installed package>` is installed. Guardian has no rules yet, so for now it lets everything through. Once your rules file is in place (step 6), when your agent breaks a rule, Guardian will `<only record it | stop it>`." Then "Learn more:" and the SDK settings page and the page on how Guardian works and its modes (`references/documentation.md`).
+"Step 1 of 8 done: the Guardian SDK `<version, from the installed package>` is installed. Guardian has no rules yet, so for now it lets everything through. Once your rules file is in place (step 6), when your agent breaks a rule, Guardian will `<only record it | stop it>`. Changed: [`collibra-guardian.toml`](<absolute path>)`<, and each other changed file, linked the same way>`." Nothing is in Collibra yet, so the links are the changed files in the project. Then "Learn more:" and the SDK settings page and the page on how Guardian works and its modes (`references/documentation.md`).
 
 Exit when the SDK is installed and wired in and the checks pass, or the customer chose to stop. Without the SDK files the step pauses for "continue".

@@ -52,9 +52,9 @@ Never name a path before the file is there: the file and the setting that names 
 
 If the setting already names this path (an update), only the file is replaced; nothing else changes.
 
-Show the change: the file's destination, and the exact line added to the settings. Ask, word for word: "Ready to save the rules file and add the setting that points to it? Reply "yes, change my code" to proceed. Anything else and I'll change nothing."
+Show the change: the file's destination, and the exact line added to the settings. Ask, word for word: "Shall I save the rules file and add the setting that points to it? I'll change nothing until you say yes."
 
-After a clear yes: write the file and the setting, then check that the file at the destination has the same SHA-256 (for the unzipped folder: that `policy/spec.yaml` is there with the right `spec_bundle_id`), that the settings file still parses and names exactly that path, and that nothing else changed. Write the rules file id to the state file.
+After the customer's clear yes: write the file and the setting, then check that the file at the destination has the same SHA-256 (for the unzipped folder: that `policy/spec.yaml` is there with the right `spec_bundle_id`), that the settings file still parses and names exactly that path, and that nothing else changed. Write the rules file id to the state file.
 
 ## Step 4: The deploy steps
 
@@ -77,7 +77,7 @@ Say: "Until you deploy, your agent runs as before. When it starts with the rules
 
 ## Step 6: The hand-off note, when nobody knows how it's deployed
 
-Write it to `<project>/collibra-guardian/handoff.md` after the customer agrees (the same "yes, change my code" if it was part of the change shown, otherwise ask), or show it in the conversation. It holds no secrets and no download link:
+Write it to `<project>/collibra-guardian/handoff.md` after the customer agrees (covered by the same yes if it was part of the change shown, otherwise ask), or show it in the conversation. It holds no secrets and no download link:
 
 - what changed in the project and which files to ship;
 - where the rules file goes and which setting names it, for a Databricks App, for Model Serving and for a pipeline (the table in step 3);
@@ -87,6 +87,6 @@ Write it to `<project>/collibra-guardian/handoff.md` after the customer agrees (
 
 ## Exit
 
-"Step 6 of 8 done: the rules file is saved and checked. Deploy your agent to start checking." Then "Learn more:" and the page on where the SDK finds the rules file (`references/documentation.md`).
+"Step 6 of 8 done: the rules file is saved in [`<path in the project>`](<absolute path>) and checked. Deploy your agent to start checking." When the customer has deployed, add where the deployed agent runs, only from what is known: on Databricks, the App [`<app name>`](https://<workspace host>/apps/<app name>) or the serving endpoint [`<endpoint name>`](https://<workspace host>/ml/endpoints/<endpoint name>), only when both the workspace address and the name are known from the code, the scan or a read-only look-up, never guessed; and its AI Endpoint in Collibra, [`<name>`](<instance>/asset/<endpoint id>), when its id is known. Then "Learn more:" and the page on where the SDK finds the rules file (`references/documentation.md`).
 
 Exit when the file is in place and checked, and the customer has the deploy steps or the hand-off note.

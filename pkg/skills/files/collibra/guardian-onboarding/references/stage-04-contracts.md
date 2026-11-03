@@ -31,16 +31,16 @@ The default is the first option. "Use" goes to step 4 (linking). "Write" goes to
 
 ## Step 3: Hand off to the contract skill
 
-Tell the customer: "I'll help you write the contract now. You'll see every rule before anything is saved." Load `collibra/agent-contract` with `load_collibra_skill` and follow it from its own start, with its own rules and its own "yes, publish". Tell it what you already know: global or specialised, and the agent to check the rules against. It works on one contract at a time.
+Tell the customer: "I'll help you write the contract now. You'll see every rule before anything is saved." Load `collibra/agent-contract` with `load_collibra_skill` and follow it from its own start, with its own rules; it asks for consent in its own way. Tell it what you already know: global or specialised, and the agent to check the rules against. It works on one contract at a time, and may offer to link a new specialised contract to the agent itself.
 
-When it ends, reload `references/stage-00-security-and-scope.md` if it is no longer in your context, and come back here: read the list again (step 1). A new specialised contract governs no agent until it is linked: go to step 4.
+When it ends, reload `references/stage-00-security-and-scope.md` if it is no longer in your context, and come back here: read the list again (step 1). If a new specialised contract doesn't govern the agent yet, go to step 4.
 
 ## Step 4: Link a specialised contract
 
-A specialised contract that doesn't govern the agent yet (one just written, or an existing one the customer chose). Header `Link`: "Your contract `<name>` isn't linked to `<agent>` yet, so its rules don't apply to it. Shall I link it?"
+A specialised contract that doesn't govern the agent yet (one just written, or an existing one the customer chose). You link it yourself, after the customer's yes. Ask (header `Link`): "Your contract `<name>` isn't linked to `<agent>` yet, so its rules don't apply to it. Shall I link it to `<agent>` now?" Options: **Yes, link it** / **I'll do it myself in Collibra** / **Not now**, none of them labelled the default.
 
-- **Yes, link it for me (default):** "I'll link `<name>` to `<agent>`. Reply "yes, link" to go ahead." After a clear "yes, link": `edit_asset` on the **AI Agent** with one `add_relation` operation, `relationTypeId` `00000000-0000-0000-0000-000000007018` (AI Agent to Agent Contract), and the contract's id as `targetAssetId`. Don't pass the role name.
-- **I'll link it myself in Collibra:** "Open `<contract link>`, link the agent, then type "continue"." Wait.
+- **Yes:** `edit_asset` on the **AI Agent** with one `add_relation` operation, `relationTypeId` `00000000-0000-0000-0000-000000007018` (AI Agent to Agent Contract), and the contract's id as `targetAssetId`. Don't pass the role name. Then check it (step 5).
+- **The customer prefers to do it in Collibra, or the link fails** (for example no permission: never retried, `refusal-scripts.md › R-PERMISSION`): "Open [`<name>`](<instance>/ai-governance/agent-contracts/<contractId>), link it to `<agent>`, then type "continue"." Wait, then check it (step 5).
 - **Not now:** go to the exit with what governs the agent.
 
 Never unlink a contract, and never link one the customer hasn't seen.
@@ -53,7 +53,7 @@ If rules were already applied to this agent, a new or changed contract makes the
 
 ## Exit
 
-"Step 3 of 8 done: `<n>` agent contracts apply to `<agent>`: `<name and link, each>`." Then "Learn more:" and the agent contracts page (`references/documentation.md`). Write the contract ids to the state file.
+"Step 3 of 8 done: `<n>` agent contracts apply to `<agent>`: [`<name>`](<instance>/ai-governance/agent-contracts/<contractId>) (`<rules>` rules), one per contract`<. The new link shows on the agent's [Contract tab](<instance>/asset/<aiAgentId>?tabbar=Contract)>`." Then "Learn more:" and the agent contracts page (`references/documentation.md`). Write the contract ids to the state file.
 
 Links: a contract is `<instance>/ai-governance/agent-contracts/<contractId>`; all contracts are `<instance>/ai-governance/agent-contracts`.
 

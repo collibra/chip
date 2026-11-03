@@ -11,7 +11,7 @@ write, read the contract back and report what Collibra holds" to every stage (ha
 | Platform login | The identity call answers, and it's the profile the customer chose | the platform tool |
 | SDK install and project changes | The packages import in the project's environment; the settings file parses and doesn't name a rules file yet; the entry module still parses (compiled in memory, never run); the diff on disk is exactly the diff shown | local commands |
 | Sending the scan | The agent appears with an id, its newest version is the one just sent, and the fingerprint status is `COMPLETED` | `list_scanned_agents`, `get_agent_guardian_status` |
-| A contract saved by the contract skill | It's in the list of contracts governing the agent, with the expected rule count | `list_agent_contracts`, `get_agent_contract` |
+| A contract saved by the contract skill, or linked | It's in the list of contracts governing the agent, with the expected rule count | `list_agent_contracts`, `get_agent_contract` |
 | Creating or linking a use case | The agent's incoming relations include the use case, through "AI Use Case uses AI Agent" | `get_asset_details` |
 | Applying the rules | Compilation `UP_TO_DATE`; the report's rule count equals the governing contracts' rules; the report names the newest agent version | `get_agent_guardian_status`, `get_agent_rules_report` |
 | Saving the rules file | SHA-256 equals the reported hash; the archive holds `spec.yaml` whose `spec_bundle_id` is the file's id; the SDK's own loader accepts the file; the file is at the path the settings name | local commands, `get_agent_rules_file` |
@@ -40,12 +40,12 @@ What to do:      <the fix, or the hand-off>; if that doesn't help, share the det
 | 03 | The scan is refused with an error code | The error's message names the field | The description has a mistake: the scanner fixes it and asks again |
 | 03 | No agent id after five minutes | `list_scanned_agents` unavailable; fingerprint status | Collibra is busy: try later. Otherwise support details |
 | 03 | Fingerprint `FAILED` | Its message | Say it plainly; a domain or permission message goes to the Collibra administrator |
-| 04 | No contract governs the agent | Is there a specialised contract the customer just wrote? | None: the contract skill. Not linked: propose linking it (the skill after "yes, link", or the customer on the contract's page) |
+| 04 | No contract governs the agent | Is there a specialised contract the customer just wrote? | None: the contract skill. Not linked: propose linking it; the skill links it after the customer's yes, and the customer links it on the contract's page only if they prefer or the link fails |
 | 04 | A contract can't be viewed | Which contracts could be read | The list may be incomplete: a message to the administrator about view rights |
 | 06 | 404 agent not found | Fingerprint status | Collibra hasn't finished adding the agent: wait, then retry |
 | 06 | 403 | none | No permission: a message for the administrator; never retried |
 | any | `agentContractsFeatureDisabled`, or Guardian looks turned off | Which switch: AI Agent contracts or Guardian | Not a permission problem: the "Collibra settings" wording in wording.md; steps for an administrator or a message for one; no retry until "continue" |
-| 06 | `FAILED` | The job's failure message | If it says to try again, ask "yes, apply" once more; otherwise support details |
+| 06 | `FAILED` | The job's failure message | If it says to try again, ask once more whether to apply the rules; otherwise support details |
 | 06 | `NOT_COMPILED` after the run finished, empty report | In order: no contract governs the agent; the contracts have no rules | Each points to stage 04. With none of these, support details |
 | 06 | `UP_TO_DATE`, few rules became checks | Each rule's outcome and reason | Group them in plain words ("3 rules mention tools this agent doesn't have"); offer the contract skill to make them more specific |
 | 07 | No rules file yet | Compilation status | Back to stage 06 |

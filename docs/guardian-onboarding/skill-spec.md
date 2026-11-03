@@ -21,7 +21,7 @@ explanation they want, and recommends one next step (see [Start](#start-look-ask
 
 ```text
 pkg/skills/files/collibra/guardian-onboarding/
-  SKILL.md                                  router: description, hard rules summary, asking the customer, stage table, flow
+  SKILL.md                                  router: description, hard rules (one line each), keep it light, asking the customer, stage table, flow
   references/stage-00-security-and-scope.md loaded first, every time; the hard rules in full
   references/refusal-scripts.md
   references/glossary.md                    the "what is ...?" answers (wording.md)
@@ -57,18 +57,24 @@ shared: platform-prerequisites.md
 ```
 
 `SKILL.md` is a router like the other two: load `references/stage-00-security-and-scope.md` first, then the current
-stage and the files it names, never everything at once. Every stage ends with a one-line status and a link to what it
-found or changed. Move to the next stage only when the current one's exit criteria are met.
+stage and the files it names, never everything at once. Its hard rules are a one-line-per-rule summary; stage 00 holds
+the full text, so the always-loaded text stays small. Every status line ends with clickable markdown links
+(`[name](url)`) to what the step found, created or deployed, built from the connection's instance URL and the ids the
+tools returned (see [Links](#links)); a link is never invented. Move to the next stage only when the current one's exit
+criteria are met.
 
 Add the skill to the table in `SKILLS.md`, like the two Guardian skills.
 
 ## Hard rules (stage 00 holds the full text)
 
-- **H1 Consent.** Nothing changes in Collibra or on the customer's computer without a clear yes, given in reply to that
-  stage's question, for exactly what was shown. The questions end with the exact reply to give: "yes, send" (scanner),
-  "yes, publish" (contract skill), "yes, change my code", "yes, create", "yes, link", "yes, apply". A hedge, a condition, "looks good"
-  or silence is not consent; ask again word for word, and after the second time add "If you'd rather not do this now,
-  say so and I'll leave everything as it is." Consent never survives a loss of context.
+- **H1 Consent.** Nothing changes in Collibra or on the customer's computer without the customer's clear yes to that
+  stage's question, for exactly what was shown. Questions end naturally (for example "Shall I go ahead?"); the customer
+  never has to type an exact phrase. Any clear yes in reply to that question counts: yes, go ahead, do it, continue,
+  sure, ok, please do, and the like. Not consent: a question back, a condition or change request ("yes, but..."),
+  silence, an unclear reply, or a yes given to a different question; ask again word for word, and after the second time
+  add "If you'd rather not do this now, say so and I'll leave everything as it is." Consent covers only exactly what was
+  shown in that question, never carries over to another change, and never survives a loss of context (ask again after
+  resuming). The scanner and the contract skill ask for consent in their own way.
 - **H2 Files.** Read-only on the customer's code except the changes shown and agreed in stage 02. Files written: those
   changes, the rules file, and the state file `<project>/collibra-guardian/setup-state.json`, all under the agent's project path. Never run the customer's agent, its
   tests or its build.
@@ -92,6 +98,20 @@ Add the skill to the table in `SKILLS.md`, like the two Guardian skills.
 - **H10 Retries.** Retry automatically only where it's safe: reads, time-outs and server errors, and a write only when you
   can confirm it didn't happen (for example the rules didn't start applying). Never after 401 or 403: a permission error is
   not transient.
+
+## Keep it light
+
+The customer pays for every token, so the skill keeps reading and writing small. A short "Keep it light" section in
+`SKILL.md` says, and the stage files apply it:
+
+- load one stage file at a time and never reload a file already loaded in this conversation; load
+  `verify-and-diagnose.md`, `glossary.md`, `refusal-scripts.md` and `documentation.md` only when needed;
+- never paste whole tool results, the fingerprint, the rules report or code back to the customer: summarise (for example
+  the rule outcome counts), details only on request;
+- while waiting for Collibra, wait in the shell between checks where the client can run commands (for example
+  `sleep 60`, checking about once a minute) rather than many quick status calls, with at most one short update a minute;
+- read only the files a step needs from the project, never the whole repository;
+- keep messages short: the status line plus one question.
 
 ## Asking the customer
 
@@ -188,7 +208,7 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
   diff with every project change from
   [sdk-and-platforms.md](sdk-and-platforms.md#what-changes-in-the-customers-project), with the mode the customer chose: record only, or stop the action (a short explanation of each, no
   default forced; "record only" is offered first as the safer start).
-- **Consent:** "yes, change my code", for the shown diff and install command together.
+- **Consent:** one yes, for the shown diff and install command together.
 - **Checks:** the packages import in the project's environment; the settings file parses and doesn't name a rules file
   yet (a path that names a missing file stops the agent); the entry module still parses (compiled in memory, never run).
 - **Exit:** the SDK is installed and wired in, or the customer chose to stop. Without the SDK files the stage pauses:
@@ -198,10 +218,11 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 
 - **Tools:** `list_scanned_agents`, `get_latest_agent_scan`, `get_agent_guardian_status`; hand-off to
   `collibra/agent-scanner` (load it with `load_collibra_skill`, then return to this stage).
-- **Does:** if Collibra doesn't know the agent, or its code changed, run the scanner skill as it is, including its own
-  "yes, send". If only the deployment changed and the code didn't, don't send a new scan (see decisions.md). Then wait
-  for Collibra to finish: poll `list_scanned_agents` until the agent has an id, then `get_agent_guardian_status` until
-  the fingerprint status is `COMPLETED` (`FAILED` carries a message).
+- **Does:** if Collibra doesn't know the agent, or its code changed, run the scanner skill as it is, with its own
+  consent question. If only the deployment changed and the code didn't, don't send a new scan (see decisions.md). Then wait
+  for Collibra to finish: check `list_scanned_agents` until the agent has an id, then `get_agent_guardian_status` until
+  the fingerprint status is `COMPLETED` (`FAILED` carries a message), about once a minute, waiting in the shell between
+  checks.
 - **Checks:** the agent id, its newest version, and that the version is the one just sent.
 - **Links:** the agent, its version and, when the scan had a deployment, the AI Endpoint (read from the version's
   relations with `get_asset_details`).
@@ -215,11 +236,14 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
   specialised contracts that could fit (`list_agent_contracts` by name, with words from the scan); show any match first
   (name, rule count, one example rule, how many agents it applies to, link), then let the customer choose: use it (link
   it, below), write a new one with the contract skill (this agent's, or the company-wide one), or stop. A specialised contract that doesn't govern the agent yet (for example one just
-  written): propose linking it, and let the customer decide: (a) the skill links it, after "yes, link"; (b) the customer
-  links it on the contract's page, then types "continue"; or (c) not now. The link is relation type
-  `00000000-0000-0000-0000-000000007018`, from the AI Agent to the Agent Contract: edit the agent with `add_relation`,
-  `relationTypeId` set to it and the contract as `targetAssetId`. Never unlink a contract.
-- **Checks:** after any hand-off, read the list again and confirm the new contract governs the agent.
+  written, which the contract skill didn't link): the skill proposes to link it and, after the customer's yes, links it
+  itself. The link is relation type `00000000-0000-0000-0000-000000007018`, from the AI Agent to the Agent Contract: edit
+  the agent with `add_relation`, `relationTypeId` set to it and the contract as `targetAssetId`. The customer links it
+  in Collibra by hand, then types "continue", only when they prefer it or the link fails (for example no permission).
+  "Not now" is also an answer. Never unlink a contract. The contract skill makes the same offer after saving a new
+  specialised contract when the agent is known from the conversation.
+- **Checks:** after any hand-off or link, read the list again (`list_agent_contracts` with the agent id) and confirm the
+  contract governs the agent, then give the contract's link.
 - **Exit:** at least one agent contract governs the agent, or the customer stops.
 
 ### 05 AI use case (optional)
@@ -237,7 +261,7 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
   "uses"; tail AI Agent, co-role "is used by"). Edit the use case and pass this id as `relationTypeId`, with the agent as
   `targetAssetId`. Don't pass the role name: AI Use Case has four relation types whose role is "uses" (AI Agent, AI Base
   Model, AI Project, AI Model Version), and AI Agent's co-role "is used by" also matches "AI Agent uses AI Agent".
-- **Consent:** "yes, create" for a new use case; a link to an existing one is asked as its own question.
+- **Consent:** a yes to creating and linking a new use case; a link to an existing one is asked as its own question.
 - **Checks:** the agent's incoming relations now include the use case.
 - **Note:** linking or changing a use case doesn't mark the rules out of date, so if rules were already applied, say they
   will be applied again in stage 06.
@@ -247,13 +271,15 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 
 - **Tools:** `apply_latest_rules`, `get_agent_guardian_status`, `get_agent_rules_report`.
 - **Does:** shows which agent contracts apply, asks, calls `apply_latest_rules` (confirm false, then true), and waits:
-  poll `get_agent_guardian_status` until the compilation status is `UP_TO_DATE`, `NOT_COMPILED` or `FAILED`. The job
+  check `get_agent_guardian_status` about once a minute, waiting in the shell between checks, until the compilation
+  status is `UP_TO_DATE`, `NOT_COMPILED` or `FAILED`. The job
   state alone isn't enough, because a run with no usable rules also ends completed. While waiting, prepare the next stages
   and give at most one short update a minute. Typical time: about five minutes for 20 rules.
-- **Consent:** "yes, apply".
+- **Consent:** a yes to the preview shown (agent, version, contracts).
 - **Checks:** `UP_TO_DATE`; the report's rule count equals the rules in the governing contracts; the report names the
   newest agent version.
-- **Result:** group the report's outcomes into plain words using the contract skill's marks: `bound` ✅,
+- **Result:** summarise, never paste the report: counts per mark, at most one plain line per ⚠️ group, rule by rule
+  only on request. The marks are the contract skill's: `bound` ✅,
   `partially_bound` 🟡, `no_enforcement_required` 📋, `not_applicable` ➖, every other outcome ⚠️.
 - **Run it again:** after a contract change, after a new agent version, and after linking a use case.
 - **Exit:** a rules file exists, or the customer knows why not and what to do.
@@ -275,6 +301,9 @@ deployed, this stage ends with the hand-off note instead of deploy steps.
   stores the download link.
 - **Checks:** SHA-256 equals the reported hash; the archive holds `spec.yaml`; its `spec_bundle_id` equals the file's id;
   the SDK's own loader accepts it (run the SDK, never the agent).
+- **Links:** the saved rules file in the project; after the deploy, the deployed agent on its platform (a Databricks App
+  or serving endpoint, only when the workspace address and the name are known, never guessed) and its AI Endpoint in
+  Collibra when known.
 - **Exit:** the file is in place and checked; the customer has the deploy steps.
 
 ### 08 Guardian sees the agent's activity
@@ -296,7 +325,10 @@ changing what Guardian does when a rule is broken.
 
 ## Links
 
-Build links from the connection's instance URL and the ids the tools return:
+Every status line ends with markdown links (`[name](url)`) to what the step found, created or deployed: the changed
+files (stage 02), the agent and its version (03), each contract and the new link (04), the use case (05), the agent's
+Contract tab (06), the rules file and the deployed agent (07), the Guardian tab (08), and the full summary (09). Build
+them from the connection's instance URL and the ids the tools return; a link is never invented:
 
 | What | Link |
 |---|---|

@@ -23,7 +23,7 @@ The administrator message: "Collibra isn't connected to your Databricks workspac
 
 ## Step 2: After the deploy
 
-The running agent reports which rules file it uses only after it has started with the file and handled a message, and Collibra has read its activity. Say: "Once your agent is deployed and has handled a message, I can check that it uses the new rules. New issues appear about an hour after they happen."
+The running agent reports which rules file it uses only after it has started with the file and handled a message, and Collibra has read its activity. Say: "Once your agent is deployed and has handled a message, I can check that it uses the new rules, once Collibra has read its activity."
 
 When the customer comes back, or says "continue", read `get_agent_guardian_status` again:
 
@@ -34,6 +34,8 @@ The install-once way and the default way both fail silently when misplaced, so t
 
 ## Exit
 
-"Step 7 of 8 done: Guardian is reading your agent's activity. New issues appear about an hour after they happen, on the **Guardian** tab: `<instance>/asset/<aiAgentId>?tabbar=Guardian`"
+Never promise how long Collibra takes to read the activity: it changes. Say only what the status reports (`collection.lastCollectedOn`).
+
+"Step 7 of 8 done: Guardian is reading your agent's activity. Collibra last read it at `<lastCollectedOn, in the customer's time>`. New issues appear on the agent's [Guardian tab](<instance>/asset/<aiAgentId>?tabbar=Guardian)."
 
 Exit when activity is being read, or the customer has the administrator's message and knows when to come back.

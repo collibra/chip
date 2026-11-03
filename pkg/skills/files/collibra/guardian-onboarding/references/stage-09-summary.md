@@ -2,7 +2,7 @@
 
 Say "Guardian is set up for `<agent>`." when it is, or what is still missing when it isn't, then the summary. Read everything again from Collibra first (`get_agent_guardian_status`); show only what a tool returned in this conversation.
 
-Every item has a link. Leave out an item you don't have; never invent one.
+Every item has a clickable markdown link (`[name](url)`). Leave out an item you don't have; never invent one.
 
 ```text
 Agent:           <name>, <link>

@@ -15,9 +15,12 @@ From the design review on 2026-11-03, unless dated otherwise.
 | Order | Prepare the agent (SDK and wiring) first, then the scan, contracts (global first), the optional use case, apply the rules, save the rules file where the SDK reads it, deploy once, and the activity connection last. |
 | SDK | Mandatory, checked first, installed only with consent from the files the customer downloaded from the private preview portal. Versions are read from the files, never hard-coded. |
 | Reusing existing assets | When the skill finds an existing AI use case or agent contract that could fit, it shows it first (name, description, what it's linked to, link); the customer decides to use it or create a new one. |
-| Use case | Optional. Suggest similar existing ones by keyword search, or draft a name and description from the scan for the customer to edit; create and link only after "yes, create". |
-| Linking | By relation type id, through a change to `edit_asset add_relation`. A specialised contract that isn't linked to the agent: the skill proposes linking it and the customer decides (the skill after "yes, link", or the customer on the contract's page). |
-| Applying rules | The customer never looks for a compile button: the skill asks "yes, apply" and runs it. |
+| Use case | Optional. Suggest similar existing ones by keyword search, or draft a name and description from the scan for the customer to edit; create and link only after the customer's yes. |
+| Linking | By relation type id, through a change to `edit_asset add_relation`. A specialised contract that isn't linked to a known agent: the skill proposes to link it and, after the customer's yes, links it itself, checks it and gives the link. The customer links it by hand in Collibra only when they prefer it or the link fails. The contract skill makes the same offer after saving a new specialised contract when the agent is known. |
+| Consent | Questions end naturally ("Shall I go ahead?"), and any clear yes to that question counts. A question back, a condition, silence, an unclear reply or a yes to a different question isn't consent. Consent covers only what that question showed. The scanner and contract skills keep their own questions. |
+| Links | Every status line ends with clickable links to what the step found, created or deployed, built from the instance URL and the ids the tools returned; never invented. |
+| Token use | Keep it light: one stage file at a time and never reloaded, helper files only when needed, summaries instead of whole tool results, waiting in the shell between status checks, short messages. `SKILL.md` keeps a one-line summary of each hard rule; stage 00 has the full text. |
+| Applying rules | The customer never looks for a compile button: the skill asks and runs it. |
 | Rules file | Through the API, never a command-line tool, and saved where the SDK reads it. |
 | No Guardian API changes | The Guardian APIs are released, so the skill works with them as they are (2026-11-03). When no rules file is made, it checks the likely causes in order: no contract, then contracts with no rules. After linking a use case it offers to apply the rules again itself. When collecting activity fails, or Guardian may be turned off, it gives the customer the settings guidance or the ids for support. |
 | Product documentation | The skill follows the private preview documentation and links to it rather than copying it, because it's still changing (skill-spec.md, "Product documentation"). All links live in one file, `references/documentation.md`, because the addresses will change at general availability. |
@@ -89,6 +92,8 @@ Checked on 2026-11-03. The skill keeps its own steps for these until the documen
 - [ ] `go test -race ./...` and `golangci-lint run` pass.
 - [ ] `evals/guardian-onboarding/lint.sh` is clean, and the evals named in [evals.md](evals.md#when-to-run-them) pass, with the
       results file added.
+- [ ] `go test ./pkg/skills/ -run PublicContent` passes, and a person has read the diff too: the test can't catch
+      everything (for example a person's name on its own).
 - [ ] Nothing internal: no internal hosts, people, tickets, internal repositories or system names, credentials, or real
       tenant data, anywhere in the change.
 - [ ] The skill still matches the product documentation: each linked page exists (and, once the product is generally
@@ -102,6 +107,11 @@ Checked on 2026-11-03. The skill keeps its own steps for these until the documen
 |---|---|---|
 | 2026-11-03 | First version of the specification | Design review |
 | 2026-11-03 | The two causes of stale rules, and how a new rules file reaches the agent | Review with the Guardian team |
+| 2026-11-03 | No fixed delay promised for activity: the skill says when Collibra last read it | How often Collibra reads activity is changing |
+| 2026-11-03 | The skill links a specialised contract itself after the customer's yes; by hand in Collibra only as the alternative | Tester feedback: being sent to Collibra to link was an extra step |
+| 2026-11-03 | Consent questions end naturally; any clear yes counts, no exact phrase | Tester feedback: exact quoted replies felt unnatural |
+| 2026-11-03 | Every status line ends with clickable links, including the deployed agent on its platform | Tester feedback |
+| 2026-11-03 | Keep it light: fewer files loaded, summaries, waiting in the shell, a shorter `SKILL.md` | Lower token use for the customer |
 | 2026-11-03 | The skill helps with Python 3.12: uses one already installed, or offers the official install after "yes, install" | Testers and customers may not have it |
 | 2026-11-03 | Rule outcome marks confirmed; the skill gives the deploy commands and the customer runs them | Review of the first build |
 | 2026-11-03 | Show an existing use case or contract before offering to reuse it; the customer decides | Review feedback |

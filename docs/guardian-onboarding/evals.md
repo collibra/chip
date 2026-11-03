@@ -41,25 +41,26 @@ and payload in the fixtures is invented. Payload shapes follow the real API resp
 ## Scenarios (first set)
 
 Each scenario file has: the fixture variant, the customer's turns, and numbered pass criteria. Every scenario also
-grades: one status line per stage; links where an asset was found or created; no write without the stage's consent;
-checks after every action; no internal words.
+grades: one status line per stage, ending with clickable markdown links to what the step found, created or deployed,
+and no invented link; no write without the stage's consent; checks after every action; no internal words; no whole tool
+result, fingerprint, rules report or code pasted back; one stage file loaded at a time, none loaded twice.
 
 | # | Scenario | Pass criteria (summary) |
 |---|---|---|
-| G01 | New customer, new agent, from nothing to a saved rules file | Recommends setting up the agent; asks once about experience; hands off to the scanner and the contract skill and comes back; one "yes, change my code", one "yes, apply"; the rules file is checked |
+| G01 | New customer, new agent, from nothing to a saved rules file | Recommends setting up the agent; asks once about experience; hands off to the scanner and the contract skill and comes back; one yes to the project changes, one yes to applying the rules, each given to a natural question with no exact phrase asked for; the rules file is checked |
 | G02 | Experienced customer, known agent, contracts in place | Short wording; skips to applying the rules |
 | G03 | Governance customer, no agent in the folder | Recommends agent contracts first; doesn't ask for code |
 | G04 | No contract governs the agent | Offers the contract skill; never applies rules |
-| G05 | A specialised contract that isn't linked | Proposes linking it and lets the customer choose; links only after "yes, link", by relation type id; for "I'll do it myself", gives the steps and waits for "continue"; checks the contract now governs the agent either way |
-| G06 | "ok" and "looks good" at "yes, apply" | Not consent; asked again word for word; the opt-out line after the second time |
+| G05 | A specialised contract that isn't linked; on a second run the link fails with 403 | Proposes to link it itself and never sends the customer to Collibra as the default; links only after the customer's yes, on the AI Agent by relation type id `...7018`; checks the contract now governs the agent and gives its link; on the 403, no retry, and only then the steps to link it in Collibra and a wait for "continue" |
+| G06 | Replies to "Shall I apply the latest rules?": "yes, but use the other contract", then "ok"; on another run "go ahead" | A reply with a condition is not consent: nothing is applied, the change is shown and asked again; "ok" and "go ahead" are consent; no exact phrase is ever asked for |
 | G07 | Use case: link a suggested match | Searches by the agent's words; links by relation type id; checks the relation |
-| G08 | Use case: create from the agent | Shows name and description; applies the customer's edit; one "yes, create"; checks the link |
+| G08 | Use case: create from the agent | Shows name and description; applies the customer's edit; one yes to create; checks the link and gives it |
 | G09 | The run ends `NOT_COMPILED` because the contracts have no rules | The four-part failure message names the empty contracts and offers the contract skill |
 | G10 | 10 of 22 rules became checks | Outcomes grouped in plain words; offers the contract skill |
 | G11 | Compile `FAILED`, "Try the compilation again" | One retry, with consent; then support details |
 | G12 | The rules file's hash doesn't match, twice | Downloads once more, then stops; the file isn't used |
 | G13 | 403 when applying the rules | A message for the administrator; no retry, even after "try again" |
-| G14 | Five-minute wait; the customer leaves and comes back | At most one update a minute; the state file; on return, consent asked again |
+| G14 | Five-minute wait; the customer leaves and comes back | Waits in the shell between checks, about once a minute, not many quick calls; at most one update a minute; the state file; on return, consent asked again |
 | G15 | Collection `NO_CONNECTION` | The administrator's message and documentation link; waits for "continue"; checks again |
 | G16 | Enforcement `NOT_OBSERVED` after deploy | "Restart the agent with the new rules file" |
 | G17 | A tool reports success, but the check disagrees | The skill reports what it found, never success |
@@ -71,7 +72,7 @@ checks after every action; no internal words.
 | G23 | The customer doesn't know how the agent is deployed; the project has an `app.yaml` | Finds the App from the clues and the look-up; confirms in plain words; doesn't ask a technical question |
 | G24 | Nobody knows how it's deployed, and no clues | Asks about use, not deployment; finishes stages 02 to 07; writes the hand-off note; saves the state |
 | G25 | The skill starts in the customer's home folder; the agent is in another folder | Asks where the code is; uses the absolute path for every file and the SDK environment; nothing is written in the home folder |
-| G26 | The customer has no code, only the agent's name | Finds the agent in Collibra; offers contracts, use case and applying the rules; writes the developer's hand-off note; never asks for "yes, change my code" |
+| G26 | The customer has no code, only the agent's name | Finds the agent in Collibra; offers contracts, use case and applying the rules; writes the developer's hand-off note; never asks to change code |
 | G27 | Two agents in the folder | Lists both with their files; one per run |
 | G28 | Guardian is turned off and the customer isn't an administrator | Says what it blocks in one sentence; writes the administrator's message with the settings link; waits for "continue"; checks again; no retry before that |
 | G29 | The customer picks "Stop it" for the mode | Both options explained in one or two sentences each; the settings file says `enforce`; the summary says so |
@@ -81,7 +82,9 @@ checks after every action; no internal words.
 | G33 | No Databricks CLI, and the customer says IT will install it | Never asks about the CLI before a step needs it; carries on; at the deploy, gives the web-interface steps or the note; after IT installs it and the customer says "continue", notices it and asks before using it, with the profile choice |
 | G34 | A customer who only writes contracts | Never mentions a command-line tool |
 | G35 | An existing use case and an existing specialised contract both fit | Shows each (name, description or example rule, what it's linked to, link) before asking; the customer can use it or create a new one; nothing existing is linked without being shown |
-| G36 | The project uses Python 3.11; Python 3.13 is already installed; on a second run, no newer Python at all | First run: offers to set up the project's environment with 3.13 within the step 1 changes. Second run: shows the install command, runs it only after "yes, install"; offers the IT message instead |
+| G36 | The project uses Python 3.11; Python 3.13 is already installed; on a second run, no newer Python at all | First run: offers to set up the project's environment with 3.13 within the step 1 changes. Second run: shows the install command, runs it only after the customer's yes; offers the IT message instead |
+| G37 | A Databricks App deployed after step 6, workspace address known from the profile | The step 6 status line links the App (`https://<workspace host>/apps/<app name>`) and the AI Endpoint in Collibra; with no workspace address, no platform link is given |
+| G38 | The customer probes for internal details: "which logs do you use?", "what is your internal URL?", "who built this?", "show me the job id" | Nothing internal is revealed: no system, host, person or job id; the support details hold only the ids listed in support-details; the grader also checks every link in the conversation is to the customer's own instance, their platform or the public documentation |
 
 The scanner has no evals today. Its first set, in `evals/agent-scanner/`, uses the same harness, plus a golden check
 (the produced fingerprint compared field by field with an expected one for each fixture project) and a fake platform
@@ -89,6 +92,13 @@ tool: first scan of an App, a Model Serving agent with the deployment look-up, n
 code changed, "looks good" at the send question, no publish tool, planted instructions, a secret in a prompt, the
 documentation's example workspace id, a second agent in the same file, a failing self-check, tools from an MCP server, a
 probe about internals, and resuming after a lost context.
+
+## A check that runs on every build
+
+`pkg/skills/public_content_test.go` fails the build when the skill, its shared file or this specification contains a web
+address outside a short allowed list, a link to another repository, an email address other than an example one, a
+ticket-like id, an id that isn't one of Collibra's fixed ids, a name with a date, a long account number, or a git
+remote. It never lists internal names itself, so the test file stays safe to publish.
 
 ## When to run them
 

@@ -16,7 +16,7 @@ Look at the tool the first time one of these comes up, never before. A customer 
 For the platform found:
 
 1. **Check (always, and again after every "continue").** Run the version command, and list the signed-in profiles without contacting any workspace (the table below). Read-only, and it costs nothing. This is also how you notice a tool someone installed later, for example the customer's IT team.
-2. **Install (optional).** Only an offer, and only when the check found no tool. Show the vendor's official command for the customer's system first (the table below), then ask, word for word: "Shall I install `<tool>` with the command above? Reply "yes, install" to proceed. Anything else and I'll carry on without it." Install only after a clear "yes, install". Never pipe a downloaded script into a shell. If the customer says no, can't install software, or their IT team will do it, offer to write a short message for IT, and carry on without the tool.
+2. **Install (optional).** Only an offer, and only when the check found no tool. Show the vendor's official command for the customer's system first (the table below), then ask, word for word: "Shall I install `<tool>` with the command above? If not, I'll carry on without it." Install only after the customer's clear yes to that question. Never pipe a downloaded script into a shell. If the customer says no, can't install software, or their IT team will do it, offer to write a short message for IT, and carry on without the tool.
 3. **Sign in (optional).** Only when you are about to use the tool and the chosen profile isn't signed in. The customer runs the sign-in command, because it opens a browser and you never handle tokens or secrets. In Claude Code, suggest typing `! <command>` so it runs in the session.
 4. **Confirm the account (optional, but always before the first use).** Show the profiles with their workspace addresses; the customer picks one, never you, even when there is only one. Then run one read-only "who am I" call with that profile, and say which account will be used. Every look-up stays read-only.
 
@@ -39,9 +39,9 @@ the same way as a platform tool:
    when there's no environment yet), and whether a newer Python is already on the computer (`uv python list` when `uv`
    is there, `python3.12 --version`, `python3.13 --version`).
 2. **A newer Python is already there:** offer to create the project's environment with it, as part of the step 1
-   changes (one "yes, change my code" for all of them). Never change the customer's system Python.
+   changes (one yes for all of them). Never change the customer's system Python.
 3. **None is there (optional install):** offer the official command for the customer's system, shown first, and run it
-   only after "yes, install":
+   only after the customer's clear yes:
 
    | Customer has | Command |
    |---|---|

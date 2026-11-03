@@ -34,7 +34,7 @@ Keep the answer for the whole conversation. It changes how much each step explai
 
 The customer may start anywhere: their home folder, an unrelated repository, or a client with no project. Never assume the current folder is the agent's project.
 
-- **Check the current folder** (read-only): one agent project, several agents, or none.
+- **Check the current folder** (read-only, by listing files and opening only likely entry files and settings, never the whole repository): one agent project, several agents, or none.
 - **Several agents** (header `Which agent`): "I found `<n>` AI agents here. Which one should we set up?" One option per agent, with the file it's in (at most four per question; more go in consecutive questions). One agent per run.
 - **None here** (header `Agent code`): "I don't see an AI agent in this folder. Where is your agent's code?"
   - **In a folder on this computer (default):** "Tell me the path." Check it's an agent project, then use that absolute path for every file from now on. If you can't open it: "I can't open `<path>` from here. Start me in that folder, or add it to this session, and say "continue setting up Guardian"." (In Claude Code: `cd <path> && claude`, or add the folder to the session.)
@@ -52,7 +52,7 @@ From what step 2 found, with the time it takes:
 | Found | Say |
 |---|---|
 | An agent here, not known to Collibra | "This folder has an AI agent, `<agent>`. Collibra doesn't know it yet. `<Your company has a company-wide agent contract.` \| `No agent contract exists yet.>` I suggest we set up Guardian for this agent. It takes about 15 minutes, most of it Collibra working." |
-| A known agent whose code, contracts or rules changed (`STALE`, `staleBecause`, or a newer commit than the last scan) | "Collibra knows `<agent>` (version `<n>`), and `<its code` \| `its agent contracts>` changed since its rules were applied. I suggest we update it." |
+| A known agent whose code, contracts or rules changed (`STALE`, `staleBecause`, or a newer commit than the last scan) | "Collibra knows [`<agent>`](<instance>/asset/<aiAgentId>) (version `<n>`), and `<its code` \| `its agent contracts>` changed since its rules were applied. I suggest we update it." |
 | No agent here, and the customer doesn't point to one | "I don't see an AI agent in this folder. I suggest we start with your agent contracts. You can add an agent later from its project folder." |
 
 Then (header `Next step`): **Start with this (default)** / **Show me what else I can do**.
@@ -68,7 +68,7 @@ Header `Get started`: "Here's what I can help with:"
 
 ## Step 6: The plan
 
-"Here's the plan: `<the steps that apply, numbered, with their customer step numbers>`. Each step ends with a one-line update and a link to what I found or changed in Collibra. You can ask "what is ...?" about anything at any time."
+"Here's the plan: `<the steps that apply, numbered, with their customer step numbers>`. Each step ends with a one-line update and links to what I found or changed. You can ask "what is ...?" about anything at any time."
 
 Then "Learn more:" and the "About Guardian" page from `references/documentation.md`.
 

@@ -9,9 +9,9 @@ the same way as a platform tool:
    when there's no environment yet), and whether a newer Python is already on the computer (`uv python list` when `uv`
    is there, `python3.12 --version`, `python3.13 --version`).
 2. **A newer Python is already there:** offer to create the project's environment with it, as part of the step 1
-   changes (one "yes, change my code" for all of them). Never change the customer's system Python.
+   changes (one yes for all of them). Never change the customer's system Python.
 3. **None is there (optional install):** offer the official command for the customer's system, shown first, and run it
-   only after "yes, install":
+   only after the customer's yes:
 
    | Customer has | Command |
    |---|---|
@@ -41,7 +41,7 @@ At that moment, for the platform found:
    contacting any workspace. Read-only, and it costs nothing. This is also how the skill notices a tool someone installed
    later, for example the customer's IT team.
 2. **Install (optional):** only an offer, with the vendor's official command for the customer's system shown first, and
-   only after "yes, install". Never a downloaded script piped into a shell. If the customer says no, can't install
+   only after the customer's yes. Never a downloaded script piped into a shell. If the customer says no, can't install
    software, or IT will do it, write the message for IT if they want one, and carry on without the tool.
 3. **Sign in (optional):** only when the skill is about to use the tool and the profile isn't signed in. The customer runs
    it, because it opens a browser and the assistant never handles tokens or secrets. In Claude Code, suggest typing
@@ -140,7 +140,7 @@ cases the skill checks from Collibra afterwards that the latest rules file is ru
 
 ## What changes in the customer's project
 
-Shown as one diff before "yes, change my code":
+Shown as one diff before the customer's yes:
 
 | File | Change | Why |
 |---|---|---|
