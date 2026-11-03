@@ -20,7 +20,7 @@ Write it as a list, so the links can be clicked (not inside a code block):
 
 The endpoint line appears only when the workspace address and the name are both known from the code, the scan or a read-only look-up; never guess one. A Databricks App: `https://<workspace host>/apps/<app name>`. Model Serving: `https://<workspace host>/ml/endpoints/<endpoint name>`.
 
-Never show `<instance>` or any other placeholder to the customer: an item without a real link is written without one.
+Never show `<instance>` or any other placeholder to the customer: an item without a real link is written without one. If the customer has said links don't open in their terminal, or asks for the full links, write each address in full as plain text after its item.
 
 
 If the rules file isn't in place yet, or the agent hasn't been deployed with it: "Until your agent starts with the rules file, Guardian lets everything through."

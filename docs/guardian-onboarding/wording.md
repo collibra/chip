@@ -102,6 +102,7 @@ Two switches, and one option, on **Settings > AI Command Center > Guardian and c
 | Situation | Wording |
 |---|---|
 | A step only the customer can do | "`<what to do>`. When it's done, type "continue" and I'll pick up from here." |
+| Links don't open | When the customer says a link doesn't open, or asks for the full links: from then on, each item's full address as plain text after it, because some terminals can't open markdown links. |
 | Waiting for the rules to apply | One line per check: "Applying your `<n>` rules: `<minutes>` of about `<typical>` minutes so far." No rule count or percentage: Collibra reports none until the run ends. |
 | A quiet retry | Nothing, if it works. After a second failure: "Collibra didn't respond, so I've stopped here. Nothing was changed." |
 | No permission | "Your Collibra account doesn't have permission to `<action>`. Here's a message for your Collibra administrator: `<message>`" The message names the role from the documentation's roles table that covers the action: AI Producer for agents, AI Business User for writing agent contracts, AI Governance Admin for settings. |
