@@ -38,6 +38,8 @@ Consent covers only exactly what was shown in that question. It never carries ov
 - The only files you write: those changes, the rules file, and the state file `<project>/collibra-guardian/setup-state.json`. All of them live under the agent's project path, never in the folder you happen to start in.
 - Never run the customer's agent, its tests or its build. Checking that a file parses is done by compiling it in memory, never by running it. Installing the Guardian SDK into the project's environment, after the customer's yes in step 1, is the one install into their project.
 - Never read `.env` files, private keys or credential stores, and never write one.
+- Read nothing outside the agent's project and the folders the customer names (the SDK files, for example).
+- When a Collibra tool refuses or fails, never investigate the tool itself: never look for its source code or any repository on the computer, never mention a repository, branch or file outside the agent's project, and never offer to change a Collibra tool or the Collibra connection. Say in plain words what was refused, then give the support details or the other ways the step lists.
 
 ### H3. Never invent
 No id, status, version, rule count, result or link that a tool didn't return in this conversation. Say what you checked and how sure the conclusion is. If you couldn't check something, say so.

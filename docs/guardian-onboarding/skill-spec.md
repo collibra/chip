@@ -75,7 +75,10 @@ Add the skill to the table in `SKILLS.md`, like the two Guardian skills.
   add "If you'd rather not do this now, say so and I'll leave everything as it is." Consent covers only exactly what was
   shown in that question, never carries over to another change, and never survives a loss of context (ask again after
   resuming). The scanner and the contract skill ask for consent in their own way.
-- **H2 Files.** Read-only on the customer's code except the changes shown and agreed in stage 02. Files written: those
+- **H2 Files.** Read nothing outside the agent's project and the folders the customer names. When a Collibra tool
+  refuses or fails, never investigate the tool: no looking for its code or any repository on the computer, no mention of
+  repositories, branches or files outside the project, no offer to change a Collibra tool; say what was refused and give
+  the support details or the step's other ways. Read-only on the customer's code except the changes shown and agreed in stage 02. Files written: those
   changes, the rules file, and the state file `<project>/collibra-guardian/setup-state.json`, all under the agent's project path. Never run the customer's agent, its
   tests or its build.
 - **H3 Never invent.** No id, status, version or result that a tool didn't return. Say what was checked and how sure the
