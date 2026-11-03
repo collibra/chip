@@ -61,7 +61,7 @@ Print only those that apply:
 - **Checked against** (specialised only, always):
   - Agents named: *"I checked these rules against what <agents> can do and against their other contracts. If the contract is linked to other agents, I haven't checked those."* Add, for `contracts check: partial`: *"Some contracts on <agent> I can't see, so I couldn't check against them."*
   - No agents named: *"You didn't name particular agents, so I checked these rules by their wording and against the global contract only."*
-- **Linking** (new specialised only): *"Saving doesn't link the contract to any agent. Once it's saved, link it to the agents it should govern, on the contract in Collibra. Until then it governs no agent."*
+- **Linking** (new specialised only): *"Saving doesn't link the contract to any agent. Until it's linked, it governs no agent."* With an agent named in Stage 01, add: *"Once it's saved, I'll offer to link it to <agent>."* With none: *"Once it's saved, link it to the agents it should govern, on the contract in Collibra."*
 - **Owner** (new specialised only): *"If Collibra hasn't already made you the Owner of the new contract, I'll also assign you as its Owner when I save it."*
 - **Global impact** (global only): *"These rules will apply to every agent governed by Guardian in your organisation, including <examples if known>."*
 - **Not about this agent** (➖): *"Rules <n> refer to actions this agent doesn't have; you chose to keep them for completeness. They're saved with the contract and not enforced."*

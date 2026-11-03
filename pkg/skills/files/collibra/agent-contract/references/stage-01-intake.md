@@ -73,7 +73,7 @@ For each agent named, `find_agent(name)`:
 
 None in particular → record `agents: none`. The rules are written by kind of action, like a global contract's, and checked against their wording and the global contract only.
 
-For a new contract, say once: *"Saving doesn't link the contract to any agent. You link it on the contract in Collibra when you're ready. Until then it doesn't govern any agent."*
+For a new contract, say once: *"Saving doesn't link the contract to any agent. Until it's linked, it doesn't govern any agent."* If the customer named an agent here, add: *"Once it's saved, I can link it to <agent> for you."* Otherwise add: *"You can link it to agents on the contract in Collibra when you're ready."*
 
 ## Step 6 — Existence check (new only)
 

@@ -24,7 +24,7 @@ Run these in order. The baseline check is last on purpose: Collibra doesn't chec
 
 Build the list from the Stage 07 table, in its order: every UNCHANGED rule, the new wording of every REWORDED rule, every ADDED rule. REMOVED rules are left out. Nothing else goes in.
 
-- **New contract:** `POST /agentContracts` with the `layer`, the name and the domain agreed in Stage 01, and the list. No agent ids: linking happens in Collibra afterwards.
+- **New contract:** `POST /agentContracts` with the `layer`, the name and the domain agreed in Stage 01, and the list. No agent ids: linking is a separate step after the report (Step 4).
 - **Edit:** `PUT /agentContracts/{id}/rules` with the contract id and the list. Nothing else goes in the body.
 
 The pushed list becomes the contract's current version straight away; Collibra keeps the previous one in its history.
@@ -55,7 +55,7 @@ Each write is called twice: first with `confirm=false`, which returns Collibra's
 After a successful create of a specialised contract, make sure the contract has a direct Owner. Collibra normally assigns the creator itself, so this is a check, not a second write by default. The Stage 07 frame told the customer about it.
 1. `get_asset_details` on the new contract's id; look in `responsibilities` for a role **Owner** with `inherited` false. The tool lists user names, not user ids, so it shows that a direct Owner exists but cannot prove who it is.
 2. A direct Owner is present → nothing more to do.
-3. None → `edit_asset` on the contract's id with one operation, `set_responsibility`, role `Owner`, `userId` = the `createdBy` the create returned. This is the only use of `edit_asset` in this skill and only for this assignment. Report it.
+3. None → `edit_asset` on the contract's id with one operation, `set_responsibility`, role `Owner`, `userId` = the `createdBy` the create returned. Apart from linking the contract to an agent after the report (Step 4), this is the only use of `edit_asset` in this skill. Report it.
 4. If that assignment fails (permission or otherwise): say so plainly, that the contract exists but has no Owner assigned to the customer, and that someone with the right permission must assign it in Collibra. Do not retry or look for another route.
 
 Global contracts get no extra step. Edits of existing contracts never change owners.
@@ -86,9 +86,10 @@ Link:    <Collibra link if the capability returned one>
 ```
 
 Then, in plain words:
-- What happens next: *"This is now the contract's current version in Collibra. The previous version stays in its history."* For a new specialised contract, add: *"Next, link it to the agents it should govern, on the contract in Collibra. Until then it doesn't govern any agent."* Do not describe what Collibra does with it beyond that.
+- What happens next: *"This is now the contract's current version in Collibra. The previous version stays in its history."* Do not describe what Collibra does with it beyond that.
+- **Linking** (new specialised contract only): when the conversation is about an agent you found in Collibra (Stage 01 Step 5), offer: *"**<name>** doesn't govern any agent yet. Shall I link it to <agent> now?"* After the customer's clear yes to that question: `edit_asset` on the **AI Agent** with one `add_relation` operation, `relationTypeId` `00000000-0000-0000-0000-000000007018` (AI Agent to Agent Contract), and the contract's id as `targetAssetId`. Then `GET /agentContracts?agentId=<agent id>` and confirm the contract is in the list; report what you found, with the contract's link. With no agent, if the customer prefers, or if the link fails (for example no permission, `R-PERMISSION`): *"Next, link it to the agents it should govern, on the contract in Collibra. Until then it doesn't govern any agent."*
 - What the customer might do next: enrich the use case if it was thin; register an agent the customer named that isn't in Collibra yet; review policy-only rules with their compliance team.
-- If this contract was written while setting up Guardian for an agent, offer to go back to Guardian Onboarding (`collibra/guardian-onboarding`), which links the contract to the agent and applies the rules.
+- If this contract was written while setting up Guardian for an agent, offer to go back to Guardian Onboarding (`collibra/guardian-onboarding`), which links the contract to the agent if it isn't linked yet, and applies the rules.
 - Offer: *"Want me to output a copy of the published contract for your records?"*
 
 ## Failed save
