@@ -256,3 +256,14 @@ func listTools(t *testing.T, cfg *chip.ServerToolConfig) []*mcp.Tool {
 	}
 	return result
 }
+
+// create_community and create_domain ship ungated, like create_asset: they are
+// generally available write tools that sit beside it in the default surface.
+func TestRegisterAll_CommunityAndDomainCreateToolsVisibleWithEmptyConfig(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range []string{"create_community", "create_domain"} {
+		if !slices.Contains(names, name) {
+			t.Errorf("expected %q to be registered with an empty config; got tools=%v", name, names)
+		}
+	}
+}

@@ -10,6 +10,8 @@ import (
 	"github.com/collibra/chip/pkg/tools/cancel_dq_job_run"
 	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
+	"github.com/collibra/chip/pkg/tools/create_community"
+	"github.com/collibra/chip/pkg/tools/create_domain"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job"
@@ -98,6 +100,8 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, search_lineage_transformations.NewTool(client))
 	toolRegister(server, toolConfig, prepare_create_asset.NewTool(client))
 	toolRegister(server, toolConfig, create_asset.NewTool(client))
+	toolRegister(server, toolConfig, create_community.NewTool(client))
+	toolRegister(server, toolConfig, create_domain.NewTool(client))
 	toolRegister(server, toolConfig, edit_asset.NewTool(client))
 	// Registered WITHOUT an experimental flag, deviating from
 	// docs/TOOL_CONTRIBUTION_STANDARDS.md 3.1: this resolver only feeds the
