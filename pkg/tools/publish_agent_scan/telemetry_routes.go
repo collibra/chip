@@ -30,10 +30,11 @@ type telemetryRoute struct {
 }
 
 var telemetryRoutes = []telemetryRoute{
+	// A served model is named by its Unity Catalog name, a Databricks App by app/<app name>.
 	{
 		prefix:       "databricks",
-		shape:        regexp.MustCompile(`^databricks:[0-9]+:[^.:\s]+\.[^.:\s]+\.[^.:\s]+$`),
-		shapeHint:    "databricks:<workspace id, digits only>:<catalog>.<schema>.<model>",
+		shape:        regexp.MustCompile(`^databricks:[0-9]+:([^.:\s]+\.[^.:\s]+\.[^.:\s]+|app/[a-z0-9][a-z0-9-]*)$`),
+		shapeHint:    "databricks:<workspace id, digits only>:<catalog>.<schema>.<model> or databricks:<workspace id, digits only>:app/<app name>",
 		expectedFrom: databricksExpectedID,
 	},
 }

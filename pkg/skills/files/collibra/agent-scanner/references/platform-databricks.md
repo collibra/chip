@@ -17,7 +17,7 @@ Look in the deploy script, `databricks.yml`, `app.yaml`, `pyproject.toml`, the a
 
 Record `platform.name` = `DATABRICKS`, `platform.metadata.ucModelName` when you found the model name, and `platform.metadata.workspaceId` (a string) once the workspace id is known.
 
-**Agent id.** The prefix of an id says where the agent's telemetry goes; `databricks:` routes it through Databricks. For a Databricks agent the id is a URN: `databricks:<workspace_id>:<model_full_name>`, for example `databricks:1234567890123456:example_catalog.agents.support_triage_agent`. `workspace_id` is the numeric workspace id and `model_full_name` is the Unity Catalog three-part name. Use it unless the customer gave an id. An id must never contain `>`, be blank, or have leading or trailing whitespace.
+**Agent id.** The prefix of an id says where the agent's telemetry goes; `databricks:` routes it through Databricks. For a Databricks agent the id is a URN: `databricks:<workspace_id>:<model_full_name>`, for example `databricks:1234567890123456:example_catalog.agents.support_triage_agent`. `workspace_id` is the numeric workspace id and `model_full_name` is the Unity Catalog three-part name. An agent that runs as a Databricks App, with no served model, is `databricks:<workspace_id>:app/<app name>`, for example `databricks:1234567890123456:app/example-agent`, with the App's name as deployed. Use it unless the customer gave an id. An id must never contain `>`, be blank, or have leading or trailing whitespace.
 
 Finding the workspace id, in this order:
 0. The known agent's platform metadata (`known.json`, Stage 02): use it, do not ask or look it up again.

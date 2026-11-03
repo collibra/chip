@@ -37,6 +37,9 @@ func TestPublishAgentScan_ExternalIDRules(t *testing.T) {
 		{"databricks four-part name", "databricks:123:a.b.c.d", "databricks:<workspace id"},
 		{"databricks empty segment", "databricks:123:cat..model", "databricks:<workspace id"},
 		{"databricks missing workspace", "databricks::cat.schema.model", "databricks:<workspace id"},
+		{"databricks app without a name", "databricks:123:app/", "databricks:<workspace id"},
+		{"databricks app with an uppercase name", "databricks:123:app/Example-Agent", "databricks:<workspace id"},
+		{"databricks app with a nested path", "databricks:123:app/example/agent", "databricks:<workspace id"},
 	}
 	for _, tt := range tests {
 		for _, confirm := range []bool{false, true} {
@@ -66,6 +69,7 @@ func TestPublishAgentScan_ExternalIDRules(t *testing.T) {
 func TestPublishAgentScan_ValidExternalIDsAreAccepted(t *testing.T) {
 	for _, id := range []string{
 		databricksID,
+		"databricks:1234567890123456:app/example-agent",
 		"https://github.com/acme/agents#support_triage_agent",
 		"snowflake:acct1:db.schema.agent",
 		"a b c",
