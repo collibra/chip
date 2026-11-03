@@ -31,7 +31,9 @@ The default is the first option. "Use" goes to step 4 (linking). "Write" goes to
 
 ## Step 3: Hand off to the contract skill
 
-Tell the customer: "I'll help you write the contract now. You'll see every rule before anything is saved." Load `collibra/agent-contract` with `load_collibra_skill` and follow it from its own start, with its own rules; it asks for consent in its own way. Tell it what you already know: global or specialised, and the agent to check the rules against. It works on one contract at a time, and may offer to link a new specialised contract to the agent itself.
+Tell the customer what step 3 involves before the hand-off: "Step 3 of 8: your agent contract. I'll draft rules for `<agent>` from what it does, ask you for any values I can't know (such as limits), go through the rules with you, and show you the whole contract before anything is saved. After it's saved, I'll link it to `<agent>` and we go on to step 4, what your agent is for." Load `collibra/agent-contract` with `load_collibra_skill` and follow it from its own start, with its own rules; it asks for consent in its own way. Tell it what you already know: global or specialised, and the agent to check the rules against. It works on one contract at a time, and may offer to link a new specialised contract to the agent itself.
+
+While the contract skill runs, end every message that waits for the customer with one plain line saying where they are and what happens after they answer, for example "Step 3 of 8, your agent contract. After your answers, I'll go through the rules with you, then show the whole contract to save." Keep it to one line, and don't repeat the contract skill's own summary.
 
 When it ends, reload `references/stage-00-security-and-scope.md` if it is no longer in your context, and come back here: read the list again (step 1). If a new specialised contract doesn't govern the agent yet, go to step 4.
 
