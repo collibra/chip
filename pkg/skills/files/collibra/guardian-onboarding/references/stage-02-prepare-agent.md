@@ -4,7 +4,7 @@ Install the Guardian SDK in the agent's project and wire it in, before the scan,
 
 Skip this stage when the client can't run code or the customer has no code (the hand-off note covers it), and when the project already has the SDK wired in as below (check it, say so, and go on).
 
-**Before** (depth "new", or the first time for "knows Collibra"): "First, I'll prepare your agent for Guardian. That means installing the Guardian SDK, the Python package that lets Guardian check your agent, and adding two lines and a small settings file to your project. I'll show you every change before I make it."
+**Before** (depth "new", or the first time for "knows Collibra"): "First, I'll prepare your agent for Guardian. That means installing the Guardian SDK, the Python package that lets Guardian check your agent, and adding three lines and a small settings file to your project. I'll show you every change before I make it."
 
 ## Step 1: How the agent runs and is deployed
 

@@ -146,7 +146,7 @@ Shown as one diff before the customer's yes:
 |---|---|---|
 | `vendor/` (new) | The Collibra wheels needed | A deployed agent may not reach a private package index, so the wheels ship with it |
 | `requirements.txt` or `pyproject.toml` | `--find-links ./vendor` and `collibra-sdk[guardian-langchain,guardian-injection,mlflow]` (with uv, a `[tool.uv.sources]` path entry) | The deployment installs the SDK from the shipped wheels |
-| The entry module | The two lines above, at the very top | Guardian on, without changing the agent's scan |
+| The entry module | The three lines above, at the very top | Guardian on, without changing the agent's scan |
 | `collibra-guardian.toml` (new, in the folder the agent starts from) | `enforcement_mode = "<monitor or enforce, as the customer chose>"` only | What Guardian does when a rule is broken. The SDK's own default is `enforce`, so the skill always writes it. **No `policy_bundle` yet:** a path that names a missing file stops the agent, so the path is written in stage 07, together with the file |
 
 The local environment gets the same packages with `pip install --find-links <folder> "collibra-sdk[...]"` (or uv).
