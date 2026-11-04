@@ -312,10 +312,17 @@ deployed, this stage ends with the hand-off note instead of deploy steps.
 
 ### 08 Guardian sees the agent's activity
 
-- **Tools:** `get_agent_guardian_status`.
+- **Tools:** `get_agent_guardian_status`; for the optional look at the runs, `get_agent_rules_report` and a read-only look
+  where the agent's records go.
 - **Does:** reads the collection status and reason. Missing connection: instructions and a documentation link for the
   Collibra administrator, then pause for "continue". After the customer deploys and the agent has handled a message,
   check again later: the enforcement status should show the latest rules file running.
+- **Optional, any platform:** after a yes, a read-only look at the agent's latest runs (at most 20) where the Guardian
+  SDK records its decisions (MLflow traces, an OpenTelemetry service, or the agent's logs), with the customer's own
+  sign-in, keeping only Guardian's decisions and counting them per rule; never the conversations,
+  never written to a file. A table shows what was stopped or flagged, how often, the rule, and the assistant's own
+  reading of whether the rule works as meant (⚠️ when a check stops more than the rule says). It changes no contract:
+  it offers the contract skill, or a note for the owner of a contract that governs other agents.
 - **Checks:** collection `OK`; enforcement shows the latest rules file.
 - **Exit:** activity is being read, or the customer has the hand-off and knows when to come back.
 

@@ -119,3 +119,4 @@ Checked on 2026-11-03. The skill keeps its own steps for these until the documen
 | 2026-11-03 | Find the agent's code when the skill starts outside it; anchor every file to the project path | Customers may start the skill anywhere |
 | 2026-11-03 | Where the rules file lives by how the agent runs; finding the deployment when the customer doesn't know | A customer may not know how their agent is deployed |
 | 2026-11-03 | The use case link names `AIUseCaseUsesAIAgent` (`...7109`) | Four relation types on AI Use Case share the role "uses" |
+| 2026-11-04 | Step 7 may offer a read-only look at the agent's recent runs, on any platform (MLflow traces, an OpenTelemetry service or the agent's logs): Guardian's decisions per rule, with the assistant's own reading of each rule | A test session did this unprompted and found two over-broad company-wide checks; now it's asked first, keeps conversations out and changes nothing |
