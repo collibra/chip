@@ -61,7 +61,6 @@ What to do:      <the fix, or the hand-off>; if that doesn't help, share the det
 | 7 | Reason `AGENT_NOT_FOUND` | The agent id's form against how it's deployed (App or serving endpoint) | A checklist: wrong id, not deployed yet, no MLflow experiment, or two endpoints serving the same model |
 | 7 | Collection `FAILING` | `lastCollectedOn` | Collecting itself fails: the support details |
 | 7 | Enforcement `NOT_OBSERVED` or `STALE` after the deploy | `observedBundle` against `latestBundle` | The agent isn't running the new rules file yet: restart it with the file |
-| 7 | A newer agent version shows no rules, but the agent runs the older one's | The agent's versions: two in a row with the same code | Created by a redeploy with unchanged code. Explain it: the agent is checked with the rules made for the earlier version; applying the rules again to the newest version and redeploying fixes it, and avoid sending a new scan when only the deployment changed |
 | any | `agentContractsFeatureDisabled`, or Guardian looks switched off | Which switch | Not a permission problem: "Collibra settings" below; no retry until "continue" |
 | any | A block missing from `get_agent_guardian_status` | The tool's note on absent blocks | An older Collibra: say which part couldn't be checked, never guess it |
 

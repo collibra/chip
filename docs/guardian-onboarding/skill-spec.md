@@ -201,7 +201,7 @@ Each stage lists its tools, what it does, its consent, its checks and its exit. 
 ### 02 Prepare the agent
 
 Before the scan, so Guardian's wiring is part of the version the rules are made for
-([decisions.md](decisions.md#a-redeploy-can-look-like-a-new-agent-version)).
+([decisions.md](decisions.md#a-redeploy-keeps-the-same-agent-version)).
 
 - **Tools:** none from chip. Local commands only.
 - **Does:** works out how the agent runs and is deployed, without blocking when the customer doesn't know
@@ -222,7 +222,7 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 - **Tools:** `list_scanned_agents`, `get_latest_agent_scan`, `get_agent_guardian_status`; hand-off to
   `collibra/agent-scanner` (load it with `load_collibra_skill`, then return to this stage).
 - **Does:** if Collibra doesn't know the agent, or its code changed, run the scanner skill as it is, with its own
-  consent question. If only the deployment changed and the code didn't, don't send a new scan (see decisions.md). Then wait
+  consent question. If only the deployment changed and the code didn't, explain that Collibra keeps the same agent version and rules either way, and let the customer choose whether to send a scan (see decisions.md). Then wait
   for Collibra to finish: check `list_scanned_agents` until the agent has an id, then `get_agent_guardian_status` until
   the fingerprint status is `COMPLETED` (`FAILED` carries a message), about once a minute, waiting in the shell between
   checks.

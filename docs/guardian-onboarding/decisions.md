@@ -35,31 +35,24 @@ From the design review on 2026-11-03, unless dated otherwise.
 | Public repository | Nothing internal in the skill, tools, evals or these docs. |
 | Branches | Work on a branch from `aicc-prpr/guardian-agents`; test with the team there; one PR back into `aicc-prpr/guardian-agents`. |
 
-## A redeploy can look like a new agent version
+## A redeploy keeps the same agent version
 
-**The issue.** A root agent's version is identified by its code's hash together with its deployment version. Rules are
-made for one version, and issues are filed under the version the rules file was made for. So:
+**Decided on 2026-11-04 with the Guardian team.** Collibra identifies a root agent's version by its code's hash only. A
+redeploy of the same code, with a new deployment version, keeps the same AI Agent Version: its rules stay applied, and
+issues stay under it. Collibra still records the scan, but nothing new appears in the catalog for it. Before this, the
+deployment version was part of the identity, so a redeploy made a new version with no rules, and on Model Serving every
+rules update repeated it.
 
-- if switching Guardian on changes the agent's code as the scanner sees it (explicit middleware, a guarded constructor),
-  the next scan is a new version while the agent runs the previous version's rules file;
-- on Databricks Model Serving, shipping a rules file means a new registered model version, so the next scan that reads
-  the deployment is a new version too, with the same code;
-- the newest version then shows no rules applied while the agent is in fact enforcing the previous one's, and it repeats
-  with every rules update.
+**What the skill still does, because it's cheap and still right:**
 
-**What the skill does:**
+- prepares the agent (SDK and wiring) before the scan, with the default way that doesn't change the scan (way 4). The
+  ways that add Guardian to the code itself (ways 1 to 3) change the code's hash, so done after the scan they would
+  still make a new version;
+- when the code is unchanged and only the deployment changed, explains that Collibra keeps the same version and rules
+  either way, and that a scan only records the deployment in Collibra's history; the customer decides whether to send it.
 
-- prepares the agent (SDK and wiring) before the scan, with the default way that doesn't change the scan (way 4);
-- doesn't send a new scan when the code is unchanged and only the deployment changed;
-- detects it after the fact: two consecutive versions with the same code, and explains it to the customer.
-
-**Still to decide** with the Guardian service owners:
-
-- the version identity on the server: the code hash only, or carrying the rules forward to a new version with identical
-  code (either covers every source of scans, not only this skill);
-- whether the scanner should leave Guardian's own wiring out of the scan;
-- for Model Serving, keeping the rules file outside the registered model (for example a volume the endpoint reads), so a
-  rules update doesn't create a model version; not yet tested.
+**Still open:** whether the scanner should leave Guardian's own wiring out of the scan, so ways 1 to 3 don't change the
+version either.
 
 ## Known gaps in the documentation
 
@@ -112,6 +105,7 @@ Checked on 2026-11-03. The skill keeps its own steps for these until the documen
 | 2026-11-03 | Consent questions end naturally; any clear yes counts, no exact phrase | Tester feedback: exact quoted replies felt unnatural |
 | 2026-11-03 | Every status line ends with clickable links, including the deployed agent on its platform | Tester feedback |
 | 2026-11-03 | Keep it light: fewer files loaded, summaries, waiting in the shell, a shorter `SKILL.md` | Lower token use for the customer |
+| 2026-11-04 | A redeploy of the same code keeps the same agent version; the redeploy risk is closed | Decided with the Guardian team |
 | 2026-11-03 | The skill helps with Python 3.12: uses one already installed, or offers the official install after "yes, install" | Testers and customers may not have it |
 | 2026-11-03 | Rule outcome marks confirmed; the skill gives the deploy commands and the customer runs them | Review of the first build |
 | 2026-11-03 | Show an existing use case or contract before offering to reuse it; the customer decides | Review feedback |

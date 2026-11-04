@@ -60,7 +60,6 @@ What to do:      <the fix, or the hand-off>; if that doesn't help, share the det
 | 08 | `AGENT_NOT_FOUND` | The agent id's form against how it's deployed (App or endpoint) | Wrong id, not deployed yet, no MLflow experiment, or two endpoints serving the same model: a checklist |
 | 08 | `FAILING` | Last collected time | Collection itself fails: support details |
 | 08 | Enforcement `NOT_OBSERVED` after deploy | `observedBundle` against `latestBundle` | The agent isn't running the new rules file yet: restart it with the file |
-| 08 | A newer agent version shows no rules, but the agent enforces the older one | The agent's version list: two versions with the same code | Created by a redeploy with unchanged code: see [decisions.md](decisions.md#a-redeploy-can-look-like-a-new-agent-version) |
 
 ## Support details
 
