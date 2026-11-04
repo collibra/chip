@@ -294,8 +294,9 @@ Where the file goes and what a deploy means depend on how the agent runs: see
 deployed, this stage ends with the hand-off note instead of deploy steps.
 
 - **Tools:** `get_agent_rules_file`.
-- **Does:** gets the file's id, version, size, SHA-256 and a short-lived download link; downloads it in the customer's
-  environment (a few lines of Python, or curl and shasum); checks it; writes it where the platform needs it (unzipped into
+- **Does:** gets the file's id, version, size, SHA-256 and a short-lived download link; after one yes that covers the file and its
+  setting, downloads it straight into the agent's project (`<project>/collibra-guardian/bundle.zip`, never a temporary
+  or session folder; a file that fails a check is deleted) with a few lines of Python, or curl and shasum; checks it; writes it where the platform needs it (unzipped into
   the folder an App reads, when that's the platform's way) and, in the same step, adds the setting that names it; gives
   the redeploy steps for the platform. Before using the platform's command-line tool, it follows
   `_shared/platform-prerequisites.md`: check it, offer to install it only if it's missing, have the customer sign in and

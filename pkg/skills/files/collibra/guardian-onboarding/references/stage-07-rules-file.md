@@ -22,9 +22,33 @@ Get the rules file only through `get_agent_rules_file`: never ask the customer t
 
 **The download link is a secret.** Use it once, only inside the download command. Never show it in a message, never write it to a file, a script on disk, the state file or a note, and never print it in command output. If it expires, get a fresh one with `get_agent_rules_file`.
 
-## Step 2: Download and check, outside the project
+## Step 2: Where the file goes, and one yes
 
-Download into a new temporary folder outside the customer's project, with the project's Python (or curl and shasum). The command prints only the size and the SHA-256:
+The rules file is always downloaded into the agent's project, so the customer can find it later: never into a
+temporary, scratch or session folder. Without a project (no code), use `collibra-guardian/` in the folder the customer
+started in, and say its full path.
+
+Never name a path before the file is there: the file and the setting that names it are written in the same change and
+shipped in the same deploy. A setting that names a missing file stops the agent.
+
+| How the agent runs | The file is downloaded to | Then, in the same change |
+|---|---|---|
+| Locally, or from a notebook | `<project>/collibra-guardian/bundle.zip` | `policy_bundle = "collibra-guardian/bundle.zip"` in `collibra-guardian.toml` (the path is relative to the folder the agent starts from) |
+| Databricks App | `<project>/collibra-guardian/bundle.zip` | Unzipped into `policy/` in the App's source folder (Apps unzip every zip on deploy, so ship the folder, not the zip), and `COLLIBRA_GUARDIAN_POLICY_BUNDLE=policy` in `app.yaml`'s environment |
+| Model Serving | `<project>/collibra-guardian/bundle.zip` | Copied into the model's `code_paths`, with the path built from the entry module's `__file__`, because the model's working folder isn't its code folder. A wrong path fails quietly: every action is allowed |
+| Deployed by a pipeline from git | `<project>/collibra-guardian/bundle.zip` | Where the pipeline packages files, as the customer or their developer says, with the setting for the platform it deploys to |
+| Nobody knows | `<project>/collibra-guardian/bundle.zip` | No setting: the hand-off note says where it goes for each platform |
+
+If the setting already names this path (an update), only the file is replaced; nothing else changes.
+
+Show the change: the full path the file is downloaded to, where it is placed for the platform, and the exact line added
+to the settings. Then ask: "Shall I download the rules file to `<full path>`, check it, and add the setting that points
+to it? I'll change nothing until you say yes."
+
+## Step 3: Download and check
+
+After the customer's yes, download straight to that path with the project's Python (or curl and shasum). The command
+prints only the size and the SHA-256:
 
 ```python
 import hashlib, sys, urllib.request
@@ -37,29 +61,17 @@ print(len(data), hashlib.sha256(data).hexdigest())
 
 Then check, and use the file only if every check passes:
 
-1. **SHA-256** equals `contentHash`, and the size equals `sizeInBytes`. If not, download once more with a fresh link. Twice wrong: "The file doesn't match what Collibra made, so I won't use it. Please share the details below with Collibra support." Load `references/support-details.md` and stop.
-2. **The archive holds `spec.yaml`**, and its `spec_bundle_id` equals the file's id (read it with the project's Python and `yaml.safe_load`; pyyaml comes with the SDK). No `spec.yaml`: an old rules file, apply the rules again (step 5).
+1. **SHA-256** equals `contentHash`, and the size equals `sizeInBytes`. If not, download once more with a fresh link. Twice wrong: delete the file, then "The file doesn't match what Collibra made, so I've removed it and won't use it. Please share the details below with Collibra support." Load `references/support-details.md` and stop.
+2. **The archive holds `spec.yaml`**, and its `spec_bundle_id` equals the file's id (read it with the project's Python and `yaml.safe_load`; pyyaml comes with the SDK). No `spec.yaml`: delete the file; it's an old rules file, so apply the rules again (step 5).
 3. **The SDK's own loader accepts it:** load the file with the rules-file loader in the installed Guardian SDK packages, in the project's environment. Run the SDK on the file only, never the agent. If you can't find the loader, say this check was skipped.
 
-A download that fails: "The download didn't complete, so I'll try once more." Then once more with a fresh link.
+A download that fails: "The download didn't complete, so I'll try once more." Then once more with a fresh link, and
+delete any partial file.
 
-## Step 3: Where the file goes
-
-Never name a path before the file is there: the file and the setting that names it are written in the same change and shipped in the same deploy. A setting that names a missing file stops the agent.
-
-| How the agent runs | Where the file goes | The setting, in the same change |
-|---|---|---|
-| Locally, or from a notebook | `<project>/collibra-guardian/bundle.zip` | `policy_bundle = "collibra-guardian/bundle.zip"` in `collibra-guardian.toml` (the path is relative to the folder the agent starts from) |
-| Databricks App | Unzipped into `policy/` in the App's source folder (Apps unzip every zip on deploy, so ship the folder, not the zip) | `COLLIBRA_GUARDIAN_POLICY_BUNDLE=policy` in `app.yaml`'s environment |
-| Model Serving | `bundle.zip` in the model's `code_paths` | The path built from the entry module's `__file__`, because the model's working folder isn't its code folder. A wrong path fails quietly: every action is allowed |
-| Deployed by a pipeline from git | Where the pipeline packages files, as the customer or their developer says | As for the platform the pipeline deploys to |
-| Nobody knows | `<project>/collibra-guardian/bundle.zip`, with no setting | None: the hand-off note says where it goes for each platform |
-
-If the setting already names this path (an update), only the file is replaced; nothing else changes.
-
-Show the change: the file's destination, and the exact line added to the settings. Ask, word for word: "Shall I save the rules file and add the setting that points to it? I'll change nothing until you say yes."
-
-After the customer's clear yes: write the file and the setting, then check that the file at the destination has the same SHA-256 (for the unzipped folder: that `policy/spec.yaml` is there with the right `spec_bundle_id`), that the settings file still parses and names exactly that path, and that nothing else changed. Write the rules file id to the state file.
+When every check passes, place the file for the platform and write the setting, as shown in step 2. Then check that the
+file at its final place has the same SHA-256 (for the unzipped folder: that `policy/spec.yaml` is there with the right
+`spec_bundle_id`), that the settings file still parses and names exactly that path, and that nothing else changed.
+Write the rules file id to the state file. Tell the customer the full path where the file is.
 
 ## Step 4: The deploy steps
 
