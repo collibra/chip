@@ -240,8 +240,8 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
   (name, rule count, one example rule, how many agents it applies to, link), then let the customer choose: use it (link
   it, below), write a new one with the contract skill (this agent's, or the company-wide one), or stop. A specialised contract that doesn't govern the agent yet (for example one just
   written, which the contract skill didn't link): the skill proposes to link it and, after the customer's yes, links it
-  itself. The link is relation type `00000000-0000-0000-0000-000000007018`, from the AI Agent to the Agent Contract: edit
-  the agent with `add_relation`, `relationTypeId` set to it and the contract as `targetAssetId`. The customer links it
+  itself. The link: edit the AI Agent with `add_relation`, `relationType` "complies to" and the contract as
+  `targetAssetId` (on an AI Agent that name belongs to one relation type only, see tools-spec.md). The customer links it
   in Collibra by hand, then types "continue", only when they prefer it or the link fails (for example no permission).
   "Not now" is also an answer. Never unlink a contract. The contract skill makes the same offer after saving a new
   specialised contract when the agent is known from the conversation.
@@ -252,18 +252,18 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 ### 05 AI use case (optional)
 
 - **Tools:** `get_asset_details` (the agent's incoming relations), `search_asset_keyword` with `assetTypeFilter`
-  "AI Use Case", `prepare_create_asset`, `create_asset`, `edit_asset add_relation` with `relationTypeId`
-  ([tools-spec.md](tools-spec.md#change-edit_asset-add_relation-takes-a-relation-type-id)).
+      "AI Use Case", `prepare_create_asset`, `create_asset`, `edit_asset add_relation` with `relationTypeId`
+  ([tools-spec.md](tools-spec.md#change-edit_asset-add_relation-takes-an-optional-relation-type-id)).
 - **Does:** if the agent has no use case, search for similar ones with words from the scan (agent name, the purpose in
   its instructions, its tools' subject). Show each match first (name, one line of its description, how many agents
   already use it, link), then offer: use it; choose another; create one from the agent; skip. The customer decides; an
   existing use case is never linked without being shown.
   To create: draft a **name and description** from the scan (and only the attributes the code shows), show them, let the
-  customer edit, then create it in the AI Use Cases domain and link it.
-- **The link:** relation type `AIUseCaseUsesAIAgent`, id `00000000-0000-0000-0000-000000007109` (head AI Use Case, role
-  "uses"; tail AI Agent, co-role "is used by"). Edit the use case and pass this id as `relationTypeId`, with the agent as
-  `targetAssetId`. Don't pass the role name: AI Use Case has four relation types whose role is "uses" (AI Agent, AI Base
-  Model, AI Project, AI Model Version), and AI Agent's co-role "is used by" also matches "AI Agent uses AI Agent".
+      customer edit, then create it in the AI Use Cases domain and link it.
+- **The link:** after the customer's yes, edit the AI Use Case with `add_relation`, `relationTypeId`
+  `00000000-0000-0000-0000-000000007109` (`AIUseCaseUsesAIAgent`) and the agent as `targetAssetId`; never only the role
+  name "uses", which names four relation types on an AI Use Case. If the link fails or the customer prefers, they link
+  it in Collibra with the steps and link the skill gives, and the skill checks it.
 - **Consent:** a yes to creating and linking a new use case; a link to an existing one is asked as its own question.
 - **Checks:** the agent's incoming relations now include the use case.
 - **Note:** linking or changing a use case doesn't mark the rules out of date, so if rules were already applied, say they

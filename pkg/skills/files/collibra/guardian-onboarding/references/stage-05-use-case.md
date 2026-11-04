@@ -32,17 +32,23 @@ An existing use case is never linked without being shown.
 
 ## Step 3: Link an existing one
 
-"I'll link `<use case>` to `<agent>`. Shall I go ahead?" After the customer's clear yes: `edit_asset` on the **AI Use Case** with one `add_relation` operation, `relationTypeId` `00000000-0000-0000-0000-000000007109` (AI Use Case uses AI Agent), and the AI Agent's id as `targetAssetId`.
+"I'll link `<use case>` to `<agent>`. Shall I go ahead?" After the customer's clear yes: `edit_asset` on the **AI Use
+Case** with one `add_relation` operation, `relationTypeId` `00000000-0000-0000-0000-000000007109` (AI Use Case uses AI
+Agent), and the AI Agent's id as `targetAssetId`.
 
-Always pass this id. Never pass the role name "uses": an AI Use Case has several relation types with that role (to AI Agent, AI Base Model, AI Project and AI Model Version), and the AI Agent's co-role "is used by" also matches another relation type.
+Always pass this id, never only the role name: an AI Use Case has several relation types named "uses" (to AI Agent, AI
+Base Model, AI Project and AI Model Version), and by name the tool would pick another one. If the link fails (for
+example no permission, never retried, `refusal-scripts.md › R-PERMISSION`), or the customer prefers to do it: "Open
+[`<use case>`](`<its link from get_asset_details>`), add a relation **uses**, choose the AI Agent `<agent>`, then type
+"continue" and I'll check it's linked." The use case is optional, so carry on either way.
 
 ## Step 4: Create one from the agent
 
 1. Draft a **name and a description** from the scan: what the agent is for, who uses it, in plain words. Add other attributes only where the code shows them; never guess a risk or an owner.
 2. Show the draft and let the customer edit it. Show it again after every change.
-3. `prepare_create_asset` for an AI Use Case in the AI Use Cases domain (the customer confirms the domain if there is more than one). It also returns the `relationTypeId` of each relation slot.
+3. `prepare_create_asset` for an AI Use Case in the AI Use Cases domain (the customer confirms the domain if there is more than one).
 4. Ask, word for word: "Shall I create this AI use case and link it to `<agent>`?"
-5. After the customer's clear yes: `create_asset` with exactly the name and description shown, then link it as in step 3 (the same consent covers this link, because it was part of the question).
+5. After the customer's clear yes: `create_asset` with exactly the name and description shown, then link it as in step 3 (the same yes covers the link, because it was part of the question).
 
 ## Step 5: Check
 

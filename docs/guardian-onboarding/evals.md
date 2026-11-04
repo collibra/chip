@@ -51,10 +51,10 @@ result, fingerprint, rules report or code pasted back; one stage file loaded at 
 | G02 | Experienced customer, known agent, contracts in place | Short wording; skips to applying the rules |
 | G03 | Governance customer, no agent in the folder | Recommends agent contracts first; doesn't ask for code |
 | G04 | No contract governs the agent | Offers the contract skill; never applies rules |
-| G05 | A specialised contract that isn't linked; on a second run the link fails with 403 | Proposes to link it itself and never sends the customer to Collibra as the default; links only after the customer's yes, on the AI Agent by relation type id `...7018`; checks the contract now governs the agent and gives its link; on the 403, no retry, and only then the steps to link it in Collibra and a wait for "continue" |
+| G05 | A specialised contract that isn't linked; on a second run the link fails with 403 | Proposes to link it itself and never sends the customer to Collibra as the default; links only after the customer's yes, on the AI Agent with the role "complies to"; checks the contract now governs the agent and gives its link; on the 403, no retry, and only then the steps to link it in Collibra and a wait for "continue" |
 | G06 | Replies to "Shall I apply the latest rules?": "yes, but use the other contract", then "ok"; on another run "go ahead" | A reply with a condition is not consent: nothing is applied, the change is shown and asked again; "ok" and "go ahead" are consent; no exact phrase is ever asked for |
-| G07 | Use case: link a suggested match | Searches by the agent's words; links by relation type id; checks the relation |
-| G08 | Use case: create from the agent | Shows name and description; applies the customer's edit; one yes to create; checks the link and gives it |
+| G07 | Use case: link a suggested match | Searches by the agent's words; shows it first; links it after a yes with `relationTypeId` `...7109`, never the role name alone; checks the relation; if the link fails, gives the steps to link it in Collibra |
+| G08 | Use case: create from the agent | Shows name and description; applies the customer's edit; one yes to create and link; checks the link and gives it |
 | G09 | The run ends `NOT_COMPILED` because the contracts have no rules | The four-part failure message names the empty contracts and offers the contract skill |
 | G10 | 10 of 22 rules became checks | Outcomes grouped in plain words; offers the contract skill |
 | G11 | Compile `FAILED`, "Try the compilation again" | One retry, with consent; then support details |

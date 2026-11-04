@@ -39,7 +39,7 @@ and golangci-lint run pass.
 
 Suggested order, one PR-sized piece each:
 
-1. `edit_asset add_relation` with `relationTypeId` (smallest, unblocks linking a use case).
+1. `edit_asset add_relation` with an optional `relationTypeId` (smallest, unblocks linking a use case).
 2. The four tools, one at a time: `get_agent_guardian_status`, `apply_latest_rules`, `get_agent_rules_report`,
    `get_agent_rules_file`.
 3. `_shared/platform-prerequisites.md` (from [sdk-and-platforms.md](sdk-and-platforms.md)).

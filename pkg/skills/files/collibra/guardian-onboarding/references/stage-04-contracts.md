@@ -46,7 +46,7 @@ When it ends, reload `references/stage-00-security-and-scope.md` if it is no lon
 
 A specialised contract that doesn't govern the agent yet (one just written, or an existing one the customer chose). You link it yourself, after the customer's yes. Ask (header `Link`): "Your contract `<name>` isn't linked to `<agent>` yet, so its rules don't apply to it. Shall I link it to `<agent>` now?" Options: **Yes, link it** / **I'll do it myself in Collibra** / **Not now**, none of them labelled the default.
 
-- **Yes:** `edit_asset` on the **AI Agent** with one `add_relation` operation, `relationTypeId` `00000000-0000-0000-0000-000000007018` (AI Agent to Agent Contract), and the contract's id as `targetAssetId`. Don't pass the role name. Then check it (step 5).
+- **Yes:** `edit_asset` on the **AI Agent** with one `add_relation` operation, `relationType` "complies to", and the contract's id as `targetAssetId`. On an AI Agent that name belongs to one relation type only (an asset complies to a governance asset, which an agent contract is), so it links the right way. Then check it (step 5).
 - **The customer prefers to do it in Collibra, or the link fails** (for example no permission: never retried, `refusal-scripts.md › R-PERMISSION`): "Open [`<name>`](<instance>/ai-governance/agent-contracts/<contractId>), link it to `<agent>`, then type "continue"." Wait, then check it (step 5).
 - **Not now:** go to the exit with what governs the agent.
 

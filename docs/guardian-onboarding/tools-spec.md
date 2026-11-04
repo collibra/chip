@@ -1,6 +1,6 @@
 # Tools
 
-Four new tools and one change to an existing tool. Follow `docs/TOOL_CONTRIBUTION_STANDARDS.md` and use the existing
+Four new tools, and one additive change to an existing tool (`edit_asset`). Follow `docs/TOOL_CONTRIBUTION_STANDARDS.md` and use the existing
 Guardian tools (`publish_agent_scan`, `list_scanned_agents`, `get_latest_agent_scan`) as the pattern: one tool per
 capability, inputs validated before any network call, the shared HTTP helper, explicit MCP annotations, a description
 written as a full paragraph with example questions, errors that tell the assistant how to recover, and writes behind a
@@ -85,27 +85,30 @@ What the skill needs to download the agent's latest rules file and check it.
 - **Annotations:** read-only, idempotent.
 - The tool doesn't download the file: chip may run remotely, and the file belongs on the customer's machine.
 
-## Change: `edit_asset add_relation` takes a relation type id
+## Change: `edit_asset add_relation` takes an optional relation type id
 
-Today `add_relation` resolves the relation type from its **role name** only. Several relation types can share a role on
-the same asset type (an AI Use Case has several "uses" relations), and the last one wins, so a use case can be linked to
-an agent through the wrong relation type.
+`add_relation` finds a relation type by its name on the edited asset and keeps the last match, without looking at the
+other asset's type. So a name only works when it is unique on the edited asset:
 
-- **Add** an optional `relationTypeId` (UUID) to the `add_relation` operation. When it's set, use it and skip the role
-  lookup; check that the relation type is assigned to the edited asset's type (source or target side) and set the
-  direction from that.
-- **Keep** `relationType` (role name) for compatibility; when both are set, `relationTypeId` wins.
-- **Also fix the ambiguity:** when a role or co-role name matches more than one relation type in the assignment, return an
-  error that lists the candidates with their ids, instead of picking one.
-- `prepare_create_asset` already returns `relationTypeId` for each relation slot, so the assistant can pass it straight on.
-- **The cases that need it:** linking a specialised agent contract to an agent (relation type `...7018`, AI Agent to
-  Agent Contract), and linking an AI use case to an AI agent uses `AIUseCaseUsesAIAgent`,
-  `00000000-0000-0000-0000-000000007109`. AI Use Case's assignment has four relation types with the role "uses" (to AI
-  Agent `...7109`, AI Base Model `...77002`, AI Project `...7112`, AI Model Version `...7098`), so `relationType: "uses"`
-  resolves to whichever comes last and fails or links the wrong type.
-- **Tests:** an assignment with two relation types sharing a role: `relationTypeId` picks the right one; the role name
-  alone returns the ambiguity error with both candidates; a `relationTypeId` not in the assignment is refused before any
-  call.
+- **Agent contract to AI Agent:** edit the AI Agent with `relationType` "complies to". On an AI Agent that name belongs
+  to one relation type only, so the existing behaviour is enough.
+- **AI use case to AI Agent:** no name is unique from either side. On an AI Use Case, "uses" belongs to four relation
+  types (to AI Agent, AI Base Model, AI Project and AI Model Version); on an AI Agent, "is used by" belongs to two. A test
+  on a live instance confirmed both are refused by Collibra (`relationTgtIncompatible`, `relationSrcIncompatible`).
+
+The change, additive only:
+
+- **Add** an optional `relationTypeId` (UUID) to `add_relation`. When it's set, use it instead of the name: check it is
+  a relation type assigned to the edited asset's type (at either end) before any write, and set the direction from
+  that. When both are given, `relationTypeId` wins.
+- **Keep** the name lookup exactly as it is when `relationTypeId` isn't given.
+- **Bulk adds** keep the direction of a relation where the edited asset is the tail (they used to always send the
+  edited asset as the source).
+- **The use case link:** edit the AI Use Case with `relationTypeId` `00000000-0000-0000-0000-000000007109`
+  (`AIUseCaseUsesAIAgent`) and the agent as `targetAssetId`.
+- **Tests:** the id picks the right one of two types sharing a name; the id wins over the name; the edited asset as the
+  tail flips source and target; an id not assigned is refused before any write; an invalid id is refused; a name alone
+  resolves as before; a bulk add keeps a tail relation's direction.
 
 ## Tests for every tool
 

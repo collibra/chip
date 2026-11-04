@@ -12,7 +12,7 @@ write, read the contract back and report what Collibra holds" to every stage (ha
 | SDK install and project changes | The packages import in the project's environment; the settings file parses and doesn't name a rules file yet; the entry module still parses (compiled in memory, never run); the diff on disk is exactly the diff shown | local commands |
 | Sending the scan | The agent appears with an id, its newest version is the one just sent, and the fingerprint status is `COMPLETED` | `list_scanned_agents`, `get_agent_guardian_status` |
 | A contract saved by the contract skill, or linked | It's in the list of contracts governing the agent, with the expected rule count | `list_agent_contracts`, `get_agent_contract` |
-| Creating or linking a use case | The agent's incoming relations include the use case, through "AI Use Case uses AI Agent" | `get_asset_details` |
+| Creating a use case, or after the customer linked it | The agent's incoming relations include the use case, through "AI Use Case uses AI Agent" | `get_asset_details` |
 | Applying the rules | Compilation `UP_TO_DATE`; the report's rule count equals the governing contracts' rules; the report names the newest agent version | `get_agent_guardian_status`, `get_agent_rules_report` |
 | Saving the rules file | SHA-256 equals the reported hash; the archive holds `spec.yaml` whose `spec_bundle_id` is the file's id; the SDK's own loader accepts the file; the file is at the path the settings name | local commands, `get_agent_rules_file` |
 | Deploying, after the agent ran | Enforcement shows the latest rules file (`observedBundle` equals `latestBundle`); collection `OK` | `get_agent_guardian_status` |
