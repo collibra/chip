@@ -2029,3 +2029,177 @@ func matchesUserNameSearch(u clients.EditAssetUser, needle string) bool {
 	}
 	return false
 }
+
+// usesRelTypeID and otherUsesRelTypeID are two relation types that share the
+// role "uses" on the edited asset, as on an AI Use Case, so the role name alone
+// cannot tell them apart and only relationTypeId picks the right one.
+const (
+	usesRelTypeID      = "00000000-0000-0000-0000-000000007109"
+	otherUsesRelTypeID = "00000000-0000-0000-0000-000000077002"
+)
+
+func withSharedUsesRole(s *stub) {
+	s.relationTypes = append(s.relationTypes,
+		clients.EditAssetAssignmentRelationType{ID: usesRelTypeID, Role: "uses", CoRole: "is used by",
+			SourceType: &clients.EditAssetTypeRef{ID: testAssetTypeID, Name: "Business Term"},
+			TargetType: &clients.EditAssetTypeRef{ID: "00000000-0000-0000-0000-000000031450", Name: "AI Agent"}},
+		clients.EditAssetAssignmentRelationType{ID: otherUsesRelTypeID, Role: "uses", CoRole: "used in",
+			SourceType: &clients.EditAssetTypeRef{ID: testAssetTypeID, Name: "Business Term"},
+			TargetType: &clients.EditAssetTypeRef{ID: "00000000-0000-0000-0000-000000031420", Name: "AI Base Model"}},
+	)
+}
+
+func TestEditAsset_AddRelation_RelationTypeID_PicksTheNamedType(t *testing.T) {
+	s := newStub()
+	withSharedUsesRole(s)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddRelation, RelationTypeID: usesRelTypeID, TargetAssetID: targetAssetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess {
+		t.Fatalf("expected success, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.createdRelations) != 1 {
+		t.Fatalf("expected one POST to /rest/2.0/relations, got %+v", s.createdRelations)
+	}
+	got := s.createdRelations[0]
+	if got.SourceID != testAssetID || got.TargetID != targetAssetID || got.TypeID != usesRelTypeID {
+		t.Fatalf("expected source=%s target=%s type=%s, got %+v", testAssetID, targetAssetID, usesRelTypeID, got)
+	}
+}
+
+func TestEditAsset_AddRelation_RelationTypeID_WinsOverRoleName(t *testing.T) {
+	s := newStub()
+	withSharedUsesRole(s)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddRelation, RelationType: "uses", RelationTypeID: usesRelTypeID, TargetAssetID: targetAssetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess || len(s.createdRelations) != 1 || s.createdRelations[0].TypeID != usesRelTypeID {
+		t.Fatalf("expected the relationTypeId to be used, got status %q and %+v", out.Status, s.createdRelations)
+	}
+}
+
+func TestEditAsset_AddRelation_RelationTypeID_EditedAssetIsTail_FlipsSourceTarget(t *testing.T) {
+	s := newStub()
+	s.relationTypes = append(s.relationTypes, clients.EditAssetAssignmentRelationType{
+		ID: usesRelTypeID, Role: "uses", CoRole: "is used by",
+		SourceType: &clients.EditAssetTypeRef{ID: "00000000-0000-0000-0000-000000031401", Name: "AI Use Case"},
+		TargetType: &clients.EditAssetTypeRef{ID: testAssetTypeID, Name: "Business Term"},
+		Reversed:   true,
+	})
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddRelation, RelationTypeID: usesRelTypeID, TargetAssetID: targetAssetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess || len(s.createdRelations) != 1 {
+		t.Fatalf("expected one relation, got status %q and %+v", out.Status, s.createdRelations)
+	}
+	got := s.createdRelations[0]
+	if got.SourceID != targetAssetID || got.TargetID != testAssetID || got.TypeID != usesRelTypeID {
+		t.Fatalf("expected source=%s target=%s type=%s, got %+v", targetAssetID, testAssetID, usesRelTypeID, got)
+	}
+}
+
+func TestEditAsset_AddRelation_RelationTypeID_NotAssigned_RefusedBeforeAnyWrite(t *testing.T) {
+	s := newStub()
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddRelation, RelationTypeID: usesRelTypeID, TargetAssetID: targetAssetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "is not a relation type assigned") {
+		t.Fatalf("expected a not-assigned error, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.createdRelations) != 0 || len(s.bulkCreatedRelations) != 0 {
+		t.Fatalf("expected no relation POST, got %+v %+v", s.createdRelations, s.bulkCreatedRelations)
+	}
+}
+
+func TestEditAsset_AddRelation_RelationTypeID_InvalidUUID(t *testing.T) {
+	s := newStub()
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddRelation, RelationTypeID: "not-a-uuid", TargetAssetID: targetAssetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusError || !strings.Contains(out.Results[0].Error, "relationTypeId") {
+		t.Fatalf("expected a relationTypeId validation error, got %q, results=%+v", out.Status, out.Results)
+	}
+	if len(s.createdRelations) != 0 {
+		t.Fatalf("expected no relation POST, got %+v", s.createdRelations)
+	}
+}
+
+func TestEditAsset_AddRelation_RoleNameBehaviourUnchanged(t *testing.T) {
+	s := newStub()
+	withSharedUsesRole(s)
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{{
+			Type: edit_asset.OpAddRelation, RelationType: "uses", TargetAssetID: targetAssetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Without relationTypeId the role name resolves as before: the last relation
+	// type with that name in the assignment.
+	if out.Status != edit_asset.StatusSuccess || len(s.createdRelations) != 1 || s.createdRelations[0].TypeID != otherUsesRelTypeID {
+		t.Fatalf("expected the existing role-name resolution, got status %q and %+v", out.Status, s.createdRelations)
+	}
+}
+
+func TestEditAsset_BulkAddRelations_KeepsTheDirectionOfATailRelation(t *testing.T) {
+	s := newStub()
+	s.relationTypes = append(s.relationTypes, clients.EditAssetAssignmentRelationType{
+		ID: usesRelTypeID, Role: "uses", CoRole: "is used by",
+		SourceType: &clients.EditAssetTypeRef{ID: "00000000-0000-0000-0000-000000031401", Name: "AI Use Case"},
+		TargetType: &clients.EditAssetTypeRef{ID: testAssetTypeID, Name: "Business Term"},
+		Reversed:   true,
+	})
+	second := "018d3602-aaaa-0000-0000-000000000001"
+	out, err := runTool(t, s, edit_asset.Input{
+		AssetID: testAssetID,
+		Operations: []edit_asset.Operation{
+			{Type: edit_asset.OpAddRelation, RelationTypeID: usesRelTypeID, TargetAssetID: targetAssetID},
+			{Type: edit_asset.OpAddRelation, RelationType: "is synonym of", TargetAssetID: second},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Status != edit_asset.StatusSuccess || len(s.bulkCreatedRelations) != 1 || len(s.bulkCreatedRelations[0]) != 2 {
+		t.Fatalf("expected one bulk POST with 2 items, got status %q and %+v", out.Status, s.bulkCreatedRelations)
+	}
+	tail, head := s.bulkCreatedRelations[0][0], s.bulkCreatedRelations[0][1]
+	if tail.SourceID != targetAssetID || tail.TargetID != testAssetID || tail.TypeID != usesRelTypeID {
+		t.Fatalf("tail relation: expected source=%s target=%s, got %+v", targetAssetID, testAssetID, tail)
+	}
+	if head.SourceID != testAssetID || head.TargetID != second {
+		t.Fatalf("head relation: expected source=%s target=%s, got %+v", testAssetID, second, head)
+	}
+}

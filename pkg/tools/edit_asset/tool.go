@@ -71,8 +71,8 @@ type Operation struct {
 	Field string `json:"field,omitempty" jsonschema:"For update_property: one of 'name', 'displayName', 'statusId'. When field is 'statusId', value may be either the status UUID or the status name (e.g. 'Candidate', 'Accepted'); the server resolves names automatically. When field is 'name' and the asset's current displayName equals its current name (Collibra's create-time default), displayName is also updated to the new value so the user-facing label stays in sync — set field=displayName separately if the user has already customized it differently."`
 
 	// Relation ops.
-	RelationType   string `json:"relationType,omitempty" jsonschema:"For add_relation: the role name of the relation type (e.g. 'is synonym of'), seen from the edited asset: a forward role makes the edited asset the source (head), and a co-role assigned in the inverse direction makes it the target (tail). If the name matches more than one relation type, the operation fails and lists the candidates with their ids; pass relationTypeId instead. Ignored when relationTypeId is set."`
-	RelationTypeID string `json:"relationTypeId,omitempty" jsonschema:"For add_relation: optional UUID of the relation type (prepare_create_asset returns it for each relation slot). Preferred over relationType: it is never ambiguous, and it wins when both are set. The relation type must be assigned to the edited asset's type, on the source or the target side; the side sets the direction, so the edited asset becomes the source or the target accordingly."`
+	RelationType   string `json:"relationType,omitempty" jsonschema:"For add_relation: required unless relationTypeId is given. The forward role name of the relation type (e.g. 'is synonym of'). The edited asset is assumed to be the source (head) of the relation; if the named relation type expects the opposite direction, Collibra will return an error."`
+	RelationTypeID string `json:"relationTypeId,omitempty" jsonschema:"For add_relation, optional: UUID of the relation type to use instead of the role name in relationType. Use it when several relation types on the edited asset share the role name, so the name alone cannot pick the right one; for example an AI Use Case 'uses' an AI Agent (00000000-0000-0000-0000-000000007109), an AI Base Model, an AI Project and an AI Model Version. prepare_create_asset returns these ids as relationTypes[].relationTypeId. It must be a relation type assigned to the edited asset's type, with the asset at either end; the server sets the direction from that. When both relationType and relationTypeId are given, relationTypeId wins."`
 	TargetAssetID  string `json:"targetAssetId,omitempty" jsonschema:"For add_relation: UUID of the asset on the target (tail) side of the relation."`
 	RelationID     string `json:"relationId,omitempty" jsonschema:"For remove_relation: UUID of the relation instance to delete."`
 
@@ -118,7 +118,6 @@ type OperationResult struct {
 	AttributeName         string        `json:"attributeName,omitempty"`
 	Field                 string        `json:"field,omitempty"`
 	RelationType          string        `json:"relationType,omitempty"`
-	RelationTypeID        string        `json:"relationTypeId,omitempty" jsonschema:"For add_relation: the relation type id that was given or resolved from relationType."`
 	RelationID            string        `json:"relationId,omitempty"`
 	TargetAssetID         string        `json:"targetAssetId,omitempty"`
 	Tag                   string        `json:"tag,omitempty"`
@@ -144,7 +143,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"set_attribute, add_attribute and remove_attribute fail on an attribute the assignment marks read-only (values Collibra calculates, such as a trust score); " +
 			"for RICH_TEXT attributes like 'Definition' the value is treated as Markdown and converted to HTML before writing; " +
 			"update_property (whitelisted fields only: 'name' to rename — also updates displayName when it tracks the current name, so the user-facing label stays in sync; 'displayName' to change the display name; or 'statusId' which accepts either a status UUID or a status name like 'Candidate'/'Accepted'); " +
-			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes the target assetId plus either relationTypeId, the relation type's UUID, which is preferred and wins when both are given, or relationType, a role name like 'is synonym of' — a role name several relation types share returns a per-operation error listing the candidates with their ids instead of picking one; remove_relation takes the relation instance UUID); " +
+			"add_relation / remove_relation (link or unlink the asset to another asset; add_relation takes a forward role name like 'is synonym of' plus the target assetId, or the relationTypeId instead of the name when several relation types on the asset share that name (the name alone then picks one of them, which may not be the one meant), remove_relation takes the relation instance UUID); " +
 			"add_tag (append a free-text tag without replacing existing tags); " +
 			"set_responsibility (assign a user or group to a resource role such as 'Steward' or 'Owner'; the user can be given as a UUID, a username, an email address, or a person's full name such as 'Jane Smith' — a full name several users share returns a per-operation error listing the candidates rather than picking one, and only enabled accounts are searched by name or username); " +
 			"remove_responsibility (unassign a user or group from a resource role given the same role and user; removes only a responsibility assigned directly on the asset, not one inherited from a parent domain or community). " +
@@ -226,13 +225,15 @@ type editContext struct {
 	assignment           *clients.EditAssetAssignment
 	attributeTypeByName  map[string]clients.EditAssetAssignmentAttributeType
 	attributesByTypeName map[string][]clients.EditAssetAttributeInstance
-	// relationTypesByRole indexes forward (TO_TARGET) relation types by
-	// their Role name. Several relation types can share a role, so each
-	// name maps to every distinct match and add_relation refuses to guess.
-	relationTypesByRole map[string][]clients.EditAssetAssignmentRelationType
-	// relationTypesByCoRole indexes inverse (TO_SOURCE) relation types
+	relationTypeByRole   map[string]clients.EditAssetAssignmentRelationType
+	// relationTypeByCoRole indexes inverse (TO_SOURCE) relation types
 	// by their CoRole name so add_relation can author from the tail asset.
-	relationTypesByCoRole map[string][]clients.EditAssetAssignmentRelationType
+	relationTypeByCoRole map[string]clients.EditAssetAssignmentRelationType
+	// relationTypesByID indexes every assigned relation type by its UUID, in
+	// both directions, so add_relation can take a relationTypeId when a role
+	// name is shared by several relation types.
+	relationTypesByID map[string][]clients.EditAssetAssignmentRelationType
+
 	// roleByName is populated only when the request contains at least one
 	// set_responsibility op, saving a GET on calls that don't need roles.
 	roleByName map[string]clients.EditAssetRole
@@ -274,18 +275,19 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 		attrsByTypeName[key] = append(attrsByTypeName[key], a)
 	}
 
-	relationByRole := make(map[string][]clients.EditAssetAssignmentRelationType)
-	relationByCoRole := make(map[string][]clients.EditAssetAssignmentRelationType)
+	relationByRole := make(map[string]clients.EditAssetAssignmentRelationType)
+	relationByCoRole := make(map[string]clients.EditAssetAssignmentRelationType)
+	relationsByID := make(map[string][]clients.EditAssetAssignmentRelationType)
 	for _, rt := range assignment.RelationTypes {
+		relationsByID[normalize(rt.ID)] = append(relationsByID[normalize(rt.ID)], rt)
+
 		if rt.Reversed {
 			if rt.CoRole != "" {
-				key := normalize(rt.CoRole)
-				relationByCoRole[key] = appendDistinctRelationType(relationByCoRole[key], rt)
+				relationByCoRole[normalize(rt.CoRole)] = rt
 			}
 		} else {
 			if rt.Role != "" {
-				key := normalize(rt.Role)
-				relationByRole[key] = appendDistinctRelationType(relationByRole[key], rt)
+				relationByRole[normalize(rt.Role)] = rt
 			}
 		}
 	}
@@ -315,27 +317,18 @@ func newEditContext(ctx context.Context, client *http.Client, assetID string, op
 	}
 
 	return &editContext{
-		asset:                 asset,
-		attributes:            attrs,
-		assignment:            assignment,
-		attributeTypeByName:   byName,
-		attributesByTypeName:  attrsByTypeName,
-		relationTypesByRole:   relationByRole,
-		relationTypesByCoRole: relationByCoRole,
-		roleByName:            rolesByName,
-		statusByName:          statusesByName,
-	}, nil
-}
+		asset:                asset,
+		attributes:           attrs,
+		assignment:           assignment,
+		attributeTypeByName:  byName,
+		attributesByTypeName: attrsByTypeName,
+		relationTypeByRole:   relationByRole,
+		relationTypeByCoRole: relationByCoRole,
+		relationTypesByID:    relationsByID,
 
-// appendDistinctRelationType adds rt unless a relation type with its id is
-// already listed.
-func appendDistinctRelationType(list []clients.EditAssetAssignmentRelationType, rt clients.EditAssetAssignmentRelationType) []clients.EditAssetAssignmentRelationType {
-	for _, existing := range list {
-		if existing.ID == rt.ID {
-			return list
-		}
-	}
-	return append(list, rt)
+		roleByName:   rolesByName,
+		statusByName: statusesByName,
+	}, nil
 }
 
 // readOnlyMessage explains that attrType cannot be written on this asset.
@@ -372,16 +365,6 @@ func (ec *editContext) availableRelationRoles() []string {
 		}
 		seen[name] = struct{}{}
 		names = append(names, name)
-	}
-	return names
-}
-
-// availableRelationTypes describes every relation type the assignment allows,
-// seen from the edited asset, for inclusion in error suggestions.
-func (ec *editContext) availableRelationTypes() []string {
-	names := make([]string, 0, len(ec.assignment.RelationTypes))
-	for _, rt := range ec.assignment.RelationTypes {
-		names = append(names, describeRelationType(rt, rt.Reversed))
 	}
 	return names
 }
@@ -460,34 +443,32 @@ type opPlan struct {
 
 func newErrorResult(op Operation, msg string) OperationResult {
 	return OperationResult{
-		Operation:      op.Type,
-		Status:         "error",
-		AttributeName:  op.AttributeName,
-		Field:          op.Field,
-		RelationType:   op.RelationType,
-		RelationTypeID: op.RelationTypeID,
-		RelationID:     op.RelationID,
-		TargetAssetID:  op.TargetAssetID,
-		Tag:            op.Tag,
-		Role:           op.Role,
-		UserID:         op.UserID,
-		Error:          msg,
+		Operation:     op.Type,
+		Status:        "error",
+		AttributeName: op.AttributeName,
+		Field:         op.Field,
+		RelationType:  op.RelationType,
+		RelationID:    op.RelationID,
+		TargetAssetID: op.TargetAssetID,
+		Tag:           op.Tag,
+		Role:          op.Role,
+		UserID:        op.UserID,
+		Error:         msg,
 	}
 }
 
 func newSuccessResult(op Operation) OperationResult {
 	return OperationResult{
-		Operation:      op.Type,
-		Status:         "success",
-		AttributeName:  op.AttributeName,
-		Field:          op.Field,
-		RelationType:   op.RelationType,
-		RelationTypeID: op.RelationTypeID,
-		RelationID:     op.RelationID,
-		TargetAssetID:  op.TargetAssetID,
-		Tag:            op.Tag,
-		Role:           op.Role,
-		UserID:         op.UserID,
+		Operation:     op.Type,
+		Status:        "success",
+		AttributeName: op.AttributeName,
+		Field:         op.Field,
+		RelationType:  op.RelationType,
+		RelationID:    op.RelationID,
+		TargetAssetID: op.TargetAssetID,
+		Tag:           op.Tag,
+		Role:          op.Role,
+		UserID:        op.UserID,
 	}
 }
 

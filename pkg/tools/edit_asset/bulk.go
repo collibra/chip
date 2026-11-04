@@ -146,6 +146,7 @@ func executeBulkAddRelations(ctx context.Context, client *http.Client, ec *editC
 	for j, idx := range indices {
 		sourceID, targetID := ec.asset.ID, plans[idx].op.TargetAssetID
 		if plans[idx].relationReversed {
+			// The edited asset is the tail, as in executeAddRelation.
 			sourceID, targetID = targetID, sourceID
 		}
 		reqs[j] = clients.EditAssetCreateRelationRequest{
@@ -164,7 +165,6 @@ func executeBulkAddRelations(ctx context.Context, client *http.Client, ec *editC
 	}
 	for j, idx := range indices {
 		res := newSuccessResult(plans[idx].op)
-		res.RelationTypeID = plans[idx].relationTypeID
 		if j < len(created) {
 			res.RelationID = created[j].ID
 		}
