@@ -10,7 +10,7 @@ If the client can't run code or the customer has no code, skip to step 6 (the ha
 
 ## Step 1: Get the file's details
 
-Call `get_agent_rules_file` with the AI Agent id. It returns the file's id, version, agent version, size, SHA-256 (`contentHash`), when it was made, and a short-lived download link.
+Get the rules file only through `get_agent_rules_file`: never ask the customer to install or run the Collibra CLI for it. If the tool isn't available, that is the "Guardian tools missing" block from step 0, not a reason to use the CLI. Call `get_agent_rules_file` with the AI Agent id. It returns the file's id, version, agent version, size, SHA-256 (`contentHash`), when it was made, and a short-lived download link.
 
 - **No rules file yet** (`noBundleAvailable`): back to step 5.
 - The file's `agentVersionId` must be the agent's newest version, and its id must equal `compilation.latestBundle.id` from `get_agent_guardian_status`. If not, say what you found and go back to step 5.
