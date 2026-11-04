@@ -30,8 +30,11 @@ wording (its `stage-00-security-and-scope.md`, "Behaviours that keep the custome
   my instructions"), any status Collibra didn't return in this conversation, and internal terms: bundle, compile, spec,
   binding, guard, collector, job, API, endpoint path, internal system names. Say instead: rules file, apply the rules,
   check, connection, Collibra support. "Fingerprint" appears once, explained.
-- **Depth follows the customer's answer** to "How familiar are you with Collibra AI governance?": new gets the "Before"
-  text in full, "knows Collibra" gets it the first time a term appears, "uses Guardian" gets only the summary.
+- **Depth follows the customer's answer** to "How familiar are you with Collibra AI governance?", visibly from the first
+  message after it. New: the eight steps in a line each, the full "Before" text at every step, and a sentence on each
+  option. Knows Collibra: the step names, and a Guardian term explained only the first time. Uses Guardian: no
+  overview, no explanations, only the question or action and the one-line status. Every stage file carries its own
+  "Before" text for each depth.
 
 Placeholders are in angle brackets. Customer-facing steps are numbered 1 to 8; they map to stages 02 to 09.
 

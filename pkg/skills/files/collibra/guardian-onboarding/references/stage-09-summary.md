@@ -1,5 +1,9 @@
 # Stage 09: Summary (step 8 of 8)
 
+**Before** (by depth):
+- New: "Step 8 of 8: here's everything we set up, with a link to each page, so you can find it again later."
+- Knows Collibra and uses Guardian: nothing before the summary.
+
 Say "Guardian is set up for `<agent>`." when it is, or what is still missing when it isn't, then the summary. Read everything again from Collibra first (`get_agent_guardian_status`); show only what a tool returned in this conversation.
 
 Every item is a clickable markdown link (`[name](url)`) with a real address. Take the addresses from the tools, never write `<instance>` or build one yourself: the `links` that `get_agent_guardian_status` just returned (agent, agentVersion, each contract, contractTab, guardianTab, guardianAgents), and `get_asset_details`' `link` for the use case (call it with the use case's id). Leave out an item you don't have a link for; never invent one.

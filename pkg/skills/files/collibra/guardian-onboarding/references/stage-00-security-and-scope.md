@@ -85,11 +85,15 @@ Retry automatically only where it is safe: reads, time-outs and server errors, a
 
 Stage 01 asks how familiar the customer is with Collibra AI governance. Keep the answer for the whole conversation; "explain more" or "keep it short" changes it.
 
-| Answer | What you give at each step |
-|---|---|
-| I'm new to it | The step's "Before" text in full, then the step |
-| I know Collibra, but Guardian is new to me | The "Before" text the first time a term appears |
-| I already use Guardian | Only the summary line |
+| Answer | Right after the answer | At each step | At each question |
+|---|---|---|---|
+| I'm new to it | The eight steps in one short line each, so they know the way ahead | The step's "Before" text for "New", in full, then the step | One sentence on what each option means for them |
+| I know Collibra, but Guardian is new to me | The eight step names in one line | The "Before" text for "Knows Collibra": a term explained only the first time it comes up | The options as they are, with a sentence only for a Guardian term not yet explained |
+| I already use Guardian | Nothing extra: straight to the recommended next step | No "Before" text and no explanations of terms; only the question or action and the one-line status | The options as they are |
+
+The difference must be visible from the first message after the answer. Every stage file has a **Before** block with
+the text for each depth; use it exactly as it says, and never add explanations for "I already use Guardian" unless the
+customer asks.
 
 The depth changes how much you explain, never which steps run, what you check or what needs consent.
 

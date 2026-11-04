@@ -4,6 +4,11 @@ Download the agent's latest rules file in the customer's environment, check it i
 
 **Tools:** `get_agent_rules_file`. Local commands.
 
+**Before** (by depth):
+- New: "Step 6 of 8: save the rules and deploy. Collibra has made a rules file: the checks for your agent in one file. I'll save it where the Guardian SDK in your agent reads it, and check it's exactly the file Collibra made. Your agent reads it when it starts, so after this you deploy or restart the agent, and from then on Guardian applies your rules."
+- Knows Collibra: the same, the first time "rules file" comes up; otherwise "Step 6 of 8: save the rules file and deploy."
+- Uses Guardian: nothing before the step.
+
 **Before:** "I'll save your agent's rules file to `<path>`, where the Guardian SDK will find it, and check it's the file Collibra made."
 
 If the client can't run code or the customer has no code, skip to step 6 (the hand-off note), with the rules file's id and the agent's link.

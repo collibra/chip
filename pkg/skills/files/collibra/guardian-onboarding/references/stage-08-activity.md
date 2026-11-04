@@ -4,6 +4,11 @@ Check that Collibra can read the agent's activity, and, after the deploy, that t
 
 **Tools:** `get_agent_guardian_status`.
 
+**Before** (by depth):
+- New: "Step 7 of 8: let Guardian see your agent's activity. Guardian records what your agent does in Collibra, so you can see any rules it broke on the agent's **Guardian** tab. For that, Collibra needs to read your agent's activity in Databricks. A Collibra administrator connects the two once; I'll check whether that's done."
+- Knows Collibra: the same, the first time; otherwise "Step 7 of 8: check that Collibra reads your agent's activity."
+- Uses Guardian: nothing before the step.
+
 **Before:** "Last, Guardian needs to read your agent's activity in Databricks. A Collibra administrator connects Collibra to your Databricks workspace once."
 
 ## Step 1: Read the connection status

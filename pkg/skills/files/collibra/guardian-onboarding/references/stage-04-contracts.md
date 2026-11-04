@@ -4,6 +4,11 @@ Make sure at least one agent contract governs the agent: the company-wide (globa
 
 **Tools:** `list_agent_contracts` (with `agentId`, or with `name`), `get_agent_contract`, `get_agent_contract_rules`, `edit_asset` (operation `add_relation`); the hand-off to `collibra/agent-contract` with `load_collibra_skill`.
 
+**Before** (by depth; see Stage 00, "Depth of explanation"):
+- New: "Step 3 of 8: your agent contract. An agent contract is a set of rules for your agents, written in plain language, such as "never share a customer's card number". One company-wide contract can apply to every agent, and an agent can also have its own. Guardian checks your agent against these rules, so this is where you decide what it may and may not do."
+- Knows Collibra: the same, the first time "agent contract" comes up; otherwise "Step 3 of 8: your agent contract."
+- Uses Guardian: nothing before the step.
+
 **Before:** "An agent contract is a set of rules for your agents, written in plain language. One company-wide contract can apply to every agent, and an agent can also have its own."
 
 ## Step 1: What governs the agent now

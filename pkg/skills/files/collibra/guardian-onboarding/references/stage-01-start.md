@@ -30,6 +30,11 @@ Header `Experience`: "How familiar are you with Collibra AI governance?"
 
 Keep the answer for the whole conversation. It changes how much each step explains, not which steps run.
 
+Right after the answer, show the difference at once (Stage 00, "Depth of explanation"):
+- New: "Here's the way ahead, eight short steps: 1 prepare your agent, 2 add it to Collibra, 3 write its rules (agent contracts), 4 say what it's for (optional), 5 apply the rules, 6 save the rules and deploy, 7 let Guardian see its activity, 8 a summary with links. I'll explain each one as we go."
+- Knows Collibra: "Eight steps: prepare the agent, add it to Collibra, agent contracts, use case (optional), apply the rules, save and deploy, activity, summary."
+- Uses Guardian: nothing extra; go straight to the recommendation.
+
 ## Where is the agent's code?
 
 The customer may start anywhere: their home folder, an unrelated repository, or a client with no project. Never assume the current folder is the agent's project.

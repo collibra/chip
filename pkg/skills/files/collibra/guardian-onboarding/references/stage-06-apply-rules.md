@@ -4,6 +4,11 @@ Turn the agent contracts that govern the agent into a rules file for its newest 
 
 **Tools:** `apply_latest_rules`, `get_agent_guardian_status`, `get_agent_rules_report`.
 
+**Before** (by depth):
+- New: "Step 5 of 8: apply the rules. Collibra now turns each rule in your agent contracts into checks Guardian can run while your agent works. Some rules can be checked fully, some partly, and some are kept for the record only; I'll tell you which is which. It takes a few minutes, and it's the same as **Apply latest rules** on the agent's **Contract** tab."
+- Knows Collibra: the same, the first time; otherwise "Step 5 of 8: apply the rules, the same as **Apply latest rules** on the Contract tab."
+- Uses Guardian: nothing before the step.
+
 **Before:** "Now I'll apply your agent contracts to `<agent>`. Collibra turns each rule into checks Guardian can run. This takes about five minutes. It's the same as **Apply latest rules** on the agent's **Contract** tab."
 
 Run this step again after a contract change, after a new agent version, and after linking a use case.

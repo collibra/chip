@@ -4,6 +4,11 @@ Link the agent to an AI use case, if the customer wants one. It is optional: Gua
 
 **Tools:** `get_asset_details`, `search_asset_keyword`, `prepare_create_asset`, `create_asset`, `edit_asset` (operation `add_relation` with `relationTypeId`).
 
+**Before** (by depth):
+- New: "Step 4 of 8, optional: what your agent is for. An AI use case describes what your agent is for and its risks, for example "answer customers' questions about their orders". Guardian applies your rules more accurately with one, and it's how your company keeps track of why the agent exists. You can skip it and add it later."
+- Knows Collibra: "Step 4 of 8, optional: link an AI use case. Guardian applies your rules more accurately with one."
+- Uses Guardian: nothing before the step.
+
 **Before:** "An AI use case describes what your agent is for and its risks. Guardian applies your rules more accurately with one."
 
 ## Step 1: Does the agent have one?
