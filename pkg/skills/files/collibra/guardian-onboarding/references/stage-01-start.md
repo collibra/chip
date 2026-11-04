@@ -56,7 +56,7 @@ From what step 2 found, with the time it takes:
 
 | Found | Say |
 |---|---|
-| An agent here, not known to Collibra | "This folder has an AI agent, `<agent>`. Collibra doesn't know it yet. `<Your company has a company-wide agent contract.` \| `No agent contract exists yet.>` I suggest we set up Guardian for this agent. It takes about 15 minutes, most of it Collibra working." |
+| An agent here, not known to Collibra | "This folder has an AI agent, `<agent>`. Collibra doesn't know it yet. `<Your company has a company-wide agent contract.` \| `No agent contract exists yet.>` I suggest we set up Guardian for this agent. Most of the time goes on waiting for Collibra and for the deploy." |
 | A known agent whose code, contracts or rules changed (`STALE`, `staleBecause`, or a newer commit than the last scan) | "Collibra knows [`<agent>`](<instance>/asset/<aiAgentId>) (version `<n>`), and `<its code` \| `its agent contracts>` changed since its rules were applied. I suggest we update it." |
 | No agent here, and the customer doesn't point to one | "I don't see an AI agent in this folder. I suggest we start with your agent contracts. You can add an agent later from its project folder." |
 
