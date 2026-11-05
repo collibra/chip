@@ -16,7 +16,7 @@ const aiAgentID = "d654ca91-10d5-34bf-8819-78800b81fe23"
 
 const latestPath = "/rest/guardianFingerprint/v1/fingerprints/by/aiAgent/" + aiAgentID
 
-const fingerprint = `{"id":"f1","externalId":"databricks:1:cat.s.max","aiAgentId":"` + aiAgentID + `","contentHash":"abc","fingerprintVersion":"1.0","parserVersion":"skill-0.1","scanCount":3,"firstSeenOn":"2026-10-01T00:00:00Z","lastSeenOn":"2026-10-02T00:00:00Z",` +
+const stored = `{"id":"f1","externalId":"databricks:1:cat.s.max","aiAgentId":"` + aiAgentID + `","contentHash":"abc","fingerprintVersion":"1.0","parserVersion":"skill-0.1","scanCount":3,"firstSeenOn":"2026-10-01T00:00:00Z","lastSeenOn":"2026-10-02T00:00:00Z",` +
 	`"document":{"agents":[{"name":"example_agent","role":"ROOT","deployment":{"version":"9","endpoint":{"url":"https://h.example/serving-endpoints/ep/invocations","name":"ep"}}},{"name":"helper","role":"SUBAGENT"}],"tools":[{"name":"a"},{"name":"b"},{"name":"c"}],` +
 	`"source":{"repoUrl":"git@example.com:acme/max.git","commitSha":"84792b0"},"platform":{"name":"DATABRICKS"}}}`
 
@@ -42,7 +42,7 @@ func newFakeGuardian(t *testing.T, status int, body string) *fakeGuardian {
 }
 
 func TestGetLatestAgentScan_SummaryByDefaultWithoutTheDocument(t *testing.T) {
-	f := newFakeGuardian(t, http.StatusOK, fingerprint)
+	f := newFakeGuardian(t, http.StatusOK, stored)
 
 	out, err := get_latest_agent_scan.NewTool(f.client).Handler(t.Context(), get_latest_agent_scan.Input{AIAgentID: aiAgentID})
 	if err != nil {
@@ -58,10 +58,13 @@ func TestGetLatestAgentScan_SummaryByDefaultWithoutTheDocument(t *testing.T) {
 	if len(out.Document) != 0 {
 		t.Errorf("document returned although includeDocument was false (%d bytes)", len(out.Document))
 	}
+	if encoded, _ := json.Marshal(out); strings.Contains(strings.ToLower(string(encoded)), "fingerprint") {
+		t.Errorf("the summary must use the tool's own names, not Collibra's wire names: %s", encoded)
+	}
 }
 
 func TestGetLatestAgentScan_IncludeDocumentReturnsItWhole(t *testing.T) {
-	f := newFakeGuardian(t, http.StatusOK, fingerprint)
+	f := newFakeGuardian(t, http.StatusOK, stored)
 
 	out, _ := get_latest_agent_scan.NewTool(f.client).Handler(t.Context(), get_latest_agent_scan.Input{AIAgentID: aiAgentID, IncludeDocument: true})
 	var doc struct {
@@ -82,7 +85,7 @@ func TestGetLatestAgentScan_NotFoundIsAnAnswer(t *testing.T) {
 }
 
 func TestGetLatestAgentScan_RejectsANonUUIDWithoutCalling(t *testing.T) {
-	f := newFakeGuardian(t, http.StatusOK, fingerprint)
+	f := newFakeGuardian(t, http.StatusOK, stored)
 
 	out, _ := get_latest_agent_scan.NewTool(f.client).Handler(t.Context(), get_latest_agent_scan.Input{AIAgentID: "databricks:1:cat.s.max"})
 	if out.Status != get_latest_agent_scan.StatusValidationError || f.calls.Load() != 0 {

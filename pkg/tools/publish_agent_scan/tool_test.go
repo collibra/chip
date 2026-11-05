@@ -112,6 +112,9 @@ func TestPublishAgentScan_SuccessSendsDocumentUnchangedAndReturnsScan(t *testing
 		out.CreatedOn != "2026-02-11T09:31:05Z" || out.GeneratedOn != "2026-02-11T09:31:04Z" {
 		t.Errorf("unexpected scan fields: %+v", out)
 	}
+	if encoded, _ := json.Marshal(out); strings.Contains(strings.ToLower(string(encoded)), "fingerprint") {
+		t.Errorf("the output must use the tool's own names, not Collibra's wire names: %s", encoded)
+	}
 	if f.calls.Load() != 1 {
 		t.Fatalf("sent %d request(s), want 1", f.calls.Load())
 	}

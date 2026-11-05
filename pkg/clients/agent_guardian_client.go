@@ -80,19 +80,26 @@ type GuardianBundleSummary struct {
 	Version            int64    `json:"version"`
 	CompiledAt         string   `json:"compiledAt,omitempty"`
 	AgentVersionID     string   `json:"agentVersionId,omitempty"`
-	AgentScanStateID   string   `json:"agentFingerprintId,omitempty"`
+	AgentScanStateID   string   `json:"agentScanStateId,omitempty"`
 	ContractVersionIDs []string `json:"contractVersionIds,omitempty"`
 }
 
-// MarshalJSON writes the scan state id under the tool's own name; Collibra's
-// wire name is only read.
-func (b GuardianBundleSummary) MarshalJSON() ([]byte, error) {
-	type wire GuardianBundleSummary
-	return json.Marshal(struct {
-		wire
-		AgentScanStateID string `json:"agentScanStateId,omitempty"`
-		WireName         string `json:"agentFingerprintId,omitempty"`
-	}{wire: wire(b), AgentScanStateID: b.AgentScanStateID})
+// UnmarshalJSON reads the scan state id from Collibra's wire name, so the
+// rest of chip, and the tools' output, only use agentScanStateId.
+func (b *GuardianBundleSummary) UnmarshalJSON(data []byte) error {
+	type plain GuardianBundleSummary
+	var wire struct {
+		plain
+		WireStateID string `json:"agentFingerprintId"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*b = GuardianBundleSummary(wire.plain)
+	if b.AgentScanStateID == "" {
+		b.AgentScanStateID = wire.WireStateID
+	}
+	return nil
 }
 
 // GuardianEnforcementOverview is what telemetry observed for the agent.
@@ -148,21 +155,28 @@ type AgentRulesBundle struct {
 	ID               string `json:"id"`
 	Version          int64  `json:"version"`
 	AgentVersionID   string `json:"agentVersionId"`
-	AgentScanStateID string `json:"agentFingerprintId,omitempty"`
+	AgentScanStateID string `json:"agentScanStateId,omitempty"`
 	SizeInBytes      int64  `json:"sizeInBytes"`
 	ContentHash      string `json:"contentHash"`
 	CompiledAt       string `json:"compiledAt"`
 }
 
-// MarshalJSON writes the scan state id under the tool's own name; Collibra's
-// wire name is only read.
-func (b AgentRulesBundle) MarshalJSON() ([]byte, error) {
-	type wire AgentRulesBundle
-	return json.Marshal(struct {
-		wire
-		AgentScanStateID string `json:"agentScanStateId,omitempty"`
-		WireName         string `json:"agentFingerprintId,omitempty"`
-	}{wire: wire(b), AgentScanStateID: b.AgentScanStateID})
+// UnmarshalJSON reads the scan state id from Collibra's wire name, so the
+// rest of chip, and the tools' output, only use agentScanStateId.
+func (b *AgentRulesBundle) UnmarshalJSON(data []byte) error {
+	type plain AgentRulesBundle
+	var wire struct {
+		plain
+		WireStateID string `json:"agentFingerprintId"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*b = AgentRulesBundle(wire.plain)
+	if b.AgentScanStateID == "" {
+		b.AgentScanStateID = wire.WireStateID
+	}
+	return nil
 }
 
 // GetAgentGuardianOverview reads one AI agent's state across Guardian.

@@ -192,7 +192,7 @@ func TestListScannedAgents_SignInPageIsASignInProblem(t *testing.T) {
 	}
 }
 
-// realService answers like the Fingerprint API does: it selects the agents
+// realService answers like the agent scan API does: it selects the agents
 // whose external id starts with "<sourceSystem>:", on whole leading segments,
 // so a prefix that ends inside a segment selects nothing. Recorded from the
 // real service (see the id below, which exists in Collibra).
