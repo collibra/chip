@@ -21,9 +21,9 @@ One answer to "where is this agent in its Guardian setup?".
 - **Input:** `aiAgentId` (UUID, required).
 - **Returns**, passed through with the field names unchanged:
   - `aiAgent {id, name}`;
-  - `fingerprint {status: IN_PROGRESS | COMPLETED | FAILED, id, createdOn, lastReceivedOn, aiAgentVersion {id, name}, failureMessage}`;
+  - `scan {status: IN_PROGRESS | COMPLETED | FAILED, id, createdOn, lastReceivedOn, aiAgentVersion {id, name}, failureMessage}`;
   - `contracts [{id, name, layer: GLOBAL | SPECIALIZED, activeVersionId}]`, global first, empty when none governs the agent;
-  - `compilation {status: NOT_COMPILED | IN_PROGRESS | FAILED | STALE | UP_TO_DATE, staleBecause [CONTRACT_VERSION_CHANGED | GOVERNING_SET_CHANGED | FINGERPRINT_CHANGED], latestJob {state, createdOn, failureMessage}, latestBundle {id, version, compiledAt, agentVersionId, agentFingerprintId, contractVersionIds}}`;
+  - `compilation {status: NOT_COMPILED | IN_PROGRESS | FAILED | STALE | UP_TO_DATE, staleBecause [CONTRACT_VERSION_CHANGED | GOVERNING_SET_CHANGED | SCAN_CHANGED], latestJob {state, createdOn, failureMessage}, latestBundle {id, version, compiledAt, agentVersionId, agentScanStateId, contractVersionIds}}`;
   - `enforcement {status: NOT_OBSERVED | UP_TO_DATE | STALE, observedBundle}`;
   - `collection {status: OK | NOT_COLLECTED | FAILING | LAGGING, reason: NO_CONNECTION | SOURCE_NOT_CONNECTED | AGENT_NOT_FOUND, lastCollectedOn}`.
   The job's id is left out, as in `apply_latest_rules`. Plus `links`: ready-made links to the agent, its newest version, its Contract and Guardian tabs, each governing
@@ -62,11 +62,10 @@ What happened to each rule in the latest run.
 - **Calls:** `GET /rest/guardianEnforcement/v1/compilationReports/by/aiAgent/{aiAgentId}` (scope
   `aigovernance.guardian.enforcement-read`).
 - **Input:** `aiAgentId`.
-- **Returns:** `bundleId` (absent when no rules file was made), `agentVersionId`, `startedAt`, `finishedAt`,
-  `rules [{ruleId, agentContractId, agentContractVersionId, agentContractLayer, statement, outcome, reason}]` and a count
-  per outcome. Outcomes: `bound`, `partially_bound`, `not_applicable`, `no_enforcement_required`, `unbindable`,
-  `ambiguous`, `inexpressible`, `unsupported_pattern`, `needs_classifier`, `unbound`, `no_model_answer`. Leave out the
-  guard detail: the skill never shows it.
+- **Returns:** `bundleId` (absent when no rules file was made), `agentVersionId`, `startedAt`, `finishedAt`, and for
+  each rule its statement, its contract, an outcome and a reason, with a count per outcome. The skill groups the
+  outcomes into what the customer sees: checked, partly checked, for the record only, not about this agent, or couldn't
+  be turned into a check as written. Nothing about how a rule is checked is returned.
 - **Errors:** 404 `compilationReportNotFound`.
 - **Annotations:** read-only, idempotent.
 

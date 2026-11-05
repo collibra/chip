@@ -37,28 +37,21 @@ From the design review on 2026-11-03, unless dated otherwise.
 
 ## A redeploy keeps the same agent version
 
-**Decided on 2026-11-04 with the Guardian team.** Collibra identifies a root agent's version by its code's hash only. A
-redeploy of the same code, with a new deployment version, keeps the same AI Agent Version: its rules stay applied, and
-issues stay under it. Collibra still records the scan, but nothing new appears in the catalog for it. Before this, the
-deployment version was part of the identity, so a redeploy made a new version with no rules, and on Model Serving every
-rules update repeated it.
+**Decided on 2026-11-04 with the Guardian team.** A redeploy of unchanged code keeps the same AI Agent Version: its
+rules stay applied, and issues stay under it.
 
-**What the skill still does, because it's cheap and still right:**
+**What the skill does:**
 
-- prepares the agent (SDK and wiring) before the scan, with the default way that doesn't change the scan (way 4). The
-  ways that add Guardian to the code itself (ways 1 to 3) change the code's hash, so done after the scan they would
-  still make a new version;
+- prepares the agent (SDK and wiring) before the scan, with the default way (way 4), so switching Guardian on is part
+  of the version the rules are made for;
 - when the code is unchanged and only the deployment changed, explains that Collibra keeps the same version and rules
   either way, and that a scan only records the deployment in Collibra's history; the customer decides whether to send it.
-
-**Still open:** whether the scanner should leave Guardian's own wiring out of the scan, so ways 1 to 3 don't change the
-version either.
 
 ## Known gaps in the documentation
 
 Checked on 2026-11-03. The skill keeps its own steps for these until the documentation covers them:
 
-- Scanning the agent (the fingerprint) isn't documented; the documentation says only that Guardian must "recognise" the
+- Scanning the agent isn't documented; the documentation says only that Guardian must "recognise" the
   agent.
 - The "Allow collecting payloads" option isn't described, though the Guardian tab topic refers to it.
 - Connecting Collibra to the agent's activity (Edge, the Databricks connection) isn't documented.
@@ -120,3 +113,4 @@ Checked on 2026-11-03. The skill keeps its own steps for these until the documen
 | 2026-11-03 | Where the rules file lives by how the agent runs; finding the deployment when the customer doesn't know | A customer may not know how their agent is deployed |
 | 2026-11-03 | The use case link names `AIUseCaseUsesAIAgent` (`...7109`) | Four relation types on AI Use Case share the role "uses" |
 | 2026-11-04 | Step 7 may offer a read-only look at the agent's recent runs, on any platform (MLflow traces, an OpenTelemetry service or the agent's logs): Guardian's decisions per rule, with the assistant's own reading of each rule | A test session did this unprompted and found two over-broad company-wide checks; now it's asked first, keeps conversations out and changes nothing |
+| 2026-11-05 | Call the description of the agent an "agent scan" in the skills, tools and spec; leave out how Collibra identifies versions and checks rules | The product owner asked: it's Collibra's own know-how |

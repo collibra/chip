@@ -109,7 +109,7 @@ The customer pays for every token, so the skill keeps reading and writing small.
 
 - load one stage file at a time and never reload a file already loaded in this conversation; load
   `verify-and-diagnose.md`, `glossary.md`, `refusal-scripts.md` and `documentation.md` only when needed;
-- never paste whole tool results, the fingerprint, the rules report or code back to the customer: summarise (for example
+- never paste whole tool results, the agent scan, the rules report or code back to the customer: summarise (for example
   the rule outcome counts), details only on request;
 - while waiting for Collibra, wait in the shell between checks where the client can run commands (for example
   `sleep 60`, checking about once a minute) rather than many quick status calls, with at most one short update a minute;
@@ -224,7 +224,7 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 - **Does:** if Collibra doesn't know the agent, or its code changed, run the scanner skill as it is, with its own
   consent question. If only the deployment changed and the code didn't, explain that Collibra keeps the same agent version and rules either way, and let the customer choose whether to send a scan (see decisions.md). Then wait
   for Collibra to finish: check `list_scanned_agents` until the agent has an id, then `get_agent_guardian_status` until
-  the fingerprint status is `COMPLETED` (`FAILED` carries a message), about once a minute, waiting in the shell between
+  the scan status is `COMPLETED` (`FAILED` carries a message), about once a minute, waiting in the shell between
   checks.
 - **Checks:** the agent id, its newest version, and that the version is the one just sent.
 - **Links:** the agent, its version and, when the scan had a deployment, the AI Endpoint (read from the version's

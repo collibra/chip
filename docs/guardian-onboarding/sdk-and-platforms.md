@@ -165,7 +165,7 @@ two cases, and in both the customer applies the latest rules again (stage 06) to
 
 | Cause | What changed | Status reported |
 |---|---|---|
-| The agent changed | A scan found different code, so Collibra made a new agent version, which has no rules yet | `staleBecause: FINGERPRINT_CHANGED`, or `NOT_COMPILED` for the new version |
+| The agent changed | A scan found different code, so Collibra made a new agent version, which has no rules yet | `staleBecause: SCAN_CHANGED`, or `NOT_COMPILED` for the new version |
 | The rules changed | New rules in the global contract (applies to every agent), or in a specialised contract linked to the agent (applies only through that link); a contract linked or unlinked | `staleBecause: CONTRACT_VERSION_CHANGED` or `GOVERNING_SET_CHANGED` |
 
 The "update an agent" path names the cause in plain words and offers to apply the rules again. Linking an AI use case
