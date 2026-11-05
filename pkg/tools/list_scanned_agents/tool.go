@@ -71,7 +71,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"If you do not know the external id, pass agentNameContains instead: a part of the agent's name (for example 'call-analysis'), searched among the catalog's AI Agent assets, which works whatever the id looks like. " +
 			"Otherwise pass sourceSystem (a prefix of the external ids: the first two segments for a route-shaped id such as 'databricks:1234567890123456', the route alone such as 'databricks:' to search every instance, the repository address for an id like '<repository>#<name>', or the whole id) and, to find one agent, its full externalId, or externalIdContains to find agents by a part of the id such as a model name. " +
 			"Only agents Collibra has imported are listed; an agent that was scanned but not yet imported is absent, and an empty result is a valid answer. It only reads. " +
-			"Note: requires permission to read agent scans (scope aigovernance.guardian.fingerprint-read).",
+			"Note: requires permission to read agent scans.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: chip.Ptr(false), IdempotentHint: true, OpenWorldHint: chip.Ptr(false)},

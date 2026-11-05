@@ -18,7 +18,7 @@ This is where the customer is asked about the look-up, because only now is it kn
 
 1. "This agent runs on <platform>. May I look up how it is deployed (which version is live, its endpoint and configuration) with read-only commands on your <CLI>? I will not call the agent." Options: "Yes, look it up (default)" and "No, skip it". A "no" skips the rest of this stage: keep the offline facts and warn that deployment details were not looked up.
 2. If yes and the platform file says a profile or account must be chosen: the profile choice, showing all of them with their addresses. Never choose one yourself, even if there is only one (add the option "Do not look anything up", so the question has two options).
-3. If yes and the platform file supports it: "Should I also fingerprint the earlier versions of this agent, so Collibra has its history (one file per version, sent oldest first, all covered by one yes)?" Options: "No, only the deployed version (default)", "All of them" and "The last 5". Do not ask when Stage 02 found a known agent: Collibra already holds the history it knows.
+3. If yes and the platform file supports it: "Should I also scan the earlier versions of this agent, so Collibra has its history (one file per version, sent oldest first, all covered by one yes)?" Options: "No, only the deployed version (default)", "All of them" and "The last 5". Do not ask when Stage 02 found a known agent: Collibra already holds the history it knows.
 
 Record the answers in `intake.json` (`platformLookup`, `earlierVersions`). A refused or failed look-up is not fatal: keep the offline facts, warn what is missing, do not retry a sign-in or permission error.
 

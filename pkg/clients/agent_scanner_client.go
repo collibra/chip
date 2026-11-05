@@ -23,10 +23,10 @@ type CreateAgentScanRequest struct {
 }
 
 type AgentScan struct {
-	ID            string `json:"id"`
-	FingerprintID string `json:"fingerprintId"`
-	CreatedOn     string `json:"createdOn"`
-	GeneratedOn   string `json:"generatedOn"`
+	ID          string `json:"id"`
+	StateID     string `json:"fingerprintId"`
+	CreatedOn   string `json:"createdOn"`
+	GeneratedOn string `json:"generatedOn"`
 }
 
 type AgentScanAPIError struct {

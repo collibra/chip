@@ -44,14 +44,14 @@ Reuse is only for code that provably did not change. For the agent you will use,
 
 1. The earlier scan records a `source.commitSha`, and its `repoUrl` is this repository (compare ignoring `.git`, `https://` versus `git@`).
 2. That commit exists in the clone (`git cat-file -e <commit>^{commit}`).
-3. `fingerprintVersion` is the one this skill produces.
+3. `documentVersion` is the one this skill produces.
 4. Nothing relevant changed: list the files changed since that commit under the scan root, including uncommitted and untracked ones (`git diff --name-only <commit> -- <scan root>` and `git status --porcelain -- <scan root>`). Ignore tests, documentation, images and other plain assets. Source, prompts, configuration, dependency manifests and lock files count.
 
 If all four hold, the verdict is `unchanged`. If tests 1 to 3 hold and some files changed, the verdict is `changed` and the list of changed files is kept.
 
 These tests cover the code only. Collibra also records where the agent is deployed: the deployment's version and endpoint address are part of what makes a scan a new version, so a redeploy of unchanged code is a new version. When the verdict is `unchanged`, the stored scan has a `deployment`, and the host has a platform file and an installed CLI, the deployment is checked too (Step 4b).
 
-Write what you learned to `known.json` in the output folder. Contents: `aiAgentId`, `externalId`, `rootAgent`, `platform` (name and metadata), `source`, `deployment` (version and endpoint, as last scanned), `contentHash`, `fingerprintVersion`, `parserVersion`, `lastSeenOn`, `verdict`, `changedFiles`.
+Write what you learned to `known.json` in the output folder. Contents: `aiAgentId`, `externalId`, `rootAgent`, `platform` (name and metadata), `source`, `deployment` (version and endpoint, as last scanned), `contentHash`, `documentVersion`, `parserVersion`, `lastSeenOn`, `verdict`, `changedFiles`.
 
 ## Step 4b: Check the deployment (verdict `unchanged` only)
 

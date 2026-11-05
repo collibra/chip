@@ -27,7 +27,7 @@ Any language and any framework is in scope, not only Python and LangChain.
 
 ### Unused definitions must be reported
 
-An agent or subagent definition (a dict literal, a constructor call, a class) that no orchestrator imports or references is **still included**, with role ORPHAN and a warning saying why it looks unused. Dead code left by a refactor is one of the most useful things a fingerprint can show. Never leave it out because nothing uses it.
+An agent or subagent definition (a dict literal, a constructor call, a class) that no orchestrator imports or references is **still included**, with role ORPHAN and a warning saying why it looks unused. Dead code left by a refactor is one of the most useful things an agent scan can show. Never leave it out because nothing uses it.
 
 ### Same agent built in two places
 
@@ -35,7 +35,7 @@ If one logical agent is constructed in more than one place (for example a studio
 
 ### Several independent roots
 
-A fingerprint has exactly one ROOT. If you find several independent systems, follow what Stage 00 stated: fingerprint each one in turn (one file each), unless the customer named only one. List what you found in your status line. Agents of a system that is not being fingerprinted are not included, except as warnings if they are connected.
+An agent scan has exactly one ROOT. If you find several independent systems, follow what Stage 00 stated: scan each one in turn (one file each), unless the customer named only one. List what you found in your status line. Agents of a system that is not being scanned are not included, except as warnings if they are connected.
 
 ### Factory patterns
 

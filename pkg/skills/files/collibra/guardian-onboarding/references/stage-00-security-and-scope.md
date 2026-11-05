@@ -21,7 +21,7 @@ Nothing changes in Collibra or on the customer's computer without the customer's
 |---|---|
 | The customer's project: SDK install and project changes, the rules file and the setting that names it | This skill, steps 1 and 6 |
 | A platform command-line tool or Python installed | `shared/platform-prerequisites.md` |
-| The agent's fingerprint sent to Collibra | The scanner skill, in its own way |
+| The agent scan sent to Collibra | The scanner skill, in its own way |
 | An agent contract saved | The contract skill, in its own way |
 | A contract linked to the agent, or an existing use case linked to it | This skill, steps 3 and 4 |
 | A new AI use case created and linked | This skill, step 4 |
@@ -74,10 +74,10 @@ Retry automatically only where it is safe: reads, time-outs and server errors, a
 - **Simple and meaningful.** Second person, sentence case, one idea per sentence. Every explanation says what the thing is and why it matters to the customer, in one or two sentences. Leave out any sentence that doesn't help the customer decide or act.
 - **Use the names customers see in Collibra:** agent contract, AI use case, AI Command Center, the Contract and Guardian tabs, Apply latest rules. A product term the customer needs appears once with a short explanation from `references/glossary.md`.
 - **The documentation's own words,** with a plain explanation the first time: "enforcement bundle" (the rules file), "Enforce" and "Monitor" (the modes), the verdicts Allow, Flag, Deny, Escalate and Rewrite, and "Apply latest rules".
-- **Words to avoid in your own messages:** this skill's labels and numbers, any status Collibra didn't return in this conversation, and internal terms: bundle, compile, spec, binding, guard, collector, job, API, endpoint path, internal system names. Say instead: rules file, apply the rules, check, connection, Collibra support. "Fingerprint" appears once, explained.
+- **Words to avoid in your own messages:** this skill's labels and numbers, any status Collibra didn't return in this conversation, and internal terms: fingerprint, bundle, compile, spec, binding, guard, collector, job, API, endpoint path, internal system names. Say instead: rules file, apply the rules, check, connection, Collibra support. Say "agent scan", never "fingerprint".
 - **Ask, don't assume.** When something can be read two ways, ask, and offer the best reading as the default.
 - **Show what you found before offering to reuse it.** An existing AI use case or agent contract is shown first (name, one line of description or one example rule, what it is already linked to, its link). Only then ask; the customer decides. Never link an existing asset the customer hasn't seen.
-- **Summarise before moving on.** Each step ends with a short status line (one to five lines) ending with clickable markdown links to what the step found, created or deployed, then the next question. Never paste whole tool results, the fingerprint, the rules report or code: summarise, and give details only when asked. Every step ends with "Learn more:" and the page for it from `references/documentation.md`.
+- **Summarise before moving on.** Each step ends with a short status line (one to five lines) ending with clickable markdown links to what the step found, created or deployed, then the next question. Never paste whole tool results, the agent scan, the rules report or code: summarise, and give details only when asked. Every step ends with "Learn more:" and the page for it from `references/documentation.md`.
 - **Choices inside a sentence are lettered** (a), (b). Menus shown as their own list keep numbers or the client's question form.
 - **Show your working on wording, never on mechanism.**
 

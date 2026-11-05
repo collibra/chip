@@ -30,7 +30,7 @@ If the code shows no model name, say so in a warning and use the default id.
 
 ## 2. Live exploration (optional, read-only)
 
-It makes the fingerprint describe what is actually deployed. Do it only if **all** of these hold:
+It makes the agent scan describe what is actually deployed. Do it only if **all** of these hold:
 
 1. `command -v databricks` finds the CLI, and `databricks --version` is 1.0.0 or newer. If not, skip this section and add the warning "deployment details not looked up: Databricks CLI not available".
 2. The customer agreed in Stage 04's form (the look-up question). Stage 04 asks it, with the profile choice, before this section runs; the wording it uses is: "This agent runs on Databricks and I can look up how it is deployed (which model version is live, its endpoint and configuration) using your Databricks CLI. I will only read, and I won't call the agent. May I?"

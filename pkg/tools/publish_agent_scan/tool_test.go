@@ -108,7 +108,7 @@ func TestPublishAgentScan_SuccessSendsDocumentUnchangedAndReturnsScan(t *testing
 	if out.Status != publish_agent_scan.StatusSuccess {
 		t.Fatalf("status = %q, want success (%s)", out.Status, out.Message)
 	}
-	if out.ScanID != "scan-1" || out.FingerprintID != "fp-1" ||
+	if out.ScanID != "scan-1" || out.StateID != "fp-1" ||
 		out.CreatedOn != "2026-02-11T09:31:05Z" || out.GeneratedOn != "2026-02-11T09:31:04Z" {
 		t.Errorf("unexpected scan fields: %+v", out)
 	}
@@ -184,8 +184,12 @@ func TestPublishAgentScan_RejectionsReturnErrorCodeAndPlainMessage(t *testing.T)
 				if out.Status != publish_agent_scan.StatusError {
 					t.Fatalf("status = %q, want error", out.Status)
 				}
-				if out.ErrorCode != code || out.HTTPStatus != status {
-					t.Errorf("errorCode/httpStatus = %q/%d, want %q/%d", out.ErrorCode, out.HTTPStatus, code, status)
+				want := code
+				if rest, ok := strings.CutPrefix(code, "fingerprint"); ok {
+					want = "scan" + rest
+				}
+				if out.ErrorCode != want || out.HTTPStatus != status {
+					t.Errorf("errorCode/httpStatus = %q/%d, want %q/%d", out.ErrorCode, out.HTTPStatus, want, status)
 				}
 				if strings.Contains(out.Message, code) {
 					t.Errorf("message should be plain language, not the raw code: %s", out.Message)

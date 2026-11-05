@@ -10,7 +10,7 @@ Before you tell the customer an action worked, check the result yourself. The cu
 |---|---|---|
 | A platform sign-in | The identity call answers, and it is the profile the customer chose | the platform tool (`shared/platform-prerequisites.md`) |
 | The SDK install and project changes (step 1) | The packages import in the project's environment; the settings file parses and has `enforcement_mode` as chosen and no rules file setting yet; the entry module still parses (compiled in memory, never run); the changes on disk are exactly the changes shown | local commands |
-| Sending the scan (step 2) | The agent appears with an id; its newest version is the one just sent; the fingerprint status is `COMPLETED` | `list_scanned_agents`, `get_agent_guardian_status` |
+| Sending the scan (step 2) | The agent appears with an id; its newest version is the one just sent; the scan status is `COMPLETED` | `list_scanned_agents`, `get_agent_guardian_status` |
 | A contract saved by the contract skill, or a contract linked by you or the customer (step 3) | It is in the list of contracts governing the agent, with the expected rule count | `list_agent_contracts` with `agentId`, `get_agent_contract` |
 | Creating or linking a use case (step 4) | The agent's incoming relations include the use case, through "AI Use Case uses AI Agent" | `get_asset_details` on the agent |
 | Applying the rules (step 5) | The status is `UP_TO_DATE`; the report's rule count equals the rules in the governing contracts; the report names the newest agent version | `get_agent_guardian_status`, `get_agent_rules_report` |
@@ -40,11 +40,11 @@ What to do:      <the fix, or the hand-off>; if that doesn't help, share the det
 | 1 | The project's LangChain or LangGraph is outside the tested range | The installed versions | Offer (a) a tested version or (b) `framework_version_policy = "permissive"`, as the customer chooses |
 | 1, 6 | Guardian says it found no rules file and allows everything | The path the setting names, and whether the file is there | Nothing looks broken, so warn about it explicitly: the agent runs unchecked until the rules file is in place |
 | 2 | The scan is refused with an error code | The error's message names the field | The description has a mistake: the scanner fixes it and asks again |
-| 2 | No agent id after five minutes | Whether `list_scanned_agents` answers; the fingerprint status | Collibra is busy: try again later. Otherwise the support details |
-| 2 | Fingerprint `FAILED` | Its `failureMessage` | Say it plainly. A message about a domain or a permission goes to the Collibra administrator |
+| 2 | No agent id after five minutes | Whether `list_scanned_agents` answers; the scan status | Collibra is busy: try again later. Otherwise the support details |
+| 2 | Scan `FAILED` | Its `failureMessage` | Say it plainly. A message about a domain or a permission goes to the Collibra administrator |
 | 3 | No contract governs the agent | Is there a specialised contract the customer just wrote? | None: offer the contract skill. Not linked: offer to link it yourself, after the customer's yes; the customer links it in Collibra only if they prefer or your link fails |
 | 3 | A contract can't be viewed | Which contracts could be read | The list may be incomplete: a message to the administrator about view rights |
-| 5 | Agent not found (404) | The fingerprint status | Collibra hasn't finished adding the agent: wait, then try again |
+| 5 | Agent not found (404) | The scan status | Collibra hasn't finished adding the agent: wait, then try again |
 | 5 | 403 | none | No permission: a message for the administrator; never retried |
 | 5 | Compilation `FAILED` | `latestJob.failureMessage` | If it says to try again, ask once more whether to apply the rules; otherwise the support details |
 | 5 | `NOT_COMPILED` after the run finished, or no rules file and an empty report | In order: no contract governs the agent; the governing contracts have no rules | Each points back to step 3. With neither, the support details |

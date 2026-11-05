@@ -15,7 +15,7 @@ Say, word for word:
 - **The client can run code and write files:** try a harmless command, such as printing the working directory.
 - **Python 3.12 or later** is available (`python3 --version`), because the Guardian SDK needs it. Do **not** check the platform's command-line tool here; that happens only when a step needs it.
 - **The current folder holds an AI agent:** framework imports such as LangChain or LangGraph, an `app.yaml`, a `databricks.yml`. See "Where is the agent's code?" below.
-- **Collibra already knows that agent:** `list_scanned_agents` with `agentNameContains` set to the agent's name or the folder name (and, when you know the agent's external id, `sourceSystem` and `externalId`). For a known agent, `get_agent_guardian_status` with its id gives the overview: the fingerprint, the contracts that govern it, whether its rules are up to date and why not (`staleBecause`), whether the running agent uses the latest rules file, and whether Collibra reads its activity.
+- **Collibra already knows that agent:** `list_scanned_agents` with `agentNameContains` set to the agent's name or the folder name (and, when you know the agent's external id, `sourceSystem` and `externalId`). For a known agent, `get_agent_guardian_status` with its id gives the overview: the agent scan, the contracts that govern it, whether its rules are up to date and why not (`staleBecause`), whether the running agent uses the latest rules file, and whether Collibra reads its activity.
 - **Which agent contracts exist:** `list_agent_contracts`, the global one in particular (`layer` `GLOBAL`).
 
 A state file, `collibra-guardian/setup-state.json`, in the folder or the project the customer names means an earlier run: go to "Resuming" in the main file.
@@ -68,7 +68,7 @@ Header `Get started`: "Here's what I can help with:"
 
 - **Set up Guardian for an agent:** "Prepare your agent, add it to Collibra, apply its rules and switch Guardian on." Stages 02 to 09.
 - **Write or change agent contracts:** "Start with the rules. You can add an agent later." Stage 04, then, if an agent is known, offer stages 06 to 09.
-- **Update an agent Collibra already knows:** "Your agent's code or its rules changed, and you want Guardian to use the latest." Name the cause from `staleBecause` in plain words: `FINGERPRINT_CHANGED`, or new code since the last scan, means stages 02 (only what's missing) and 03, then 06 to 09; `CONTRACT_VERSION_CHANGED` or `GOVERNING_SET_CHANGED` means stages 06 to 09.
+- **Update an agent Collibra already knows:** "Your agent's code or its rules changed, and you want Guardian to use the latest." Name the cause from `staleBecause` in plain words: `SCAN_CHANGED`, or new code since the last scan, means stages 02 (only what's missing) and 03, then 06 to 09; `CONTRACT_VERSION_CHANGED` or `GOVERNING_SET_CHANGED` means stages 06 to 09.
 - **Check an agent's setup:** "See what's in place, what's missing, and any issues." Read only: show the summary from Stage 09 with what is missing, then recommend the next step.
 
 ## Step 6: The plan

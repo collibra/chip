@@ -38,9 +38,9 @@ type Output struct {
 	ErrorCode    string                               `json:"errorCode,omitempty" jsonschema:"Machine-readable error code from Collibra (e.g. 'aiAgentNotFound', 'accessDenied', 'agentContractsUnavailable'), when the request was rejected."`
 	HTTPStatus   int                                  `json:"httpStatus,omitempty" jsonschema:"HTTP status of the rejection, when Collibra answered with one."`
 	AIAgent      *clients.GuardianAgentRef            `json:"aiAgent,omitempty" jsonschema:"The agent: id and name."`
-	Fingerprint  *clients.GuardianFingerprintOverview `json:"fingerprint,omitempty" jsonschema:"The agent's latest fingerprint (the newest scanned state of the agent) and its import into the catalog. status: IN_PROGRESS (still importing), COMPLETED (aiAgentVersion is the newest version), FAILED (failureMessage says why). lastReceivedOn is when the agent was last scanned."`
+	AgentScan    *clients.GuardianAgentScanOverview   `json:"scan,omitempty" jsonschema:"The agent's latest scan (the newest scanned state of the agent) and its import into the catalog. status: IN_PROGRESS (still importing), COMPLETED (aiAgentVersion is the newest version), FAILED (failureMessage says why). lastReceivedOn is when the agent was last scanned."`
 	Contracts    *[]clients.GuardianGoverningContract `json:"contracts,omitempty" jsonschema:"The agent contracts (sets of natural-language rules) that govern the agent, global first, each with its layer (GLOBAL or SPECIALIZED) and activeVersionId (its latest published version). Empty when no contract governs the agent."`
-	Compilation  *clients.GuardianCompilationOverview `json:"compilation,omitempty" jsonschema:"Whether the agent's rules file (enforcement bundle, the rules compiled for the agent to apply at runtime) is current. status: NOT_COMPILED, IN_PROGRESS, FAILED, STALE (staleBecause says why: CONTRACT_VERSION_CHANGED, GOVERNING_SET_CHANGED, FINGERPRINT_CHANGED) or UP_TO_DATE. latestJob is the latest run (state PENDING, RUNNING, COMPLETED or FAILED, with failureMessage on failure; bundleId when it made a rules file); latestBundle is the newest rules file."`
+	Compilation  *clients.GuardianCompilationOverview `json:"compilation,omitempty" jsonschema:"Whether the agent's rules file (enforcement bundle, the rules compiled for the agent to apply at runtime) is current. status: NOT_COMPILED, IN_PROGRESS, FAILED, STALE (staleBecause says why: CONTRACT_VERSION_CHANGED, GOVERNING_SET_CHANGED, SCAN_CHANGED) or UP_TO_DATE. latestJob is the latest run (state PENDING, RUNNING, COMPLETED or FAILED, with failureMessage on failure; bundleId when it made a rules file); latestBundle is the newest rules file."`
 	Enforcement  *clients.GuardianEnforcementOverview `json:"enforcement,omitempty" jsonschema:"What the agent's activity shows it runs. status: NOT_OBSERVED (no activity seen yet), UP_TO_DATE, or STALE (the deployment does not run the newest rules file). observedBundle is the rules file seen in the latest issue."`
 	Collection   *clients.GuardianCollectionOverview  `json:"collection,omitempty" jsonschema:"Whether Collibra reads the agent's activity. status: OK, NOT_COLLECTED (reason: NO_CONNECTION, SOURCE_NOT_CONNECTED or AGENT_NOT_FOUND), FAILING or LAGGING. Absent for an agent with no rules file yet, or whose platform's activity Collibra does not collect."`
 	Links        *Links                               `json:"links,omitempty" jsonschema:"Ready-made links to the agent's pages in Collibra, to give the customer as clickable links. Use them as they are; never build a link yourself. Absent when the Collibra address is not known."`
@@ -52,8 +52,8 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 	return &chip.Tool[Input, Output]{
 		Name:  "get_agent_guardian_status",
 		Title: "Get Agent Guardian Status",
-		Description: "Read where one AI agent stands in its Guardian setup, in one call. Guardian is Collibra's runtime governance for AI agents: an agent is scanned (its fingerprint, a description of its sub-agents, tools and models), agent contracts (sets of natural-language rules) govern it, Collibra compiles those rules into a rules file (an enforcement bundle) for the agent's newest version, the agent runs with that file, and Collibra reads the agent's activity. " +
-			"This tool returns each of those stages as Collibra reports it, with field names unchanged: aiAgent, fingerprint (import status and newest version), contracts (governing contracts with their active versions), compilation (NOT_COMPILED, IN_PROGRESS, FAILED, STALE with staleBecause, or UP_TO_DATE, plus the latest run and rules file), enforcement (whether the deployment runs the newest rules file) and collection (whether Collibra reads the agent's activity, and if not, why). " +
+		Description: "Read where one AI agent stands in its Guardian setup, in one call. Guardian is Collibra's runtime governance for AI agents: an agent is scanned (a description of its sub-agents, tools and models), agent contracts (sets of natural-language rules) govern it, Collibra compiles those rules into a rules file (an enforcement bundle) for the agent's newest version, the agent runs with that file, and Collibra reads the agent's activity. " +
+			"This tool returns each of those stages as Collibra reports it: aiAgent, scan (import status and newest version), contracts (governing contracts with their active versions), compilation (NOT_COMPILED, IN_PROGRESS, FAILED, STALE with staleBecause, or UP_TO_DATE, plus the latest run and rules file), enforcement (whether the deployment runs the newest rules file) and collection (whether Collibra reads the agent's activity, and if not, why). " +
 			"Use it to decide the next setup step and to follow a run started by apply_latest_rules until compilation leaves IN_PROGRESS. Use get_agent_rules_report for what happened to each rule, and get_agent_rules_file to download the rules file. " +
 			"aiAgentId is the AI Agent asset id, not the external id: get it from list_scanned_agents. A block an older Collibra does not send is left out and named in absentBlocks. " +
 			"A not_found status (errorCode aiAgentNotFound) means Guardian has no record of the agent: its scan may still be importing, or the id is wrong. A 503 (agentContractsUnavailable) is temporary. Permission errors (401, 403) are not: do not retry them. It only reads. " +
@@ -108,9 +108,9 @@ func success(overview *clients.AgentGuardianOverview) Output {
 	out := Output{
 		Status:       StatusSuccess,
 		AIAgent:      overview.AIAgent,
-		Fingerprint:  overview.Fingerprint,
+		AgentScan:    overview.AgentScan,
 		Contracts:    overview.Contracts,
-		Compilation:  overview.Compilation,
+		Compilation:  compilation(overview.Compilation),
 		Enforcement:  overview.Enforcement,
 		Collection:   overview.Collection,
 		AbsentBlocks: absentBlocks(overview),
@@ -122,6 +122,23 @@ func success(overview *clients.AgentGuardianOverview) Output {
 	return out
 }
 
+// compilation names the scan reason in the tool's own words, so the reason a
+// rules file is out of date reads the same as the rest of the output.
+func compilation(c *clients.GuardianCompilationOverview) *clients.GuardianCompilationOverview {
+	if c == nil || len(c.StaleBecause) == 0 {
+		return c
+	}
+	out := *c
+	out.StaleBecause = make([]string, len(c.StaleBecause))
+	for i, reason := range c.StaleBecause {
+		if reason == "FINGERPRINT_CHANGED" {
+			reason = "SCAN_CHANGED"
+		}
+		out.StaleBecause[i] = reason
+	}
+	return &out
+}
+
 func links(host, aiAgentID string, overview *clients.AgentGuardianOverview) *Links {
 	l := &Links{
 		Agent:          host + "/asset/" + aiAgentID,
@@ -130,8 +147,8 @@ func links(host, aiAgentID string, overview *clients.AgentGuardianOverview) *Lin
 		AllContracts:   host + "/ai-governance/agent-contracts",
 		GuardianAgents: host + "/ai-governance/guardian-agents",
 	}
-	if overview.Fingerprint != nil && overview.Fingerprint.AIAgentVersion != nil && overview.Fingerprint.AIAgentVersion.ID != "" {
-		l.AgentVersion = host + "/asset/" + overview.Fingerprint.AIAgentVersion.ID
+	if overview.AgentScan != nil && overview.AgentScan.AIAgentVersion != nil && overview.AgentScan.AIAgentVersion.ID != "" {
+		l.AgentVersion = host + "/asset/" + overview.AgentScan.AIAgentVersion.ID
 	}
 	if overview.Contracts != nil {
 		for _, c := range *overview.Contracts {
@@ -148,7 +165,7 @@ func absentBlocks(overview *clients.AgentGuardianOverview) []string {
 		present bool
 	}{
 		{"aiAgent", overview.AIAgent != nil},
-		{"fingerprint", overview.Fingerprint != nil},
+		{"scan", overview.AgentScan != nil},
 		{"contracts", overview.Contracts != nil},
 		{"compilation", overview.Compilation != nil},
 		{"enforcement", overview.Enforcement != nil},
@@ -163,8 +180,8 @@ func absentBlocks(overview *clients.AgentGuardianOverview) []string {
 
 func summary(overview *clients.AgentGuardianOverview) string {
 	var parts []string
-	if overview.Fingerprint != nil {
-		parts = append(parts, "fingerprint "+overview.Fingerprint.Status)
+	if overview.AgentScan != nil {
+		parts = append(parts, "scan "+overview.AgentScan.Status)
 	}
 	if overview.Contracts != nil {
 		parts = append(parts, fmt.Sprintf("%d governing contract(s)", len(*overview.Contracts)))

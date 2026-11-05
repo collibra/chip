@@ -41,7 +41,7 @@ type Preview struct {
 	AIAgentID         string                              `json:"aiAgentId" jsonschema:"The agent id that will be sent; the request has no body."`
 	AIAgent           *clients.GuardianAgentRef           `json:"aiAgent,omitempty" jsonschema:"The agent: id and name."`
 	NewestVersion     *clients.GuardianAgentRef           `json:"newestVersion,omitempty" jsonschema:"The agent's newest version (from its latest imported scan), which the rules will be compiled for. Absent while the agent's first scan is still importing or when its import failed."`
-	FingerprintStatus string                              `json:"fingerprintStatus,omitempty" jsonschema:"Import status of the agent's latest scan: IN_PROGRESS, COMPLETED or FAILED."`
+	ScanStatus        string                              `json:"scanStatus,omitempty" jsonschema:"Import status of the agent's latest scan: IN_PROGRESS, COMPLETED or FAILED."`
 	Contracts         []clients.GuardianGoverningContract `json:"contracts" jsonschema:"The agent contracts that govern the agent, global first, with the active version each run will use. Empty when no contract governs the agent: a run then finishes without a rules file."`
 	CompilationStatus string                              `json:"compilationStatus,omitempty" jsonschema:"Current compilation status: NOT_COMPILED, IN_PROGRESS, FAILED, STALE or UP_TO_DATE."`
 	StaleBecause      []string                            `json:"staleBecause,omitempty" jsonschema:"Why the current rules file is out of date, when it is."`
@@ -117,9 +117,9 @@ func previewOutput(aiAgentID string, overview *clients.AgentGuardianOverview) Ou
 		AIAgent:   overview.AIAgent,
 		Contracts: []clients.GuardianGoverningContract{},
 	}
-	if overview.Fingerprint != nil {
-		preview.FingerprintStatus = overview.Fingerprint.Status
-		preview.NewestVersion = overview.Fingerprint.AIAgentVersion
+	if overview.AgentScan != nil {
+		preview.ScanStatus = overview.AgentScan.Status
+		preview.NewestVersion = overview.AgentScan.AIAgentVersion
 	}
 	if overview.Contracts != nil {
 		preview.Contracts = *overview.Contracts

@@ -4,10 +4,10 @@ Show the customer exactly what would be sent, get explicit consent, then send or
 
 ## Step 1: Show the summary
 
-Give the customer a summary they can check against their own knowledge of the agent. Offer to show the raw JSON; show it on request. If several fingerprints were produced, give one summary block per document, then one consent question (Step 3) that names every document it covers. Consent covers exactly the documents shown. For earlier versions of one Databricks model, give one full block for the main version and one line per earlier version (version, commit, whether it differs from the one after it), in the order they will be sent, and say that Collibra's existing versions could not be checked.
+Give the customer a summary they can check against their own knowledge of the agent. Offer to show the raw JSON; show it on request. If several agent scans were produced, give one summary block per document, then one consent question (Step 3) that names every document it covers. Consent covers exactly the documents shown. For earlier versions of one Databricks model, give one full block for the main version and one line per earlier version (version, commit, whether it differs from the one after it), in the order they will be sent, and say that Collibra's existing versions could not be checked.
 
 ```
-FINGERPRINT READY: <root agent name>
+AGENT SCAN READY: <root agent name>
 Source:     <repo url and commit if found, else "not detected">; say "deployed code, version <V>, commit <C>" when the deployed code was scanned
 Platform:   <platform name, model name, endpoint and deployed version if known; else "standalone">
 Route:      <the id's prefix and why: "databricks, the agent runs on Databricks"; "mlflow, its traces go to MLflow; it runs on AWS"; "custom, no platform found"; values read from the deployed configuration, by name only>
@@ -40,9 +40,9 @@ Show the summary in a message first. With a question tool (see "Asking the custo
 
 Ask this question, word for word:
 
-**"Ready to send this fingerprint to Collibra exactly as summarised above? Reply "yes, send" to proceed. If anything is unclear I'll ask again before sending."**
+**"Ready to send this agent scan to Collibra exactly as summarised above? Reply "yes, send" to proceed. If anything is unclear I'll ask again before sending."**
 
-**What counts as consent.** The customer does not have to type the exact phrase. A reply counts when it clearly says yes to sending this fingerprint as shown, answers the question you just asked, and has no condition or change attached: "yes, send", "ok, yes, send it", "go ahead and send", "yes please", "looks good, send it".
+**What counts as consent.** The customer does not have to type the exact phrase. A reply counts when it clearly says yes to sending this agent scan as shown, answers the question you just asked, and has no condition or change attached: "yes, send", "ok, yes, send it", "go ahead and send", "yes please", "looks good, send it".
 
 **What does not count.** Approval of the review with no intent to send ("looks good", "fine"), a hedge ("maybe", "I guess"), a question, a condition ("yes, but change the id"), a change request, silence, or a refusal. For a change request, make the change, show the summary again and re-ask. For anything else, re-ask once with the same question; after a second unclear answer add *"If you'd rather not send now, say so and I'll leave the file as it is."* Never treat an unclear answer as a yes.
 
@@ -54,10 +54,10 @@ Ask this question, word for word:
 Use only `publish_agent_scan`, one call per document, with `confirm` set to true, `document` exactly as saved in `agent_scan.json` (pass it through; do not edit, summarise or re-type it), `externalId` set to the agent id and `domainId` only if the customer gave one. Do not change the document between consent and send. Never call it with `confirm` true before the customer's yes. If the result carries `warnings`, tell the customer about them in plain words.
 
 - **Several documents:** send them one at a time in the order shown, one call each. Stop at the first failure and say which were sent and which were not; do not retry or skip ahead.
-- **Success:** report what Collibra returned (the scan, the state it recorded). Explain in plain words that Collibra has the fingerprint and that creating the matching records can take a little while. Do not claim the agent is fully registered. If the tool lets you read the result back, do so once and report it.
+- **Success:** report what Collibra returned (the scan, the state it recorded). Explain in plain words that Collibra has the agent scan and that creating the matching records can take a little while. Do not claim the agent is fully registered. If the tool lets you read the result back, do so once and report it.
 - **Failure:** do not retry blindly. Report the error in plain words using `validation-rules.md › Collibra rejections`, and what to change. A rejection that points at the document goes back to Stage 05 or 06. Re-sending needs fresh consent for the changed document.
 - **Permission or sign-in error:** this is not temporary. Do not retry on your own. Offer the handoff (Step 5). Retry once only if the customer says the access has been changed.
-- **Stored but import failed:** if the result says the scan was recorded but the follow-up did not complete, say exactly that, and that the fingerprint is safe in Collibra. Do not resend.
+- **Stored but import failed:** if the result says the scan was recorded but the follow-up did not complete, say exactly that, and that the agent scan is safe in Collibra. Do not resend.
 
 ## Step 5: Handoff (no sending)
 

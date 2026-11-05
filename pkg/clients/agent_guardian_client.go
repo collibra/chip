@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,7 +25,7 @@ const (
 // Collibra does not send can be told apart from an empty one.
 type AgentGuardianOverview struct {
 	AIAgent     *GuardianAgentRef            `json:"aiAgent,omitempty"`
-	Fingerprint *GuardianFingerprintOverview `json:"fingerprint,omitempty"`
+	AgentScan   *GuardianAgentScanOverview   `json:"fingerprint,omitempty"`
 	Contracts   *[]GuardianGoverningContract `json:"contracts,omitempty"`
 	Compilation *GuardianCompilationOverview `json:"compilation,omitempty"`
 	Enforcement *GuardianEnforcementOverview `json:"enforcement,omitempty"`
@@ -37,8 +38,8 @@ type GuardianAgentRef struct {
 	Name string `json:"name,omitempty"`
 }
 
-// GuardianFingerprintOverview is the agent's latest fingerprint and its import.
-type GuardianFingerprintOverview struct {
+// GuardianAgentScanOverview is the agent's latest scan and its import.
+type GuardianAgentScanOverview struct {
 	Status         string            `json:"status"`
 	ID             string            `json:"id"`
 	CreatedOn      string            `json:"createdOn,omitempty"`
@@ -79,8 +80,19 @@ type GuardianBundleSummary struct {
 	Version            int64    `json:"version"`
 	CompiledAt         string   `json:"compiledAt,omitempty"`
 	AgentVersionID     string   `json:"agentVersionId,omitempty"`
-	AgentFingerprintID string   `json:"agentFingerprintId,omitempty"`
+	AgentScanStateID   string   `json:"agentFingerprintId,omitempty"`
 	ContractVersionIDs []string `json:"contractVersionIds,omitempty"`
+}
+
+// MarshalJSON writes the scan state id under the tool's own name; Collibra's
+// wire name is only read.
+func (b GuardianBundleSummary) MarshalJSON() ([]byte, error) {
+	type wire GuardianBundleSummary
+	return json.Marshal(struct {
+		wire
+		AgentScanStateID string `json:"agentScanStateId,omitempty"`
+		WireName         string `json:"agentFingerprintId,omitempty"`
+	}{wire: wire(b), AgentScanStateID: b.AgentScanStateID})
 }
 
 // GuardianEnforcementOverview is what telemetry observed for the agent.
@@ -133,13 +145,24 @@ type AgentRulesReportRule struct {
 
 // AgentRulesBundle is the latest rules file (enforcement bundle) of an agent.
 type AgentRulesBundle struct {
-	ID                 string `json:"id"`
-	Version            int64  `json:"version"`
-	AgentVersionID     string `json:"agentVersionId"`
-	AgentFingerprintID string `json:"agentFingerprintId,omitempty"`
-	SizeInBytes        int64  `json:"sizeInBytes"`
-	ContentHash        string `json:"contentHash"`
-	CompiledAt         string `json:"compiledAt"`
+	ID               string `json:"id"`
+	Version          int64  `json:"version"`
+	AgentVersionID   string `json:"agentVersionId"`
+	AgentScanStateID string `json:"agentFingerprintId,omitempty"`
+	SizeInBytes      int64  `json:"sizeInBytes"`
+	ContentHash      string `json:"contentHash"`
+	CompiledAt       string `json:"compiledAt"`
+}
+
+// MarshalJSON writes the scan state id under the tool's own name; Collibra's
+// wire name is only read.
+func (b AgentRulesBundle) MarshalJSON() ([]byte, error) {
+	type wire AgentRulesBundle
+	return json.Marshal(struct {
+		wire
+		AgentScanStateID string `json:"agentScanStateId,omitempty"`
+		WireName         string `json:"agentFingerprintId,omitempty"`
+	}{wire: wire(b), AgentScanStateID: b.AgentScanStateID})
 }
 
 // GetAgentGuardianOverview reads one AI agent's state across Guardian.

@@ -1,6 +1,6 @@
 # Validation rules
 
-What gets a fingerprint rejected, and what to do. Written for you; tell the customer in plain words.
+What gets an agent scan rejected, and what to do. Written for you; tell the customer in plain words.
 
 ## Finalize rejections (Stage 06)
 
@@ -29,19 +29,19 @@ When a send fails, the answer carries an error code and a message. Explain in pl
 | Code | Meaning | What to do |
 |---|---|---|
 | `requestInvalid` | The agent id or the document is missing or unreadable. | Check `agent_scan.json` exists and is JSON; check an agent id was given. |
-| `fingerprintVersionUnsupported` | This Collibra does not read this fingerprint version. | Stop. Tell the customer this skill and their Collibra are out of step and the skill needs updating. Do not edit the version. |
-| `fingerprintRootAgentInvalid` | Not exactly one ROOT. | Back to Stage 03. |
-| `fingerprintDuplicateName` | Duplicate names. | Back to Stage 05, rename. |
-| `fingerprintNameTooShort` | A name under 3 characters. | Back to Stage 05, rename. |
-| `fingerprintUnresolvedReference` | An agent or tool names something the document lacks. | Back to Stage 05: add the missing agent or tool, or remove the reference. |
-| `fingerprintDefaultModelInvalid` | Models listed without exactly one default. | Back to Stage 05. |
-| `fingerprintGuardrailConfidenceMissing` | A guardrail without a confidence. | Back to Stage 05: add a confidence, rerun Stage 06. |
-| `fingerprintLlmFallbackWithoutLlm` | The document claims no LLM was used but marks fields as LLM-derived. | Stop. This should not happen with the finalize program's output. Show the customer the message; do not edit `parser` by hand. |
-| `fingerprintRootOnlyField` | A deployment-only field on a non-root agent. | Stop. This skill never writes these fields; report the message. |
-| Sign-in or permission errors (401 or 403) | The Collibra connection is not signed in, or may not write fingerprints, or is for a different environment. | Not temporary. Offer the handoff. Retry once only after the customer says access changed. |
+| `scanVersionUnsupported` | This Collibra does not read this scan format version. | Stop. Tell the customer this skill and their Collibra are out of step and the skill needs updating. Do not edit the version. |
+| `scanRootAgentInvalid` | Not exactly one ROOT. | Back to Stage 03. |
+| `scanDuplicateName` | Duplicate names. | Back to Stage 05, rename. |
+| `scanNameTooShort` | A name under 3 characters. | Back to Stage 05, rename. |
+| `scanUnresolvedReference` | An agent or tool names something the document lacks. | Back to Stage 05: add the missing agent or tool, or remove the reference. |
+| `scanDefaultModelInvalid` | Models listed without exactly one default. | Back to Stage 05. |
+| `scanGuardrailConfidenceMissing` | A guardrail without a confidence. | Back to Stage 05: add a confidence, rerun Stage 06. |
+| `scanLlmFallbackWithoutLlm` | The document claims no LLM was used but marks fields as LLM-derived. | Stop. This should not happen with the finalize program's output. Show the customer the message; do not edit `parser` by hand. |
+| `scanRootOnlyField` | A deployment-only field on a non-root agent. | Stop. This skill never writes these fields; report the message. |
+| Sign-in or permission errors (401 or 403) | The Collibra connection is not signed in, or may not write agent scans, or is for a different environment. | Not temporary. Offer the handoff. Retry once only after the customer says access changed. |
 
 A rejected document is not stored by Collibra. After any change, rerun Stage 06, show the summary again and ask for consent again.
 
 ## Same code, same hashes
 
-Scanning unchanged code should give the same fingerprint every time. That is why labels are lowercase and quotes are verbatim. If the customer scans again and Collibra reports a new state for code they did not touch, the likely causes are a reworded prompt, a changed label spelling, or a different set of tools. Compare the two `extraction.json` files before blaming anything else.
+Scanning unchanged code should give the same scan every time. That is why labels are lowercase and quotes are verbatim. If the customer scans again and Collibra reports a new state for code they did not touch, the likely causes are a reworded prompt, a changed label spelling, or a different set of tools. Compare the two `extraction.json` files before blaming anything else.

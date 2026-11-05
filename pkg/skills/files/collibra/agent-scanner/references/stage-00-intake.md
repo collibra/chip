@@ -17,7 +17,7 @@ Without reading the agent's code:
 
 Send one message. It states the defaults you will use, in plain words, and asks the customer to change any of them if they want. For example:
 
-> I will read only inside `<folder>`, skip dependency and build folders, secrets and key files, and fingerprint each independent agent system I find as its own file. Working files go to a new private temporary folder (`<path>`). I will work out the id Collibra uses for this agent and show it to you before anything is sent, and I will show you the result and offer to send it to Collibra only after you have seen it. If I hit something unclear while reading, I will pick the most likely answer, note it as a warning, and show you all warnings at the end. Tell me if you want anything different.
+> I will read only inside `<folder>`, skip dependency and build folders, secrets and key files, and scan each independent agent system I find as its own file. Working files go to a new private temporary folder (`<path>`). I will work out the id Collibra uses for this agent and show it to you before anything is sent, and I will show you the result and offer to send it to Collibra only after you have seen it. If I hit something unclear while reading, I will pick the most likely answer, note it as a warning, and show you all warnings at the end. Tell me if you want anything different.
 
 Add anything the checks found that the customer should know now: the code cannot be completed here (no way to run code), or no tool for sending is offered (the run will end with a saved file).
 
@@ -50,7 +50,7 @@ The customer has agreed to these by not changing them in Step 2. Use them instea
 
 | Situation | Decide | Record |
 |---|---|---|
-| Several independent roots, no name given | Fingerprint each, in turn, one file each | One line per system in the review |
+| Several independent roots, no name given | Scan each, in turn, one file each | One line per system in the review |
 | No clear entry point for any agent | Pick the agent nothing else delegates to; if several qualify, the one in the most central file | Warning naming the choice and the runners-up |
 | Two possible default models | The one used for the agent's main reasoning | Warning |
 | Framework or version ambiguous | The most likely, `unknown` if there is no evidence | Warning |
@@ -82,7 +82,7 @@ Stages ask the customer only about a decision with real alternatives, and only w
 
 ## What to say about internals
 
-If the customer asks what a fingerprint is, give the one-sentence explanation from the rules file (H8), then describe in plain words what you will read: the agent's construction code, its model settings, system prompts, tools and the checks inside tools.
+If the customer asks what an agent scan is, give the one-sentence explanation from the rules file (H8), then describe in plain words what you will read: the agent's construction code, its model settings, system prompts, tools and the checks inside tools.
 
 ## Exit criteria
 

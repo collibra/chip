@@ -43,27 +43,27 @@ type Source struct {
 
 // Output is the typed response.
 type Output struct {
-	Status             OutputStatus    `json:"status" jsonschema:"'success'; 'not_found' when Collibra holds no scan for this asset (an answer: scan without a baseline); 'validation_error' for a bad input; 'error' when Collibra could not answer."`
-	Message            string          `json:"message" jsonschema:"Plain-language summary that can be relayed to the customer."`
-	Guidance           string          `json:"guidance,omitempty" jsonschema:"What to tell or ask the customer next, on error."`
-	HTTPStatus         int             `json:"httpStatus,omitempty" jsonschema:"HTTP status of the rejection, when Collibra answered with one."`
-	FingerprintID      string          `json:"fingerprintId,omitempty" jsonschema:"Id of this state of the agent."`
-	ExternalID         string          `json:"externalId,omitempty" jsonschema:"The agent's identifier in its source system."`
-	ContentHash        string          `json:"contentHash,omitempty" jsonschema:"Hash over the document's functional fields. Equal hashes mean a functionally identical agent."`
-	FingerprintVersion string          `json:"fingerprintVersion,omitempty" jsonschema:"Schema version of the stored document."`
-	ParserVersion      string          `json:"parserVersion,omitempty" jsonschema:"Version of the producer that generated the stored document."`
-	ScanCount          int64           `json:"scanCount,omitempty" jsonschema:"How many scans reported this state."`
-	FirstSeenOn        string          `json:"firstSeenOn,omitempty" jsonschema:"When the earliest scan of this state was recorded (UTC)."`
-	LastSeenOn         string          `json:"lastSeenOn,omitempty" jsonschema:"When the latest scan of this state was recorded (UTC)."`
-	Source             *Source         `json:"source,omitempty" jsonschema:"Where the scanned code came from, when the document records it."`
-	RootAgent          string          `json:"rootAgent,omitempty" jsonschema:"Name of the root agent in the document."`
-	DeploymentVersion  string          `json:"deploymentVersion,omitempty" jsonschema:"The root agent's deployment.version, when there is one. Compare it with what is deployed now to see whether the agent was redeployed."`
-	EndpointURL        string          `json:"endpointUrl,omitempty" jsonschema:"The root agent's deployment.endpoint.url, when there is one."`
-	EndpointName       string          `json:"endpointName,omitempty" jsonschema:"The root agent's deployment.endpoint.name (for Databricks the serving endpoint name), when there is one."`
-	PlatformName       string          `json:"platformName,omitempty" jsonschema:"Platform recorded in the document (for example DATABRICKS), when there is one."`
-	AgentCount         int             `json:"agentCount,omitempty" jsonschema:"Number of agents in the document."`
-	ToolCount          int             `json:"toolCount,omitempty" jsonschema:"Number of tools in the document."`
-	Document           json.RawMessage `json:"document,omitempty" jsonschema:"The full scan document, only when includeDocument was true."`
+	Status            OutputStatus    `json:"status" jsonschema:"'success'; 'not_found' when Collibra holds no scan for this asset (an answer: scan without a baseline); 'validation_error' for a bad input; 'error' when Collibra could not answer."`
+	Message           string          `json:"message" jsonschema:"Plain-language summary that can be relayed to the customer."`
+	Guidance          string          `json:"guidance,omitempty" jsonschema:"What to tell or ask the customer next, on error."`
+	HTTPStatus        int             `json:"httpStatus,omitempty" jsonschema:"HTTP status of the rejection, when Collibra answered with one."`
+	StateID           string          `json:"stateId,omitempty" jsonschema:"Id of this state of the agent."`
+	ExternalID        string          `json:"externalId,omitempty" jsonschema:"The agent's identifier in its source system."`
+	ContentHash       string          `json:"contentHash,omitempty" jsonschema:"Hash over the document's functional fields. Equal hashes mean a functionally identical agent."`
+	DocumentVersion   string          `json:"documentVersion,omitempty" jsonschema:"Schema version of the stored document."`
+	ParserVersion     string          `json:"parserVersion,omitempty" jsonschema:"Version of the producer that generated the stored document."`
+	ScanCount         int64           `json:"scanCount,omitempty" jsonschema:"How many scans reported this state."`
+	FirstSeenOn       string          `json:"firstSeenOn,omitempty" jsonschema:"When the earliest scan of this state was recorded (UTC)."`
+	LastSeenOn        string          `json:"lastSeenOn,omitempty" jsonschema:"When the latest scan of this state was recorded (UTC)."`
+	Source            *Source         `json:"source,omitempty" jsonschema:"Where the scanned code came from, when the document records it."`
+	RootAgent         string          `json:"rootAgent,omitempty" jsonschema:"Name of the root agent in the document."`
+	DeploymentVersion string          `json:"deploymentVersion,omitempty" jsonschema:"The root agent's deployment.version, when there is one. Compare it with what is deployed now to see whether the agent was redeployed."`
+	EndpointURL       string          `json:"endpointUrl,omitempty" jsonschema:"The root agent's deployment.endpoint.url, when there is one."`
+	EndpointName      string          `json:"endpointName,omitempty" jsonschema:"The root agent's deployment.endpoint.name (for Databricks the serving endpoint name), when there is one."`
+	PlatformName      string          `json:"platformName,omitempty" jsonschema:"Platform recorded in the document (for example DATABRICKS), when there is one."`
+	AgentCount        int             `json:"agentCount,omitempty" jsonschema:"Number of agents in the document."`
+	ToolCount         int             `json:"toolCount,omitempty" jsonschema:"Number of tools in the document."`
+	Document          json.RawMessage `json:"document,omitempty" jsonschema:"The full scan document, only when includeDocument was true."`
 }
 
 // NewTool returns the registered tool.
@@ -77,7 +77,7 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"By default only a small summary comes back; set includeDocument=true to also get the full scan document, which can be large. " +
 			"'Newest' means the most recently confirmed state; it is not necessarily the version currently deployed. " +
 			"A not_found status is an answer (nothing recorded yet), not a fault. It only reads. " +
-			"Note: requires permission to read agent scans (scope aigovernance.guardian.fingerprint-read).",
+			"Note: requires permission to read agent scans.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		TypeSchemas: typeSchemas(),
@@ -95,30 +95,30 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			}, nil
 		}
 
-		fingerprint, err := clients.GetLatestAgentFingerprint(ctx, collibraClient, aiAgentID)
+		state, err := clients.GetLatestAgentScanState(ctx, collibraClient, aiAgentID)
 		if err != nil {
 			return failure(err), nil
 		}
-		return success(fingerprint, input.IncludeDocument), nil
+		return success(state, input.IncludeDocument), nil
 	}
 }
 
-func success(fingerprint *clients.AgentFingerprint, includeDocument bool) Output {
+func success(state *clients.AgentScanState, includeDocument bool) Output {
 	out := Output{
-		Status:             StatusSuccess,
-		FingerprintID:      fingerprint.ID,
-		ExternalID:         fingerprint.ExternalID,
-		ContentHash:        fingerprint.ContentHash,
-		FingerprintVersion: fingerprint.FingerprintVersion,
-		ParserVersion:      fingerprint.ParserVersion,
-		ScanCount:          fingerprint.ScanCount,
-		FirstSeenOn:        fingerprint.FirstSeenOn,
-		LastSeenOn:         fingerprint.LastSeenOn,
+		Status:          StatusSuccess,
+		StateID:         state.ID,
+		ExternalID:      state.ExternalID,
+		ContentHash:     state.ContentHash,
+		DocumentVersion: state.DocumentVersion,
+		ParserVersion:   state.ParserVersion,
+		ScanCount:       state.ScanCount,
+		FirstSeenOn:     state.FirstSeenOn,
+		LastSeenOn:      state.LastSeenOn,
 	}
-	summarize(&out, fingerprint.Document)
-	out.Message = fmt.Sprintf("Collibra's newest recorded state for this agent (content hash %s) was last confirmed on %s, after %d scan(s).", fingerprint.ContentHash, fingerprint.LastSeenOn, fingerprint.ScanCount)
+	summarize(&out, state.Document)
+	out.Message = fmt.Sprintf("Collibra's newest recorded state for this agent (content hash %s) was last confirmed on %s, after %d scan(s).", state.ContentHash, state.LastSeenOn, state.ScanCount)
 	if includeDocument {
-		out.Document = fingerprint.Document
+		out.Document = state.Document
 	}
 	return out
 }

@@ -24,7 +24,7 @@ Call `apply_latest_rules` with the AI Agent id and `confirm` false. It changes n
 After the customer's clear yes for what was shown, call `apply_latest_rules` once with `confirm` true. Say: "Collibra has started. While it works, I'll get the next step ready."
 
 - **403:** no permission. A message for the administrator (`references/verify-and-diagnose.md`); never retried, even after "try again".
-- **404 agent not found:** Collibra may not have finished adding the agent. Check the fingerprint status, wait, and ask again before the next try.
+- **404 agent not found:** Collibra may not have finished adding the agent. Check the scan status, wait, and ask again before the next try.
 - **A time-out or server error:** read `get_agent_guardian_status` first. Call again only if it shows the rules didn't start applying (the latest run is older than your call), and only once.
 
 The result has a state and a time, never an id. Don't mention a job or any id to the customer.

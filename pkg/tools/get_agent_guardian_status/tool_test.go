@@ -70,7 +70,7 @@ func TestGetAgentGuardianStatus_PassesTheBlocksThroughWithoutTheJobID(t *testing
 	if out.Status != get_agent_guardian_status.StatusSuccess || len(out.AbsentBlocks) != 0 {
 		t.Fatalf("unexpected output: %+v", out)
 	}
-	if out.AIAgent.Name != "support_triage_agent" || out.Fingerprint.AIAgentVersion.Name != "support_triage_agent_v1" ||
+	if out.AIAgent.Name != "support_triage_agent" || out.AgentScan.AIAgentVersion.Name != "support_triage_agent_v1" ||
 		len(*out.Contracts) != 2 || (*out.Contracts)[0].Layer != "GLOBAL" ||
 		out.Compilation.Status != "STALE" || out.Compilation.StaleBecause[0] != "CONTRACT_VERSION_CHANGED" ||
 		out.Compilation.LatestJob.State != "COMPLETED" || out.Compilation.LatestBundle.Version != 2 ||
@@ -82,10 +82,27 @@ func TestGetAgentGuardianStatus_PassesTheBlocksThroughWithoutTheJobID(t *testing
 	if strings.Contains(string(encoded), jobID) {
 		t.Errorf("the job id must not be returned: %s", encoded)
 	}
-	for _, field := range []string{`"staleBecause"`, `"latestJob"`, `"latestBundle"`, `"activeVersionId"`, `"lastReceivedOn"`, `"observedBundle"`, `"agentFingerprintId"`, `"contractVersionIds"`} {
+	for _, field := range []string{`"staleBecause"`, `"latestJob"`, `"latestBundle"`, `"activeVersionId"`, `"lastReceivedOn"`, `"observedBundle"`, `"agentScanStateId"`, `"contractVersionIds"`} {
 		if !strings.Contains(string(encoded), field) {
 			t.Errorf("field %s missing from the output: %s", field, encoded)
 		}
+	}
+}
+
+func TestGetAgentGuardianStatus_UsesItsOwnNamesForTheScan(t *testing.T) {
+	stale := strings.Replace(overview, `["CONTRACT_VERSION_CHANGED"]`, `["CONTRACT_VERSION_CHANGED", "FINGERPRINT_CHANGED"]`, 1)
+	f := newFakeGuardian(t, http.StatusOK, stale)
+	out := run(t, f, aiAgentID)
+
+	if got := out.Compilation.StaleBecause; !slices.Equal(got, []string{"CONTRACT_VERSION_CHANGED", "SCAN_CHANGED"}) {
+		t.Errorf("staleBecause = %v, want the scan reason renamed", got)
+	}
+	encoded, _ := json.Marshal(out)
+	if strings.Contains(strings.ToLower(string(encoded)), "fingerprint") {
+		t.Errorf("the output must use the tool's own names, not Collibra's wire names: %s", encoded)
+	}
+	if !strings.Contains(string(encoded), `"scan":`) {
+		t.Errorf("the scan block is missing: %s", encoded)
 	}
 }
 

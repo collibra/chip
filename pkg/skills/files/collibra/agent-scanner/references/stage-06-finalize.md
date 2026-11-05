@@ -1,6 +1,6 @@
 # Stage 06: Finalize
 
-Turn the extraction into the complete fingerprint document. Load `references/finalize-procedure.md` and `references/validation-rules.md` with this stage.
+Turn the extraction into the complete scan document. Load `references/finalize-procedure.md` and `references/validation-rules.md` with this stage.
 
 If Stage 02 chose a scan from the stored document (`redeployed`, or `unchanged` with a send asked for) and the stored scan passed the check below, `agent_scan.json` is the known document with only its unhashed fields set, as that file describes. You still build the program and pass the self-check below (Steps 1 and 2), and you run it on that document to confirm it is valid and its hashes recompute (Step 3 as a check, not as a rewrite); then go to Step 5.
 

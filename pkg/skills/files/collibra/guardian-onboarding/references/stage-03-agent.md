@@ -5,7 +5,7 @@ Make sure Collibra knows the agent's current version, and get its AI Agent id an
 **Tools:** `list_scanned_agents`, `get_latest_agent_scan`, `get_agent_guardian_status`, `get_asset_details`; the hand-off to `collibra/agent-scanner` with `load_collibra_skill`.
 
 **Before** (by depth):
-- New agent: "Next, I'll read your agent's code and describe it to Collibra: its models, instructions and tools. Collibra calls this description a fingerprint."
+- New agent: "Next, I'll read your agent's code and describe it to Collibra: its models, instructions and tools. Collibra calls this an agent scan."
 - Known agent: "Collibra already knows `<agent>` (version `<n>`). I'll check whether your code changed since then."
 
 ## Step 1: Decide whether a scan is needed
@@ -23,18 +23,18 @@ Tell the customer: "I'll now describe your agent to Collibra. You'll see exactly
 
 If the scanner reports that only the deployment changed and the code didn't, give the same explanation as in step 1 and let the customer decide at the scanner's own question. Don't recommend either answer.
 
-When the scanner ends, reload `references/stage-00-security-and-scope.md` if it is no longer in your context, and come back here. Keep what the scan returned: the external id it was sent with, the scan id and the fingerprint id. If nothing was sent, say so, and continue only if Collibra already knows the agent.
+When the scanner ends, reload `references/stage-00-security-and-scope.md` if it is no longer in your context, and come back here. Keep what the scan returned: the external id it was sent with, the scan id and the state id (`stateId`). If nothing was sent, say so, and continue only if Collibra already knows the agent.
 
 ## Step 3: Wait for Collibra
 
 1. Check `list_scanned_agents` with `sourceSystem` and `externalId` from the id the scan was sent with, until the agent has an `aiAgentId`. Between checks, if you can run commands, wait in the shell (`sleep 60`) rather than calling again straight away. "Collibra is still adding your agent. This usually takes under a minute. I'll keep checking."
-2. Then check `get_agent_guardian_status` with that id, the same way, until `fingerprint.status` is `COMPLETED` or `FAILED`. `FAILED` carries `failureMessage`: say it plainly (`references/verify-and-diagnose.md`).
+2. Then check `get_agent_guardian_status` with that id, the same way, until `scan.status` is `COMPLETED` or `FAILED`. `FAILED` carries `failureMessage`: say it plainly (`references/verify-and-diagnose.md`).
 3. At most one short update a minute. After five minutes without an agent id, follow the diagnosis in `references/verify-and-diagnose.md`.
 
 ## Step 4: Check
 
 - The AI Agent id is known.
-- `fingerprint.aiAgentVersion` names the newest version, and its `fingerprint.id` equals the fingerprint id the scan returned. If no scan was sent, the newest version is the one Collibra holds.
+- `scan.aiAgentVersion` names the newest version, and its `scan.id` equals the `stateId` the scan returned. If no scan was sent, the newest version is the one Collibra holds.
 
 ## Step 5: Links
 

@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	importedAgentsPath   = "/rest/guardianFingerprint/v1/importedAgents"
-	latestFingerprintFmt = "/rest/guardianFingerprint/v1/fingerprints/by/aiAgent/%s"
+	importedAgentsPath = "/rest/guardianFingerprint/v1/importedAgents"
+	latestAgentScanFmt = "/rest/guardianFingerprint/v1/fingerprints/by/aiAgent/%s"
 )
 
 // ImportedAgent is one agent Guardian has imported as an AI Agent asset.
@@ -30,18 +30,18 @@ type ImportedAgentPage struct {
 	NextCursor string          `json:"nextCursor,omitempty"`
 }
 
-// AgentFingerprint is one distinct state of one agent, with its document.
-type AgentFingerprint struct {
-	ID                 string          `json:"id"`
-	ExternalID         string          `json:"externalId"`
-	AIAgentID          string          `json:"aiAgentId,omitempty"`
-	ContentHash        string          `json:"contentHash"`
-	FingerprintVersion string          `json:"fingerprintVersion"`
-	ParserVersion      string          `json:"parserVersion"`
-	ScanCount          int64           `json:"scanCount"`
-	FirstSeenOn        string          `json:"firstSeenOn"`
-	LastSeenOn         string          `json:"lastSeenOn"`
-	Document           json.RawMessage `json:"document"`
+// AgentScanState is one distinct state of one agent, with its document.
+type AgentScanState struct {
+	ID              string          `json:"id"`
+	ExternalID      string          `json:"externalId"`
+	AIAgentID       string          `json:"aiAgentId,omitempty"`
+	ContentHash     string          `json:"contentHash"`
+	DocumentVersion string          `json:"fingerprintVersion"`
+	ParserVersion   string          `json:"parserVersion"`
+	ScanCount       int64           `json:"scanCount"`
+	FirstSeenOn     string          `json:"firstSeenOn"`
+	LastSeenOn      string          `json:"lastSeenOn"`
+	Document        json.RawMessage `json:"document"`
 }
 
 // ListImportedAgents reads one page of the agents imported from a source
@@ -65,20 +65,20 @@ func ListImportedAgents(ctx context.Context, collibraHttpClient *http.Client, so
 	return &page, nil
 }
 
-// GetLatestAgentFingerprint reads the newest state Guardian holds for an AI
+// GetLatestAgentScanState reads the newest state Guardian holds for an AI
 // Agent asset, with its document.
-func GetLatestAgentFingerprint(ctx context.Context, collibraHttpClient *http.Client, aiAgentID string) (*AgentFingerprint, error) {
-	slog.InfoContext(ctx, fmt.Sprintf("Reading latest agent fingerprint of AI Agent: %s", aiAgentID))
+func GetLatestAgentScanState(ctx context.Context, collibraHttpClient *http.Client, aiAgentID string) (*AgentScanState, error) {
+	slog.InfoContext(ctx, fmt.Sprintf("Reading latest agent scan of AI Agent: %s", aiAgentID))
 
-	var fingerprint AgentFingerprint
-	path := fmt.Sprintf(latestFingerprintFmt, url.PathEscape(aiAgentID))
-	if err := getAgentScanJSON(ctx, collibraHttpClient, path, &fingerprint); err != nil {
+	var state AgentScanState
+	path := fmt.Sprintf(latestAgentScanFmt, url.PathEscape(aiAgentID))
+	if err := getAgentScanJSON(ctx, collibraHttpClient, path, &state); err != nil {
 		return nil, err
 	}
-	if fingerprint.ID == "" {
-		return nil, errors.New("Collibra answered success but the response did not contain a fingerprint")
+	if state.ID == "" {
+		return nil, errors.New("Collibra answered success but the response did not contain an agent scan")
 	}
-	return &fingerprint, nil
+	return &state, nil
 }
 
 // getAgentScanJSON runs one read request and decodes the JSON answer. A read
@@ -113,13 +113,13 @@ func getAgentScanJSON(ctx context.Context, collibraHttpClient *http.Client, path
 func (e *AgentScanAPIError) ReadFailure() (message, guidance string) {
 	switch {
 	case e.StatusCode == http.StatusNotFound:
-		return "Collibra has no scan for this AI Agent asset: it was never fingerprinted here, or the id is not an AI Agent asset.",
+		return "Collibra has no scan for this AI Agent asset: it was never scanned here, or the id is not an AI Agent asset.",
 			"This is an answer, not a fault: treat the agent as having no earlier scan and continue without one."
 	case e.StatusCode == http.StatusUnauthorized:
 		return "Collibra did not accept the sign-in for this read (HTTP 401).",
 			"Do not retry. Tell the customer the earlier scan could not be looked up, carry on without it, and mention that signing in to Collibra again may fix it."
 	case e.StatusCode == http.StatusForbidden:
-		return "Collibra refused this read for the current user or environment (HTTP 403); reading scans needs permission to read fingerprints.",
+		return "Collibra refused this read for the current user or environment (HTTP 403); reading scans needs permission to read agent scans.",
 			"Do not retry. Tell the customer the earlier scan could not be looked up and carry on without it."
 	}
 	return fmt.Sprintf("Collibra could not answer the read (HTTP %d).", e.StatusCode),
