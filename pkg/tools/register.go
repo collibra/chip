@@ -23,6 +23,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/generate_dq_rule_sql"
 	"github.com/collibra/chip/pkg/tools/get_assessment"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
+	"github.com/collibra/chip/pkg/tools/get_asset_operating_model"
 	"github.com/collibra/chip/pkg/tools/get_business_term_data"
 	"github.com/collibra/chip/pkg/tools/get_column_semantics"
 	"github.com/collibra/chip/pkg/tools/get_context_specification"
@@ -76,6 +77,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, discover_data_assets.NewTool(client))
 	toolRegister(server, toolConfig, discover_business_glossary.NewTool(client))
 	toolRegister(server, toolConfig, get_asset_details.NewTool(client, toolConfig.IsExperimentalEnabled(ContextSpecificationsFeature)))
+	toolRegister(server, toolConfig, get_asset_operating_model.NewTool(client))
 	toolRegister(server, toolConfig, search_asset_keyword.NewTool(client))
 	toolRegister(server, toolConfig, search_data_classes.NewTool(client))
 	toolRegister(server, toolConfig, list_asset_types.NewTool(client))
