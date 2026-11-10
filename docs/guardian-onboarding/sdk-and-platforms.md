@@ -90,8 +90,10 @@ the install-once way.
 
 **No versions in the skill.** The SDK is updated independently. The skill reads the wheels the customer downloaded: their
 names and each wheel's `Requires-Dist` and `Requires-Python`. It builds the install line from them, and stops with a
-clear message when a Collibra dependency wheel is missing. Never install from a source archive (`.tar.gz`): installing
-one can run code.
+clear message when a Collibra dependency wheel is missing. It shows the customer the version it found and asks
+whether that's the latest on the private preview portal, because it can't see the portal itself. How customers get the
+SDK at GA isn't decided yet, so this question and every mention of the portal in the skill change then. Never install
+from a source archive (`.tar.gz`): installing one can run code.
 
 ### The SDK interface the skill relies on
 

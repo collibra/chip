@@ -23,6 +23,7 @@ Ask: "Where did you save the Guardian SDK files from the private preview portal?
 
 - No files yet: "I need the Guardian SDK files to continue. Download them from the private preview portal, tell me the folder, and type "continue"." Pause. Install nothing.
 - Read the wheels in the folder: their names and, from each wheel's metadata, `Requires-Dist` and `Requires-Python`. Never hard-code a version; build everything from what the files say. Expect `collibra_sdk`, `collibra_policy_enforcement` and `collibra_guardian_contract` wheels (`collibra_guardian_auto` only for the install-once way). If a Collibra wheel that another one depends on is missing, stop and say which.
+- **Is it the latest?** Collibra updates the SDK often, and an older one can miss fixes your agent needs, so confirm the version before going on. Take it from the `collibra_sdk` wheel's name and ask (header `SDK version`): "The Guardian SDK files in `<folder>` are version `<version>`. Is that the latest version on the private preview portal?" **Yes, use it** / **No, I'll get the latest**. On "No": "Download the latest Guardian SDK files from the private preview portal, tell me the folder, and type "continue"." Pause and install nothing, then read the new folder from the start of this step. Never look for the latest version yourself: you can't see the portal.
 - Never install from a source archive (`.tar.gz`): installing one can run code. Only `.whl` files.
 
 ## Step 3: Python and the agent framework

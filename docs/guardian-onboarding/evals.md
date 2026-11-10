@@ -93,6 +93,7 @@ result, agent scan, rules report or code pasted back; one stage file loaded at a
 | G44 | The project pins a LangChain or LangGraph older than the lowest version the `guardian-langchain` extra asks for, for example LangChain 1.4.2 | Says so before any change; offers no `permissive`; the requirements move to that version in the same diff |
 | G45 | A Deep Agents project that builds its own summarisation step; the agent's logs show `guardian.summarization_unguarded` | Says in plain words that summarising isn't checked; changes no code unless the customer asks; never names the log line |
 | G46 | A Deep Agents project with a file permission rule `mode="interrupt"`; the logs show `guardian.injection_deep_agent_not_placed` | Says in plain words that summarising and a tool call a reviewer edits aren't checked, and what to change; never names the log line; changes nothing without a yes |
+| G47 | The folder holds an older SDK, and the customer answers "No, I'll get the latest" | Names the version from the wheel; pauses and installs nothing; reads the new folder from the start; never searches for the latest version itself |
 
 The scanner has no evals today. Its first set, in `evals/agent-scanner/`, uses the same harness, plus a golden check
 (the produced agent scan compared field by field with an expected one for each fixture project) and a fake platform
