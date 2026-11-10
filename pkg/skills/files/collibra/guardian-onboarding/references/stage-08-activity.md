@@ -5,11 +5,11 @@ Check that Collibra can read the agent's activity, and, after the deploy, that t
 **Tools:** `get_agent_guardian_status`; for the optional step 3, `get_agent_rules_report` and a read-only look where the agent's records go.
 
 **Before** (by depth):
-- New: "Step 7 of 8: let Guardian see your agent's activity. Guardian records what your agent does in Collibra, so you can see any rules it broke on the agent's **Guardian** tab. For that, Collibra needs to read your agent's activity in Databricks. A Collibra administrator connects the two once; I'll check whether that's done."
+- New: "Step 7 of 8: let Guardian see your agent's activity. Guardian records what your agent does in Collibra, so you can see any rules it broke on the agent's **Guardian** tab. For that, Collibra needs to read your agent's activity in Databricks. A Collibra administrator adds one Databricks connection on Collibra Edge, once; I'll check whether that's done."
 - Knows Collibra: the same, the first time; otherwise "Step 7 of 8: check that Collibra reads your agent's activity."
 - Uses Guardian: nothing before the step.
 
-**Before:** "Last, Guardian needs to read your agent's activity in Databricks. A Collibra administrator connects Collibra to your Databricks workspace once."
+**Before:** "Last, Guardian needs to read your agent's activity in Databricks. A Collibra administrator adds one Databricks connection on a running Collibra Edge site, once. Guardian sets up the rest itself."
 
 ## Step 1: Read the connection status
 
@@ -18,13 +18,14 @@ Check that Collibra can read the agent's activity, and, after the deploy, that t
 | Collection | What it means | Do |
 |---|---|---|
 | `OK` | Collibra reads the agent's activity | Step 2 |
-| `NOT_COLLECTED`, reason `NO_CONNECTION` | Collibra isn't connected to the Databricks workspace yet | The administrator message below; pause for "continue" |
-| reason `SOURCE_NOT_CONNECTED` | Collibra is connected to a different workspace | The administrator message, naming the agent's workspace id (from its external id) |
+| `NOT_COLLECTED`, no reason | Collibra hasn't checked for this agent's activity yet, as just after the rules are first applied | "Collibra hasn't checked yet. It checks about every 15 minutes." Offer to check again later |
+| `NOT_COLLECTED`, reason `NO_CONNECTION` | Collibra Edge has no Databricks connection yet | The administrator message below; pause for "continue" |
+| reason `SOURCE_NOT_CONNECTED` | Collibra has a Databricks connection, but hasn't read this workspace through it yet | In the half hour after the administrator added the connection, this is expected: Collibra first sees the connection at a check, then reads the workspace by the check after. Say so, and don't send a message. If it stays: a message for the administrator to check that the connection is for workspace `<workspace id>` (from the agent's external id) and that its Edge site is running |
 | reason `AGENT_NOT_FOUND` | The agent wasn't found in the connected workspace | The checklist: is the agent's id right for how it's deployed (App or serving endpoint); is it deployed yet; does it have an MLflow experiment; do two endpoints serve the same model? |
 | `LAGGING` | Collibra reads it, with a delay | Say so; nothing to do |
 | `FAILING` | Reading the activity fails | `references/verify-and-diagnose.md`, then the support details |
 
-The administrator message: "Collibra isn't connected to your Databricks workspace yet. Here's a message you can send to your Collibra administrator:" then, in a code block: "Hi, I'm setting up Collibra Guardian for our AI agent `<agent>` (`<agent link>`). Could you connect Collibra to our Databricks workspace `<workspace id>` so Guardian can read the agent's activity?" Add "Learn more:" and the setting-up page (`references/documentation.md`). Then: "When the connection is in place, type "continue"." On "continue", read the status again once.
+The administrator message: "Collibra isn't connected to your Databricks workspace yet. Here's a message you can send to your Collibra administrator:" then, in a code block: "Hi, I'm setting up Collibra Guardian for our AI agent `<agent>` (`<agent link>`). Could you add a Databricks connection for our workspace `<workspace id>` on a running Collibra Edge site, so Guardian can read the agent's activity? Only the connection is needed: Guardian sets up the rest on that Edge site itself." Never ask the administrator to set up anything else on Edge, because Guardian adds what reads the activity for each Databricks connection it finds. Add "Learn more:" and the setting-up page (`references/documentation.md`). Then: "When the connection is in place, type "continue"." On "continue", read the status again once. Collibra looks for new connections about every 15 minutes, so if it still says `NO_CONNECTION` or now says `SOURCE_NOT_CONNECTED`, don't send a message: "Collibra checks for new connections regularly, about every 15 minutes, so it can take up to half an hour after the connection is added before it reads your agent's activity. I can check again later, or you can come back with "continue setting up Guardian"."
 
 ## Step 2: After the deploy
 
@@ -56,7 +57,7 @@ Ask: "Shall I look at your agent's recent runs in `<where>` to see what Guardian
 After a yes, in one read-only command run from the project with the project's Python:
 
 - Read at most the latest 20 runs.
-- Keep only Guardian's decision: whether it stopped or flagged, where (a tool call or a reply), and the id of the check that decided. Count per check and decision.
+- Keep only Guardian's decision: whether it stopped or flagged, where (a tool call or a reply), and the id of the check that decided. A decision whose `collibra.guardian.purpose` is `summarization` is about the step that summarises a long conversation, so name that step as where. Count per check and decision.
 - **Print only the counts.** Never print, save or quote a run's inputs, outputs or messages: they hold real conversations. Never write a run or a log to a file, not even a temporary one.
 
 Match each check id to its rule with the project's rules file (`spec.yaml`) and `get_agent_rules_report` (the rule's statement and contract). Then show one table:

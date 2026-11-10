@@ -110,17 +110,24 @@ Agree this list with the SDK owners, so a change to any item is flagged before a
   `guardian.no_policy_bundle`;
 - a rules file that is a zip holding `spec.yaml` (or that folder unzipped), whose `spec_bundle_id` is the file's id;
 - Python 3.12 or later; the framework version check, which with `strict` stops the agent before it runs when LangChain
-  or LangGraph is outside the tested range (in the documentation's SDK settings page).
+  or LangGraph is outside the tested range (in the documentation's SDK settings page);
+- the lowest LangChain, LangGraph and `langgraph-prebuilt` versions in the `guardian-langchain` extra's `Requires-Dist`;
+- `create_guarded_agent` and `create_guarded_deep_agent`, the constructors the skill offers when the customer doesn't
+  want injection;
+- the log lines `guardian.summarization_unguarded`, `guardian.injection_deep_agent_not_placed` and
+  `guardian.placed_by_hand`, the trace field `collibra.guardian.run.unguarded`, and `collibra.guardian.purpose` on a decision.
 
 ## Attaching Guardian
 
-The SDK offers six ways. Injection (ways 4 to 6) patches LangChain's `create_agent`, so it covers `create_agent` and
-Deep Agents; a hand-built LangGraph `StateGraph` needs way 3.
+The SDK offers six ways. Injection (ways 4 to 6) patches LangChain's `create_agent`, and from SDK 0.8 Deep Agents'
+`create_deep_agent` too, so it covers both; a hand-built LangGraph `StateGraph` needs way 3. Injection places Guardian
+as way 2 does, so it also checks the step that summarises a long conversation. Way 1 doesn't, and logs
+`guardian.placed_by_hand`, so when the customer wants a way that changes the scan, the skill offers way 2.
 
 | # | Way | Changes the agent's scan? |
 |---|---|---|
 | 1 | `GuardianMiddleware()` in `create_agent(middleware=[...])` | Yes: middleware is part of the scan |
-| 2 | `create_guarded_agent(...)` | Yes: the constructor is part of the scan |
+| 2 | `create_guarded_agent(...)`, or `create_guarded_deep_agent(...)` for Deep Agents | Yes: the constructor is part of the scan |
 | 3 | `guard_graph` and node wrappers | Probably; check before relying on it |
 | 4 | `start_injection()` as the first line | No |
 | 5 | The launcher, `python -m collibra_sdk.guardian.launch <file>` | No |
@@ -134,9 +141,9 @@ start_injection()                     # first, before anything imports create_ag
 import collibra_sdk.guardian.mlflow   # puts Guardian's decisions on the MLflow traces
 ```
 
-Cautions the skill handles: way 4 does nothing, with no error, if `create_agent` was imported first, so the lines go at
-the very top. Way 6 never stops a process when it fails, so the agent can run unguarded without anyone noticing. In both
-cases the skill checks from Collibra afterwards that the latest rules file is running.
+Cautions the skill handles: way 4 does nothing, with no error, if `create_agent` or `create_deep_agent` was imported
+first, so the lines go at the very top. Way 6 never stops a process when it fails, so the agent can run unguarded
+without anyone noticing. In both cases the skill checks from Collibra afterwards that the latest rules file is running.
 
 ## What changes in the customer's project
 
@@ -153,10 +160,18 @@ The local environment gets the same packages with `pip install --find-links <fol
 Until the rules file exists, the SDK finds none and allows everything, which is harmless before the deploy, as long as
 no setting names the file yet.
 
-**Framework versions.** Before showing the diff, the skill compares the project's LangChain and LangGraph versions with
-the tested ranges in the documentation. Outside them, the agent wouldn't start, so it says so and offers (a) moving to a
-tested version, or (b) `framework_version_policy = "permissive"`, which only logs a warning. A hand-built LangGraph
-graph isn't covered by ways 4 to 6, so the skill offers way 3 instead.
+**Framework versions.** Before showing the diff, the skill checks the project's versions at both ends:
+
+- **The lowest:** LangChain, LangGraph and `langgraph-prebuilt` against the lowest versions the wheel's
+  `guardian-langchain` extra asks for. Installing the SDK moves the project up to them anyway, and fails on a pin below
+  them, so the skill offers no choice and moves the requirements. SDK 0.8 raised LangChain's to 1.4.5, the LangChain
+  release whose `SummarizationMiddleware` takes the `summarizer` the SDK checks the summarising step through. The tested
+  range compares only major and minor, so 1.4.0 to 1.4.4 pass the range but not the extra.
+- **The highest:** LangChain and LangGraph against the tested ranges in the documentation. The wheel names no highest
+  version. Newer than the range, the agent wouldn't start, so the skill says so and offers (a) moving to a tested
+  version, or (b) `framework_version_policy = "permissive"`, which only logs a warning.
+
+A hand-built LangGraph graph isn't covered by ways 4 to 6, so the skill offers way 3 instead.
 
 ## When the rules go out of date, and how a new rules file reaches the agent
 
