@@ -4,13 +4,6 @@ Download the agent's latest rules file in the customer's environment, check it i
 
 **Tools:** `get_agent_rules_file`. Local commands.
 
-**Before** (by depth):
-- New: "Step 6 of 8: save the rules and deploy. Collibra has made a rules file: the checks for your agent in one file. I'll save it where the Guardian SDK in your agent reads it, and check it's exactly the file Collibra made. Your agent reads it when it starts, so after this you deploy or restart the agent, and from then on Guardian applies your rules."
-- Knows Collibra: the same, the first time "rules file" comes up; otherwise "Step 6 of 8: save the rules file and deploy."
-- Uses Guardian: nothing before the step.
-
-**Before:** "I'll save your agent's rules file to `<path>`, where the Guardian SDK will find it, and check it's the file Collibra made."
-
 If the client can't run code or the customer has no code, skip to step 6 (the hand-off note), with the rules file's id and the agent's link.
 
 ## Step 1: Get the file's details
@@ -81,7 +74,7 @@ Write the rules file id to the state file. Tell the customer the full path where
 |---|---|
 | Locally, or from a notebook | Restart the agent's process |
 | Databricks App | Upload the App's source with the new `policy/` folder and settings, then `databricks apps deploy`. A few minutes |
-| Model Serving | Log and register a new model version with the file in `code_paths`, then deploy it to the endpoint. Up to half an hour. This makes a new model version; don't send a new scan only because of it |
+| Model Serving | Log and register a new model version with the file in `code_paths` then deploy it to the endpoint with `COLLIBRA_GUARDIAN_ENFORCEMENT_MODE` set to the chosen mode and an MLflow experiment set (step 1 put both in the deploy script; without one, give them as part of these steps). Up to half an hour. This makes a new model version; don't send a new scan only because of it |
 | A pipeline | Commit the changed files; the pipeline deploys |
 
 Before giving commands for the platform's command-line tool, follow `shared/platform-prerequisites.md`: check the tool, offer to install it only if it's missing, have the customer sign in and choose the profile. Give the exact commands with the chosen profile. The customer runs them (in Claude Code, typing `! <command>` runs it in the session). Without the tool, give the steps in the platform's web interface, or put them in the hand-off note for whoever deploys.

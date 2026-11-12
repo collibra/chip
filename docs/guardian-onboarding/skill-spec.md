@@ -14,8 +14,8 @@ Customers in the Guardian private preview, new or existing:
 - new to Collibra, new to AI Command Center, or a daily Guardian user;
 - a governance person (rules first, may not read code) or a technical person (agent first).
 
-The skill doesn't make the customer choose a category. It looks at what exists, asks one question about how much
-explanation they want, and recommends one next step (see [Start](#start-look-ask-once-recommend)).
+The skill doesn't make the customer choose a category or say how much they know. It looks at what exists and recommends
+one next step, with the same short explanations for everyone (see [Start](#start-look-and-recommend)).
 
 ## Structure (same conventions as the two Guardian skills)
 
@@ -28,7 +28,7 @@ pkg/skills/files/collibra/guardian-onboarding/
   references/verify-and-diagnose.md         after-action checks and failure causes (verification-and-diagnosis.md)
     references/support-details.md             what the customer shares with support (ids only)
   references/documentation.md               every product documentation link, in one place (private preview today)
-  references/stage-01-start.md              look, ask once, recommend
+  references/stage-01-start.md              look and recommend
   references/stage-02-prepare-agent.md      platform prerequisites, Guardian SDK, project changes
   references/stage-03-agent.md              known agent, or hand off to collibra/agent-scanner; wait for Collibra
   references/stage-04-contracts.md          global first, then the agent's; hand off to collibra/agent-contract
@@ -95,7 +95,7 @@ Add the skill to the table in `SKILLS.md`, like the two Guardian skills.
   about to do. A rule can be enforced when it is specific enough to check in the moment." Never name internal systems
   (logging, monitoring, service names) to the customer.
 - **H8 One agent per run.**
-- **H9 Installs.** Install only the Guardian SDK files the customer downloaded from the private preview portal, and
+- **H9 Installs.** Install only the Guardian SDK files Collibra shared with the customer, and
   official vendor command-line tools and Python 3.12 from [sdk-and-platforms.md](sdk-and-platforms.md), and only after the customer
   agrees to the exact command shown.
 - **H10 Retries.** Retry automatically only where it's safe: reads, time-outs and server errors, and a write only when you
@@ -123,7 +123,7 @@ and four questions per call; each question has a header of 12 characters or fewe
 "(default)"; never "yes" as a default; free text in "Other"; a rejected form is never resent unchanged; without a
 question tool, ask in plain text exactly as the stage says.
 
-## Start: look, ask once, recommend
+## Start: look and recommend
 
 Stage 01. Wording in [wording.md](wording.md#start).
 
@@ -139,14 +139,11 @@ Stage 01. Wording in [wording.md](wording.md#start).
    - the current folder holds an AI agent (framework imports such as LangChain or LangGraph);
    - Collibra already knows that agent (`list_scanned_agents`), and its overview (`get_agent_guardian_status`);
    - which agent contracts exist (`list_agent_contracts`), the global one in particular.
-3. **One question, about explanation depth** (header `Experience`): new to it (default), knows Collibra but not
-   Guardian, already uses Guardian. It changes how much each stage explains, not which stages run. Keep the answer for
-   the whole conversation; "explain more" or "keep it short" changes it.
-4. **Recommend one next step** from what step 2 found, with the time it takes, then (header `Next step`) "Start with
+3. **Recommend one next step** from what step 2 found, with the time it takes, then (header `Next step`) "Start with
    this (default)" or "Show me what else I can do".
-5. **The menu, only if asked** (header `Get started`): set up Guardian for an agent; write or change agent contracts;
+4. **The menu, only if asked** (header `Get started`): set up Guardian for an agent; write or change agent contracts;
    update an agent Collibra already knows; check an agent's setup.
-6. **The plan:** the stages that apply, as a numbered list.
+5. **The plan:** the stages that apply, as a numbered list.
 
 ### Where is the agent's code?
 
@@ -206,7 +203,7 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 - **Tools:** none from chip. Local commands only.
 - **Does:** works out how the agent runs and is deployed, without blocking when the customer doesn't know
   ([sdk-and-platforms.md](sdk-and-platforms.md#when-the-customer-doesnt-know-how-the-agent-is-deployed)); asks where the customer saved the Guardian SDK
-  files from the private preview portal; reads their names and metadata (no versions hard-coded); checks Python and the
+  files Collibra shared with the customer; reads their names and metadata (no versions hard-coded); checks Python and the
   agent framework, including the LangChain and LangGraph versions against the documentation's tested ranges; prepares one
   diff with every project change from
   [sdk-and-platforms.md](sdk-and-platforms.md#what-changes-in-the-customers-project), with the mode the customer chose: record only, or stop the action (a short explanation of each, no
@@ -389,8 +386,8 @@ The documentation's own words, used with our plain explanation the first time: "
 
 ## Resuming
 
-The state file `<project>/collibra-guardian/setup-state.json` holds the project path, the agent id, version id, contract ids, rules-file id,
-the current stage and the explanation depth. "Continue setting up Guardian" in a new conversation reads it, reloads stage 00,
+The state file `<project>/collibra-guardian/setup-state.json` holds the project path, the agent id, version id, contract ids, rules-file id
+and the current stage. "Continue setting up Guardian" in a new conversation reads it, reloads stage 00,
 re-reads everything from Collibra, and asks any consent again.
 
 ## Support details

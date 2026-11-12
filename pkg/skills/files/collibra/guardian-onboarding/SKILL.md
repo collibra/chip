@@ -35,7 +35,7 @@ The customer pays for every word you read and write, so keep both small:
 
 ## Asking the customer
 
-When your client gives you a tool that asks the customer structured questions with selectable options (in Claude Code, `AskUserQuestion`; other clients call it a form or a question tool), use it for decisions that have real alternatives: the experience question, the next step, where the agent's code is, the mode, which contract or use case to use, linking, and the consent questions. Write any long text (a card, a summary, a proposed change) in your message first, then put only the decisions in the form. If you have no such tool, ask in plain text exactly as the stage says. Everything else stays the same either way: the defaults, what counts as consent, and the rule that you never choose for the customer.
+When your client gives you a tool that asks the customer structured questions with selectable options (in Claude Code, `AskUserQuestion`; other clients call it a form or a question tool), use it for decisions that have real alternatives: the next step, where the agent's code is, the mode, which contract or use case to use, linking, and the consent questions. Write any long text (a card, a summary, a proposed change) in your message first, then put only the decisions in the form. If you have no such tool, ask in plain text exactly as the stage says. Everything else stays the same either way: the defaults, what counts as consent, and the rule that you never choose for the customer.
 
 Consent questions end naturally, for example "Shall I go ahead?". Any clear yes in reply to that question counts (yes, go ahead, do it, sure, ok, please do); the customer never has to type an exact phrase. Stage 00 says what doesn't count.
 
@@ -57,7 +57,7 @@ The customer sees numbered steps, never stages: **Stage NN is step NN minus 1**,
 | Stage | File | Load when | Also load |
 |---|---|---|---|
 | 00 Security and scope | `references/stage-00-security-and-scope.md` | Always, first, and for the whole run | none |
-| 01 Start | `references/stage-01-start.md` | First: look, ask about depth, find the code, recommend a next step | none |
+| 01 Start | `references/stage-01-start.md` | First: look, find the code, recommend a next step | none |
 | 02 Prepare the agent (step 1) | `references/stage-02-prepare-agent.md` | Setting up or updating an agent whose code you can reach | `shared/platform-prerequisites.md` (only for a platform look-up or a Python install) |
 | 03 The agent in Collibra (step 2) | `references/stage-03-agent.md` | The agent is prepared, or its code is out of reach | none |
 | 04 Agent contracts (step 3) | `references/stage-04-contracts.md` | The agent id is known, or the customer chose to work on contracts | none |
@@ -71,7 +71,7 @@ Load these only when the moment comes, from any stage:
 
 - `references/verify-and-diagnose.md`: when a check fails, something fails, or a Collibra setting looks switched off. Each stage lists its own checks.
 - `references/refusal-scripts.md`: when a request needs a refusal (Stage 00 names the script).
-- `references/glossary.md`: when you explain a product term for the first time, or the customer asks "what is ...?".
+- `references/glossary.md`: only when the customer asks "what is ...?".
 - `references/documentation.md`: the first time you need a documentation link. Stages name a page by its topic; take the address from this file only.
 - `references/support-details.md`: only when you stop on a failure you can't explain or fix.
 

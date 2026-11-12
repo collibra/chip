@@ -74,7 +74,7 @@ from the documentation.
 
 ## The Guardian SDK
 
-The SDK isn't public and can't ship with chip, which is public. Customers download it from the private preview portal.
+The SDK isn't public and can't ship with chip, which is public. Collibra shares it with each customer; the skill never names where it comes from, because that changes at GA.
 It's four Python wheels, all pure Python, for Python 3.12 or later:
 
 | Wheel | Purpose | Needs from PyPI |
@@ -90,9 +90,10 @@ the install-once way.
 
 **No versions in the skill.** The SDK is updated independently. The skill reads the wheels the customer downloaded: their
 names and each wheel's `Requires-Dist` and `Requires-Python`. It builds the install line from them, and stops with a
-clear message when a Collibra dependency wheel is missing. It shows the customer the version it found and asks
-whether that's the latest on the private preview portal, because it can't see the portal itself. How customers get the
-SDK at GA isn't decided yet, so this question and every mention of the portal in the skill change then. Never install
+clear message when a Collibra dependency wheel is missing. When the project already has the SDK (wheels in
+`vendor/`, or the package installed in the project's environment), it uses that and only says which version; it asks
+for the folder only when there's none. How customers get the SDK at GA isn't decided yet, so the skill says only "the Guardian SDK files
+Collibra shared with you". Never install
 from a source archive (`.tar.gz`): installing one can run code.
 
 ### The SDK interface the skill relies on
@@ -270,8 +271,8 @@ that doesn't depend on the deployment and hand the rest over.
 | How it's identified | external id `databricks:<workspace id>:app/<app name>` | external id `databricks:<workspace id>:<catalog>.<schema>.<model>` |
 | SDK wheels | In the App's source (`vendor/`) and its requirements | In the model's `code_paths`; `pip_requirements` lists `./code/<wheel>` |
 | Rules file | Apps unzip every zip on deploy, so ship it unzipped in a folder and point the setting at the folder | `bundle.zip` in `code_paths`; build its path from the module's `__file__`, because the working directory isn't the model's folder. A wrong path fails quietly: every action is allowed |
-| Mode | `COLLIBRA_GUARDIAN_ENFORCEMENT_MODE=<monitor or enforce>` in `app.yaml`, or the settings file | The same, as an endpoint environment variable |
-| Traces | `MLFLOW_TRACKING_URI=databricks`, `MLFLOW_EXPERIMENT_ID` from the App's experiment resource | `ENABLE_MLFLOW_TRACING=true`, `MLFLOW_EXPERIMENT_ID` |
+| Mode | `COLLIBRA_GUARDIAN_ENFORCEMENT_MODE=<monitor or enforce>` in `app.yaml`, or the settings file | Only as an endpoint environment variable (`environment_vars` in `agents.deploy`): the settings file isn't deployed with the model, and without the variable the endpoint enforces. Step 1 adds it to the deploy script |
+| Traces | `MLFLOW_TRACKING_URI=databricks`, `MLFLOW_EXPERIMENT_ID` from the App's experiment resource | `ENABLE_MLFLOW_TRACING=true` and the experiment, both set by `agents.deploy` from the experiment active when it's called, so the deploy script sets one with `mlflow.set_experiment` |
 | Launcher (way 5) | Possible, in `app.yaml`'s `command` | Not possible: Databricks starts the model |
 | Redeploy | `databricks apps deploy`, a few minutes | Log and register a new model version, then deploy it, up to half an hour |
 

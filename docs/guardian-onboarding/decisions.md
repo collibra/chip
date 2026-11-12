@@ -8,12 +8,12 @@ From the design review on 2026-11-03, unless dated otherwise.
 |---|---|
 | Name | Guardian Onboarding, `collibra/guardian-onboarding` (2026-11-03). "Guardian Setup" was too close to Guardian Agents and the Guardian settings page. |
 | Which skill | A new skill drives the whole journey. The scanner and contract skills stay as they are and are called from it. |
-| Start | Look first, ask one question about explanation depth, recommend one next step; the menu only on request. Works for new and existing customers, governance and technical. |
+| Start | Look first and recommend one next step; the menu only on request. No question about how much the customer knows and no explanations unless asked: each step does its work and ends with its status and links to the Collibra assets, because the setup is a quickstart and the question and its explanations made it much slower. Works for new and existing customers, governance and technical. |
 | Mode | The customer chooses what Guardian does when a rule is broken: record only, or stop the action, each explained simply. "Record only" is offered first as the safer start; the skill always writes the choice, because the SDK's default is to stop. |
 | Collibra settings | The skill checks the AI Agent contracts and Guardian switches, explains what an off switch blocks, and guides an administrator or writes them a message, then continues. Payload collection is the company's choice and never pushed. |
 | Wording | Simple and meaningful, following the agent-contract skill's communication rules (wording.md). |
 | Order | Prepare the agent (SDK and wiring) first, then the scan, contracts (global first), the optional use case, apply the rules, save the rules file where the SDK reads it, deploy once, and the activity connection last. |
-| SDK | Mandatory, checked first, installed only with consent from the files the customer downloaded from the private preview portal. Versions are read from the files, never hard-coded. |
+| SDK | Mandatory, checked first, installed only with consent from the files Collibra shared with the customer, or the SDK already in the project. Versions are read from the files, never hard-coded. |
 | Reusing existing assets | When the skill finds an existing AI use case or agent contract that could fit, it shows it first (name, description, what it's linked to, link); the customer decides to use it or create a new one. |
 | Use case | Optional. Suggest similar existing ones by keyword search, or draft a name and description from the scan for the customer to edit; create and link only after the customer's yes. |
 | Linking | A contract is linked to the agent by the role name "complies to", unique on an AI Agent, with `edit_asset` as it is. A use case is linked with a small additive change to `edit_asset`: an optional `relationTypeId` (`...7109`), because no name for that link is unique on either asset (2026-11-04). A specialised contract that isn't linked to a known agent: the skill proposes to link it and, after the customer's yes, links it itself, checks it and gives the link. The customer links it by hand in Collibra only when they prefer it or the link fails. The contract skill makes the same offer after saving a new specialised contract when the agent is known. |
@@ -25,6 +25,7 @@ From the design review on 2026-11-03, unless dated otherwise.
 | No Guardian API changes | The Guardian APIs are released, so the skill works with them as they are (2026-11-03). When no rules file is made, it checks the likely causes in order: no contract, then contracts with no rules. After linking a use case it offers to apply the rules again itself. When collecting activity fails, or Guardian may be turned off, it gives the customer the settings guidance or the ids for support. |
 | Product documentation | The skill follows the private preview documentation and links to it rather than copying it, because it's still changing (skill-spec.md, "Product documentation"). All links live in one file, `references/documentation.md`, because the addresses will change at general availability. |
 | Rules-file path | No setting names the rules file before the file is there, because the SDK refuses to start when a named file is missing. The path and the file are written together in stage 07. |
+| Mode on Model Serving | Step 1 puts the mode in the deploy script as an endpoint environment variable, and sets an MLflow experiment, inside the same diff the customer already approves. The settings file isn't deployed with the model, so without the variable the endpoint enforces even when the customer chose Monitor, and without an experiment Collibra sees no activity. |
 | Platform command-line tools | Checked only when a step needs them (the deployment look-up, the deploy), never at the start. Installing, signing in and choosing the profile are optional; without the tool the setup continues and the deploy moves to the customer or the note for whoever deploys. |
 | Tools | Four platform-neutral tools. An Edge read tool was considered and dropped: the status's collection reason says what's missing. |
 | Activity connection | The administrator adds only a Databricks connection on a Collibra Edge site. No capability is created by hand: Guardian's collector pass, every 15 minutes (`worker.schedules.telemetryCollectorRuns` in the guardian-orchestrator Helm chart, no environment overrides it), creates one capability per Databricks connection on a healthy Edge site, once a Databricks agent has rules applied (`RunTelemetryCollectorsJob` in ai-governance-chi-services). Until it has read the workspace through a new connection, the status says `SOURCE_NOT_CONNECTED`, so the skill doesn't treat that as the wrong workspace right after the connection is added. |
@@ -66,7 +67,6 @@ Checked on 2026-11-03. The skill keeps its own steps for these until the documen
 
 - The documentation addresses at general availability: when they're known, update `references/documentation.md`.
 - Does the hosted Collibra MCP server (per-user OAuth) expose the skills and the Guardian tools, and when?
-- Does the private preview portal offer all four SDK wheels, not only `collibra-sdk`?
 - Gating: which capability flag, if any, for the Guardian tools and this skill before `main`.
 - The product's Contract tab tells customers to "update your SDK reference" with command-line steps; it should point to
   this assistant once it exists.
@@ -74,7 +74,7 @@ Checked on 2026-11-03. The skill keeps its own steps for these until the documen
 
 ## Before every PR
 
-- [ ] Take the latest Guardian SDK from the portal; install it in the fixture project; check every item of
+- [ ] Take the latest Guardian SDK; install it in the fixture project; check every item of
       [the SDK interface](sdk-and-platforms.md#the-sdk-interface-the-skill-relies-on) still holds; update the fixtures.
 - [ ] `go test -race ./...` and `golangci-lint run` pass.
 - [ ] `evals/guardian-onboarding/lint.sh` is clean, and the evals named in [evals.md](evals.md#when-to-run-them) pass, with the

@@ -14,7 +14,7 @@ The customer can ask "what is ...?" about anything at any time. Answer with the 
 | Enforce (stop it) | "Guardian applies your rules: it blocks the action, or changes it (for example, hides sensitive data), as your rules say. Your users see the effect straight away." |
 | Collecting payloads | "Keeping the conversation behind a flagged action, so you can see why it was flagged. Your company decides whether Collibra keeps it." |
 | Collibra Edge | "The Collibra component your administrator runs to connect Collibra to systems such as Databricks." |
-| Guardian SDK | "The Python package that lets Guardian check your agent. It comes from the private preview portal." |
+| Guardian SDK | "The Python package that lets Guardian check your agent. Collibra shares it with you." |
 | Agent scan | "A description of your agent's models, instructions and tools, read from its code. Collibra uses it to know your agent and to notice when it changes." |
 | Apply latest rules | "The button on your agent's **Contract** tab in Collibra that turns the agent contracts into a rules file for the agent's newest version. I can do the same for you." |
 | Allow, Flag, Deny, Escalate, Rewrite | "The documentation's names for what Guardian decided about an action. The page on how Guardian works explains each one." Then the link for that topic from `references/documentation.md`. |

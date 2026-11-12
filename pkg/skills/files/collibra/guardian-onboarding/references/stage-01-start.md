@@ -1,12 +1,12 @@
-# Stage 01: Start (look, ask once, recommend)
+# Stage 01: Start (look and recommend)
 
-Find out what exists, ask one question about how much explanation the customer wants, and recommend one next step. The customer never has to choose a category. This stage has no step number for the customer.
+Find out what exists and recommend one next step. The customer never has to choose a category, and is never asked how much they know (Stage 00, "No explanations"). This stage has no step number for the customer.
 
 ## Step 1: Opening
 
 Say, word for word:
 
-"I'll help you set up Collibra Guardian for your AI agents. Guardian checks what an agent does against rules you write in plain language, called agent contracts, and records any issues in Collibra. I'll ask before I change anything in Collibra or in your files. Let me check a few things first."
+"I'll set up Collibra Guardian for your agent. I'll ask before I change anything in Collibra or in your files."
 
 ## Step 2: Look, read-only, without asking
 
@@ -19,21 +19,6 @@ Say, word for word:
 - **Which agent contracts exist:** `list_agent_contracts`, the global one in particular (`layer` `GLOBAL`).
 
 A state file, `collibra-guardian/setup-state.json`, in the folder or the project the customer names means an earlier run: go to "Resuming" in the main file.
-
-## Step 3: One question, about explanation depth
-
-Header `Experience`: "How familiar are you with Collibra AI governance?"
-
-- **I'm new to it (default):** "I'll explain each step in a sentence before we do it."
-- **I know Collibra, but Guardian is new to me:** "I'll explain Guardian's terms the first time they come up."
-- **I already use Guardian:** "I'll keep it short: one line per step."
-
-Keep the answer for the whole conversation. It changes how much each step explains, not which steps run.
-
-Right after the answer, show the difference at once (Stage 00, "Depth of explanation"):
-- New: "Here's the way ahead, eight short steps: 1 prepare your agent, 2 add it to Collibra, 3 write its rules (agent contracts), 4 say what it's for (optional), 5 apply the rules, 6 save the rules and deploy, 7 let Guardian see its activity, 8 a summary with links. I'll explain each one as we go."
-- Knows Collibra: "Eight steps: prepare the agent, add it to Collibra, agent contracts, use case (optional), apply the rules, save and deploy, activity, summary."
-- Uses Guardian: nothing extra; go straight to the recommendation.
 
 ## Where is the agent's code?
 
@@ -50,7 +35,7 @@ The customer may start anywhere: their home folder, an unrelated repository, or 
 - **Anchor to the project:** the state file, the rules file, the SDK settings and the environment the SDK is installed into all live under the agent's project path, never the current folder.
 - **Coming back from another folder** with no state file here: "I don't see your Guardian setup in this folder. Which project were we working on?"
 
-## Step 4: Recommend one next step
+## Step 3: Recommend one next step
 
 From what step 2 found, with the time it takes:
 
@@ -62,7 +47,7 @@ From what step 2 found, with the time it takes:
 
 Then (header `Next step`): **Start with this (default)** / **Show me what else I can do**.
 
-## Step 5: The menu, only if asked
+## Step 4: The menu, only if asked
 
 Header `Get started`: "Here's what I can help with:"
 
@@ -71,7 +56,7 @@ Header `Get started`: "Here's what I can help with:"
 - **Update an agent Collibra already knows:** "Your agent's code or its rules changed, and you want Guardian to use the latest." Name the cause from `staleBecause` in plain words: `SCAN_CHANGED`, or new code since the last scan, means stages 02 (only what's missing) and 03, then 06 to 09; `CONTRACT_VERSION_CHANGED` or `GOVERNING_SET_CHANGED` means stages 06 to 09.
 - **Check an agent's setup:** "See what's in place, what's missing, and any issues." Read only: show the summary from Stage 09 with what is missing, then recommend the next step.
 
-## Step 6: The plan
+## Step 5: The plan
 
 "Here's the plan: `<the steps that apply, numbered, with their customer step numbers>`. Each step ends with a one-line update and links to what I found or changed. You can ask "what is ...?" about anything at any time."
 
@@ -88,4 +73,4 @@ Then "Learn more:" and the "About Guardian" page from `references/documentation.
 
 ## Exit criteria
 
-The customer chose a path; the agent and its absolute project path are known, or the customer has no code; the explanation depth is set; the plan is shown.
+The customer chose a path; the agent and its absolute project path are known, or the customer has no code; the plan is shown.

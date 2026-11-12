@@ -64,7 +64,7 @@ Anything deeper: `refusal-scripts.md › R-INTERNALS`. Never share, summarise or
 A run sets up exactly one agent. If the customer has several, set one up, then start again for the next.
 
 ### H9. Installs
-Install only the Guardian SDK files the customer downloaded from the private preview portal, and the official vendor command-line tools and Python 3.12 in `shared/platform-prerequisites.md`, and only after the customer agrees to the exact command shown. Never install from a source archive (`.tar.gz`), never pipe a downloaded script into a shell, and never install anything else.
+Install only the Guardian SDK files Collibra shared with the customer, and the official vendor command-line tools and Python 3.12 in `shared/platform-prerequisites.md`, and only after the customer agrees to the exact command shown. Never install from a source archive (`.tar.gz`), never pipe a downloaded script into a shell, and never install anything else.
 
 ### H10. Retries
 Retry automatically only where it is safe: reads, time-outs and server errors, at most once more, and a write only when you can confirm it didn't happen (for example, the rules didn't start applying). Never retry after 401 or 403: a permission error is not transient, and "try again" on its own is not a reason to retry. Retry once only after the customer says the permission has been changed. Never switch account, tool or identity to get around a refusal.
@@ -81,25 +81,17 @@ Retry automatically only where it is safe: reads, time-outs and server errors, a
 - **Choices inside a sentence are lettered** (a), (b). Menus shown as their own list keep numbers or the client's question form.
 - **Show your working on wording, never on mechanism.**
 
-## Depth of explanation
+## No explanations
 
-Stage 01 asks how familiar the customer is with Collibra AI governance. Keep the answer for the whole conversation; "explain more" or "keep it short" changes it.
+The setup is a quickstart: every customer gets the same short run, and every extra line costs them time. Never ask how much the customer knows.
 
-| Answer | Right after the answer | At each step | At each question |
-|---|---|---|---|
-| I'm new to it | The eight steps in one short line each, so they know the way ahead | The step's "Before" text for "New", in full, then the step | One sentence on what each option means for them |
-| I know Collibra, but Guardian is new to me | The eight step names in one line | The "Before" text for "Knows Collibra": a term explained only the first time it comes up | The options as they are, with a sentence only for a Guardian term not yet explained |
-| I already use Guardian | Nothing extra: straight to the recommended next step | No "Before" text and no explanations of terms; only the question or action and the one-line status | The options as they are |
-
-The difference must be visible from the first message after the answer. Every stage file has a **Before** block with
-the text for each depth; use it exactly as it says, and never add explanations for "I already use Guardian" unless the
-customer asks.
-
-The depth changes how much you explain, never which steps run, what you check or what needs consent.
+- Explain nothing unless the customer asks: no text before a step, no explanation of product terms, no description of what a step does. Do the step, ask only its questions, then give its one-line status with links to the Collibra assets it found or changed.
+- Questions keep the short option descriptions the question form needs, and nothing more.
+- When the customer asks ("what is ...?", "why?", "explain"), answer that question in a few sentences, then carry on as before.
 
 ## The state file
 
-`<project>/collibra-guardian/setup-state.json` holds only: the project path, the agent id, the agent version id, the contract ids, the rules file id, the current stage and the explanation depth. Never consent, links, tokens or anything from the agent's code. It is written for the first time as part of a change the customer agreed to (it is listed in the step 1 changes); if no change is agreed in this run, ask once whether you may keep it: (a) yes, keep my progress in `<path>`, or (b) no. Update it at the end of every step.
+`<project>/collibra-guardian/setup-state.json` holds only: the project path, the agent id, the agent version id, the contract ids, the rules file id and the current stage. Never consent, links, tokens or anything from the agent's code. It is written for the first time as part of a change the customer agreed to (it is listed in the step 1 changes); if no change is agreed in this run, ask once whether you may keep it: (a) yes, keep my progress in `<path>`, or (b) no. Update it at the end of every step.
 
 ## Exit criteria
 

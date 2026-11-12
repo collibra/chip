@@ -4,13 +4,6 @@ Turn the agent contracts that govern the agent into a rules file for its newest 
 
 **Tools:** `apply_latest_rules`, `get_agent_guardian_status`, `get_agent_rules_report`.
 
-**Before** (by depth):
-- New: "Step 5 of 8: apply the rules. Collibra now turns each rule in your agent contracts into checks Guardian can run while your agent works. Some rules can be checked fully, some partly, and some are kept for the record only; I'll tell you which is which. It takes a few minutes, and it's the same as **Apply latest rules** on the agent's **Contract** tab."
-- Knows Collibra: the same, the first time; otherwise "Step 5 of 8: apply the rules, the same as **Apply latest rules** on the Contract tab."
-- Uses Guardian: nothing before the step.
-
-**Before:** "Now I'll apply your agent contracts to `<agent>`. Collibra turns each rule into checks Guardian can run. This takes about five minutes. It's the same as **Apply latest rules** on the agent's **Contract** tab."
-
 Run this step again after a contract change, after a new agent version, and after linking a use case.
 
 ## Step 1: Preview and ask
@@ -21,7 +14,7 @@ Call `apply_latest_rules` with the AI Agent id and `confirm` false. It changes n
 
 ## Step 2: Apply
 
-After the customer's clear yes for what was shown, call `apply_latest_rules` once with `confirm` true. Say: "Collibra has started. While it works, I'll get the next step ready."
+After the customer's clear yes for what was shown, call `apply_latest_rules` once with `confirm` true. Say: "Collibra is applying `<n>` rules. This takes about five minutes."
 
 - **403:** no permission. A message for the administrator (`references/verify-and-diagnose.md`); never retried, even after "try again".
 - **404 agent not found:** Collibra may not have finished adding the agent. Check the scan status, wait, and ask again before the next try.

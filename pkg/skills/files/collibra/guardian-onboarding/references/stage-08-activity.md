@@ -4,13 +4,6 @@ Check that Collibra can read the agent's activity, and, after the deploy, that t
 
 **Tools:** `get_agent_guardian_status`; for the optional step 3, `get_agent_rules_report` and a read-only look where the agent's records go.
 
-**Before** (by depth):
-- New: "Step 7 of 8: let Guardian see your agent's activity. Guardian records what your agent does in Collibra, so you can see any rules it broke on the agent's **Guardian** tab. For that, Collibra needs to read your agent's activity in Databricks. A Collibra administrator adds one Databricks connection on Collibra Edge, once; I'll check whether that's done."
-- Knows Collibra: the same, the first time; otherwise "Step 7 of 8: check that Collibra reads your agent's activity."
-- Uses Guardian: nothing before the step.
-
-**Before:** "Last, Guardian needs to read your agent's activity in Databricks. A Collibra administrator adds one Databricks connection on a running Collibra Edge site, once. Guardian sets up the rest itself."
-
 ## Step 1: Read the connection status
 
 `get_agent_guardian_status` with the AI Agent id. Read `collection.status`, `collection.reason` and `collection.lastCollectedOn`. If the block is missing (an older Collibra), say this part couldn't be checked.

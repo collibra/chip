@@ -4,10 +4,6 @@ Make sure Collibra knows the agent's current version, and get its AI Agent id an
 
 **Tools:** `list_scanned_agents`, `get_latest_agent_scan`, `get_agent_guardian_status`, `get_asset_details`; the hand-off to `collibra/agent-scanner` with `load_collibra_skill`.
 
-**Before** (by depth):
-- New agent: "Next, I'll read your agent's code and describe it to Collibra: its models, instructions and tools. Collibra calls this an agent scan."
-- Known agent: "Collibra already knows `<agent>` (version `<n>`). I'll check whether your code changed since then."
-
 ## Step 1: Decide whether a scan is needed
 
 | Situation | Do |

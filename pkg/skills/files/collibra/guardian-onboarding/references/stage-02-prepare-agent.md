@@ -4,8 +4,6 @@ Install the Guardian SDK in the agent's project and wire it in, before the scan,
 
 Skip this stage when the client can't run code or the customer has no code (the hand-off note covers it), and when the project already has the SDK wired in as below (check it, say so, and go on).
 
-**Before** (depth "new", or the first time for "knows Collibra"): "First, I'll prepare your agent for Guardian. That means installing the Guardian SDK, the Python package that lets Guardian check your agent, and adding three lines and a small settings file to your project. I'll show you every change before I make it."
-
 ## Step 1: How the agent runs and is deployed
 
 Never block on this. Find out, confirm in plain words, ask only if still unsure.
@@ -19,11 +17,10 @@ Record what you found: local or notebook, Databricks App, Model Serving, a pipel
 
 ## Step 2: The Guardian SDK files
 
-Ask: "Where did you save the Guardian SDK files from the private preview portal?" (free text; a folder path).
-
-- No files yet: "I need the Guardian SDK files to continue. Download them from the private preview portal, tell me the folder, and type "continue"." Pause. Install nothing.
-- Read the wheels in the folder: their names and, from each wheel's metadata, `Requires-Dist` and `Requires-Python`. Never hard-code a version; build everything from what the files say. Expect `collibra_sdk`, `collibra_policy_enforcement` and `collibra_guardian_contract` wheels (`collibra_guardian_auto` only for the install-once way). If a Collibra wheel that another one depends on is missing, stop and say which.
-- **Is it the latest?** Collibra updates the SDK often, and an older one can miss fixes your agent needs, so confirm the version before going on. Take it from the `collibra_sdk` wheel's name and ask (header `SDK version`): "The Guardian SDK files in `<folder>` are version `<version>`. Is that the latest version on the private preview portal?" **Yes, use it** / **No, I'll get the latest**. On "No": "Download the latest Guardian SDK files from the private preview portal, tell me the folder, and type "continue"." Pause and install nothing, then read the new folder from the start of this step. Never look for the latest version yourself: you can't see the portal.
+- **The SDK is already in the project** (Collibra wheels in `vendor/`, or `collibra-sdk` installed in the project's environment): use it and ask nothing about it. Say one line: "Using the Guardian SDK `<version>` already in your project." Take the version from the wheel's name, or from `importlib.metadata.version("collibra-sdk")` run with the project's environment. If the agent is deployed on Databricks, which needs the wheel files, and the project has only the installed package, ask for the folder as below.
+- **No SDK in the project:** ask: "Where did you save the Guardian SDK files Collibra shared with you?" (free text; a folder path).
+- No files yet: "I need the Guardian SDK files Collibra shared with you to continue. Download them, tell me the folder, and type "continue"." Pause. Install nothing.
+- Read the wheels (in `vendor/`, or in the customer's folder): their names and, from each wheel's metadata, `Requires-Dist` and `Requires-Python`. Never hard-code a version; build everything from what the files say. Expect `collibra_sdk`, `collibra_policy_enforcement` and `collibra_guardian_contract` wheels (`collibra_guardian_auto` only for the install-once way). If a Collibra wheel that another one depends on is missing, stop and say which.
 - Never install from a source archive (`.tar.gz`): installing one can run code. Only `.whl` files.
 
 ## Step 3: Python and the agent framework
@@ -54,6 +51,7 @@ Prepare one diff with every change, and the install command, and show them toget
 | `collibra-guardian.toml` (new, in the folder the agent starts from) | `enforcement_mode = "<monitor or enforce>"`, and `framework_version_policy = "permissive"` only if the customer chose (b) above. **Nothing that names a rules file:** a setting that names a missing file stops the agent. The rules file and its setting are added together in step 6 |
 | `collibra-guardian/setup-state.json` (new) | The progress file: ids only |
 | Databricks App | `COLLIBRA_GUARDIAN_ENFORCEMENT_MODE` and the trace variables (`MLFLOW_TRACKING_URI=databricks`, `MLFLOW_EXPERIMENT_ID` from the App's experiment resource) in `app.yaml`'s environment, if they aren't there |
+| Model Serving, in the deploy script | `environment_vars={"COLLIBRA_GUARDIAN_ENFORCEMENT_MODE": "<monitor or enforce>"}` in the `agents.deploy(...)` call, because `collibra-guardian.toml` isn't deployed with the model and without the variable the endpoint enforces. `mlflow.set_experiment(...)` before that call, unless the script already sets an experiment: use `/Shared/<agent name>`, so Guardian's decisions have somewhere to go. `agents.deploy` turns on `ENABLE_MLFLOW_TRACING` itself; a script that deploys another way also sets `ENABLE_MLFLOW_TRACING=true`. A pin of `mlflow` below 3.15 moves to 3.15 (the SDK's `mlflow` extra needs it). No deploy script: these go in the deploy steps in step 6, not in a question |
 
 The default way to switch Guardian on, which doesn't change the agent's scan:
 
@@ -86,7 +84,7 @@ After the customer's clear yes to that question, for exactly what was shown: mak
 - the changes on disk are exactly the diff shown;
 - the packages import in the project's environment (`python -c "import collibra_sdk.guardian.injection"`), without importing the agent;
 - `collibra-guardian.toml` parses (`tomllib`), has `enforcement_mode` as chosen, and names no rules file;
-- the entry module still parses: `compile()` it in memory, never run or import it.
+- the entry module still parses: `compile()` it in memory, never run or import it. So does a changed deploy script, and it sets the mode variable.
 
 ## Exit
 
