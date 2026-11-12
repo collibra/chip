@@ -5,7 +5,9 @@
     "main"
   ],
   "branchPrefix": "renovate-",
-  "dependencyDashboard": false,
+  "dependencyDashboard": {
+    "enabled": false
+  },
   "extends": [
     "config:recommended",
     "group:allNonMajor"
