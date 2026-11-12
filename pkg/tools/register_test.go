@@ -102,7 +102,7 @@ func TestRegisterAll_DataQualityFlagOnlyMovesDataQualityTools(t *testing.T) {
 // disabled-tools.
 func TestRegisterAll_AgentScannerToolsVisibleWithEmptyConfig(t *testing.T) {
 	names := listToolNames(t, &chip.ServerToolConfig{})
-	for _, name := range []string{"publish_agent_scan", "list_scanned_agents", "get_latest_agent_scan"} {
+	for _, name := range []string{"finalize_agent_scan", "publish_agent_scan", "list_scanned_agents", "get_latest_agent_scan"} {
 		if !slices.Contains(names, name) {
 			t.Errorf("expected %q to be registered with an empty config", name)
 		}

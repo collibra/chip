@@ -105,15 +105,15 @@ Tell the customer in one line which row applies. When the run ends after the che
 
 It follows the check in "Validating a stored scan" and only goes on if the stored scan passed it; otherwise say so and offer a re-read instead. `known-document.json` already exists from that check.
 
-1. Make `extraction.json` from it as the changed-only extraction describes (keep `agents` and `tools`, drop what the finalize program sets), but **keep the root agent's `deployment`**, and for `redeployed` replace it with the new one from Step 4b: `version`, and `endpoint` with `url` and `name`. Add `source` (the current commit and repository) and the `platform` block from what the platform step learned.
-2. Run the finalize program on it (Stage 06, Steps 1 to 3). It recomputes every hash, including the document hash, which includes the deployment's `version` and `endpoint.url`: never copy or edit a hash by hand (H6).
+1. Make `extraction.json` from it as the changed-only extraction describes (keep `agents` and `tools`, drop what `finalize_agent_scan` sets), but **keep the root agent's `deployment`**, and for `redeployed` replace it with the new one from Step 4b: `version`, and `endpoint` with `url` and `name`. Add `source` (the current commit and repository) and the `platform` block from what the platform step learned.
+2. Call `finalize_agent_scan` on it (Stage 06, Steps 2 and 3). It recomputes every hash, including the document hash, which includes the deployment's `version` and `endpoint.url`: never copy or edit a hash by hand (H6).
 3. Add the warning "Prepared from the scan Collibra holds (last confirmed <date>): no relevant file changed since commit <commit>; <the deployment changed from <old> to <new> | sent again at the customer's request>".
 4. Stage 07 shows it and says plainly that the code was not re-read. For `redeployed` it says a new version will be recorded; for a scan sent anyway it says this is the same state again, which Collibra treats as nothing new.
 
 ## Changed-only extraction (verdict `changed`)
 
 1. Call `get_latest_agent_scan` with the document included and write it to `known-document.json`.
-2. Make `extraction.json` from its `agents` and `tools`, dropping every field the finalize program sets: `contentHash`, every `via`, `parser`, `generatedOn`, `fingerprintVersion`, `source`, `platform`, and the root agent's `deployment`. Keep the rest exactly. The `deployment` comes back from Stage 04 when the customer allowed a live look-up; otherwise leave it out and warn that the deployment was not looked up.
+2. Make `extraction.json` from its `agents` and `tools`, dropping every field `finalize_agent_scan` sets: `contentHash`, every `via`, `parser`, `generatedOn`, `fingerprintVersion`, `source`, `platform`, and the root agent's `deployment`. Keep the rest exactly. The `deployment` comes back from Stage 04 when the customer allowed a live look-up; otherwise leave it out and warn that the deployment was not looked up.
 3. For each changed file, search it for the names of the known agents and tools. An agent or tool whose name appears in a changed file is read again from the code and its entry replaced. Read the changed files for new agent or tool definitions and add them. A known agent or tool whose name now appears nowhere under the scan root (one search) is removed, with a warning.
 4. A changed manifest or lock file can change framework versions: re-read it and update the framework version of every agent.
 5. Everything else stays as the known document has it. Add `evidence` only for what you re-read.

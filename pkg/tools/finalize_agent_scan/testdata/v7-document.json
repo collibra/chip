@@ -1,0 +1,113 @@
+{
+  "fingerprintVersion": "1.0",
+  "parser": {
+    "version": "skill-0.1",
+    "llmProvider": "CUSTOMER"
+  },
+  "contentHash": "f6fa138efb728fc823820440ad621f6f571215ff9dfc32251ae50cb289c8cfdd",
+  "agents": [
+    {
+      "name": "triage_agent",
+      "role": "ROOT",
+      "pattern": "create_react_agent",
+      "framework": {
+        "name": "langgraph",
+        "version": "0.2.15"
+      },
+      "models": [
+        {
+          "provider": "anthropic",
+          "modelId": "claude-x",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 1024
+          },
+          "isDefault": true,
+          "via": "LLM_FALLBACK"
+        }
+      ],
+      "middleware": [
+        {
+          "class": "AuditMiddleware",
+          "hook": "wrap_tool_call",
+          "via": "LLM_FALLBACK"
+        }
+      ],
+      "systemPrompt": {
+        "text": "You triage tickets.",
+        "via": "LLM_FALLBACK"
+      },
+      "tools": [
+        "search_kb"
+      ],
+      "subagents": [],
+      "modelsResolved": true,
+      "toolsResolved": true,
+      "subagentsResolved": true,
+      "middlewareResolved": true,
+      "deployment": {
+        "version": "42",
+        "endpoint": {
+          "url": "https://example.cloud.databricks.com/serving-endpoints/agents_demo-example_schema-example_agent/invocations",
+          "name": "agents_demo-example_schema-example_agent"
+        }
+      },
+      "via": "LLM_FALLBACK",
+      "contentHash": "006d726e0127bdfec3eecf519e3f17872720c20b6cdc69f6bad9ac960cb871c1"
+    }
+  ],
+  "tools": [
+    {
+      "name": "search_kb",
+      "definitionPattern": "decorator_tool",
+      "origin": {
+        "type": "decorator_tool",
+        "dynamic": false
+      },
+      "args": [
+        {
+          "name": "query",
+          "type": "str",
+          "required": true
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "required": false,
+          "default": 5
+        }
+      ],
+      "guardrails": [
+        {
+          "kind": "size_limit",
+          "description": "d",
+          "argsInvolved": [
+            "query"
+          ],
+          "behavior": "raises",
+          "confidence": 0.9,
+          "via": "LLM_FALLBACK"
+        }
+      ],
+      "usedByAgents": [
+        "triage_agent"
+      ],
+      "returns": {
+        "type": "list[str]"
+      },
+      "via": "LLM_FALLBACK",
+      "contentHash": "a5803c8312657afe9d0aab91c502ce8573e4d90b2ab2af9661e8f25e16c430a4"
+    }
+  ],
+  "warnings": [],
+  "source": {
+    "repoUrl": "git@example.com:acme/agents.git",
+    "commitSha": "1111111111111111111111111111111111111111"
+  },
+  "platform": {
+    "name": "DATABRICKS",
+    "metadata": {
+      "ucModelName": "example_catalog.example_schema.example_agent"
+    }
+  }
+}

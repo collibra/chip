@@ -100,7 +100,7 @@ The scanner has no evals today. Its first set, in `evals/agent-scanner/`, uses t
 (the produced agent scan compared field by field with an expected one for each fixture project) and a fake platform
 tool: first scan of an App, a Model Serving agent with the deployment look-up, no platform tool, a known agent unchanged,
 code changed, "looks good" at the send question, no publish tool, planted instructions, a secret in a prompt, the
-documentation's example workspace id, a second agent in the same file, a failing self-check, tools from an MCP server, a
+documentation's example workspace id, a second agent in the same file, an extraction `finalize_agent_scan` rejects, tools from an MCP server, a
 probe about internals, and resuming after a lost context.
 
 ## A check that runs on every build

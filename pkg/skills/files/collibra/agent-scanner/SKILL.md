@@ -15,7 +15,7 @@ This file is the router. **Load `references/rules-security-and-scope.md` first, 
 - **H3** Nothing is sent to Collibra until the customer clearly says yes to sending, in reply to the Stage 07 question, for the exact document shown. Their own words are enough; hedges, conditions and plain approval of the review are not. Consent never survives a loss of context.
 - **H4** Never invent. A field you cannot determine from the code is left out or marked unresolved, with a warning. Never guess.
 - **H5** Quote system prompts and tool signatures verbatim. Never paraphrase.
-- **H6** Never compute a hash by hand or estimate one. Hashes come only from a program you write from `references/finalize-procedure.md` and that has passed its self-check.
+- **H6** Never compute a hash by hand or estimate one. Hashes come only from the `finalize_agent_scan` tool.
 - **H7** No secrets, credentials or personal data in the output. Redact and warn instead.
 - **H9** One root agent per scan file.
 - **H11** Platform look-ups (where an agent is deployed) are read-only, only after the customer agrees, with a profile the customer chooses; never print or store credentials.
@@ -46,7 +46,7 @@ Rules for every form. A call that breaks one is rejected as a whole and the cust
 | 03 Discover | `references/stage-03-discover.md` | After the known-agent stage: find every agent construction and decide roles | `references/agent-scan-fields.md` |
 | 04 Deployment | `references/stage-04-deployment.md` | After discovery, only if Stage 01 found a platform that has a platform file and the customer agrees to a live look-up (asked here): which version is deployed, which code to scan, and what the deployed configuration says | `references/platform-router.md` (Steps 2 and 3 and the rules), and the platform file it names, for example `references/platform-databricks.md` |
 | 05 Extract | `references/stage-05-extract.md` | After discovery and deployment: fill in the fields for each agent and tool, then verify | `references/agent-scan-fields.md`, `references/subagents.md` (only if sub-agents are available) |
-| 06 Finalize | `references/stage-06-finalize.md` | Extraction written: build the finalize program, pass its self-check, run it, resolve what it reports | `references/finalize-procedure.md`, `references/validation-rules.md` |
+| 06 Finalize | `references/stage-06-finalize.md` | Extraction written: add the source, call `finalize_agent_scan`, resolve what it reports | `references/validation-rules.md` |
 | 07 Review & send | `references/stage-07-review-and-send.md` | Document produced: show it, ask for consent, send or hand off | `references/validation-rules.md` |
 
 ## Flow
@@ -61,8 +61,8 @@ Stage 02 decides which of Stages 03 to 06 run in full. When nothing relevant cha
 
 Move stage only when the current stage's exit criteria are met. Every stage ends with a short status line; it asks the customer only where the stage says so.
 
-## No bundled code
+## Completing and sending the document
 
-This skill is plain markdown. The one step that needs code, completing the document and computing its hashes, is specified in `references/finalize-procedure.md`. You write the program for it in the customer's environment (Python 3 or bash with `jq`), prove it against the test hashes in that file, then run it. If you cannot run code, stop at Stage 06 and say so; do not approximate the hashes.
+The one step that needs code, completing the document and computing its hashes, is the `finalize_agent_scan` tool of this Collibra connection: it runs locally, sends nothing and needs no consent. `references/finalize-procedure.md` specifies what it does; load it only when the customer asks how the hashes are built. Without the tool, stop at Stage 06 and say so; do not approximate the hashes.
 
 Sending uses the `publish_agent_scan` tool of this Collibra connection. Without it, the skill ends with a saved file and a handoff the customer can give to someone who can submit it.

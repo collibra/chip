@@ -6,7 +6,7 @@ If Stage 02 left a verdict, follow it: `unchanged` skips this stage, `changed` u
 
 ## What you write
 
-One JSON file with three keys: `agents`, `tools`, `warnings`. You do not write hashes, `via`, `parser`, `generatedOn`, `fingerprintVersion` or `source`. The finalize program adds those (H6).
+One JSON file with three keys: `agents`, `tools`, `warnings`. You do not write hashes, `via`, `parser`, `generatedOn` or `fingerprintVersion`: `finalize_agent_scan` adds those (H6). `source` is added in Stage 06, unless Stage 04 set it.
 
 ## Rules for every field
 

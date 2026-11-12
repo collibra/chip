@@ -21,6 +21,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_assessment"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
+	"github.com/collibra/chip/pkg/tools/finalize_agent_scan"
 	"github.com/collibra/chip/pkg/tools/find_dq_rules"
 	"github.com/collibra/chip/pkg/tools/generate_dq_rule_sql"
 	"github.com/collibra/chip/pkg/tools/get_agent_contract"
@@ -133,6 +134,7 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, update_agent_contract_rules.NewTool(client))
 	// The agent scanner tools are registered WITHOUT a capability flag, like
 	// the agent contract tools above: there is no --agent-scanner switch.
+	toolRegister(server, toolConfig, finalize_agent_scan.NewTool())
 	toolRegister(server, toolConfig, publish_agent_scan.NewTool(client))
 	toolRegister(server, toolConfig, list_scanned_agents.NewTool(client))
 	toolRegister(server, toolConfig, get_latest_agent_scan.NewTool(client))

@@ -44,7 +44,7 @@ Scan root: <scan root>. Your files: <file list>. You may read other files inside
 Reply with one JSON object {"agents":[...],"tools":[...],"warnings":[...]} in exactly that format. For each agent and tool include "evidence": ["path:line", ...]. Report only what these files show. Where a list may be incomplete, set the matching *Resolved flag to false and add a warning. Do not decide roles you cannot see from your files: use "SUBAGENT" only when your files show the delegation, otherwise use the role the main agent gave: <roles from the Stage 03 table>.
 ```
 
-3. Merge: concatenate `agents` and `tools`. If two clusters returned the same name, they found the same thing: keep the one with more fields, union the lists, add a warning if they disagree. Then continue as in Stage 05. The finalize program will catch dangling references.
+3. Merge: concatenate `agents` and `tools`. If two clusters returned the same name, they found the same thing: keep the one with more fields, union the lists, add a warning if they disagree. Then continue as in Stage 05. `finalize_agent_scan` will catch dangling references.
 
 ## Verify
 

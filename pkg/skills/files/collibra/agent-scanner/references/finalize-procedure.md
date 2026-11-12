@@ -1,15 +1,12 @@
 # Finalize procedure
 
-What the finalize step does, written as a specification. You write a small program from it (Python 3 with the standard library, or bash with `jq` and `shasum -a 256` or `sha256sum`), run it on `extraction.json`, and keep it in the output folder as `finalize-agent-scan.py` or `.sh`. Use Python if both are available: the hashing rules below are easier to get right there.
-
-**You must pass the self-check at the end before you run it on the customer's extraction.** A program that does not reproduce the test hashes is wrong, whatever it looks like.
+What the `finalize_agent_scan` tool does, written as a specification. You don't run these steps yourself: Stage 06 calls the tool. Load this file only to explain to the customer how the document's hashes are built (H8).
 
 ## Input and output
 
-- Input: `extraction.json` with `agents`, `tools`, `warnings`, and optionally `platform` and `source` (below), and on the root agent a `deployment` object, `{ "version": "...", "endpoint": { "url": "...", "name": "..." } }`, every part optional except that an `endpoint` needs its `url`.
-- Output: `agent_scan.json`, the complete document, written in the output folder next to `extraction.json`.
-- Print to the terminal (format is free): counts of agents, tools and warnings, the document `contentHash`, and a suggested agent id (see step 8).
-- Exit with an error and a list of problems, writing no output file, if step 2 finds any.
+- Input: the extraction, `extraction.json`, with `agents`, `tools`, `warnings`, and optionally `platform` and `source` (below), and on the root agent a `deployment` object, `{ "version": "...", "endpoint": { "url": "...", "name": "..." } }`, every part optional except that an `endpoint` needs its `url`.
+- Output: the complete document, which Stage 06 saves as `agent_scan.json`, with the counts of agents, tools and warnings, the document `contentHash` and a suggested agent id (see step 8).
+- If step 2 finds any problem, no document: the list of every problem instead.
 
 ## Step 1: Normalise
 
@@ -124,8 +121,8 @@ The expected document for V1 below shows the whole shape.
 
 ## Step 8: Source and agent id
 
-- Source: if the extraction carries a `source` (for example when the code scanned is an extracted deployed commit and not the working copy), use it as is and skip git. Otherwise run `git -C <scan root> remote get-url origin` and `git -C <scan root> rev-parse HEAD`, where `<scan root>` is the customer's repository folder agreed in Stage 00 (not the output folder; pass it to the program as an argument). Ignore a failure. Never fail the run because git is missing.
-- Suggested agent id: `<repoUrl>#<ROOT agent name>`, or just the ROOT agent's name if there is no repo URL. The program only prints this; the id the customer sees is the one Stage 00 decided, which has the route from the platform check in front of it (`custom:` when no route was found), so the skill adds that prefix to this suggestion and never sends the bare form.
+- Source: the extraction's `source`, as is. Stage 06 adds it from git (`git -C <scan root> remote get-url origin` and `git -C <scan root> rev-parse HEAD`) before calling the tool, unless the extraction already carries one, for example when the code scanned is an extracted deployed commit and not the working copy.
+- Suggested agent id: `<repoUrl>#<ROOT agent name>`, or just the ROOT agent's name if there is no repo URL. The tool only suggests this; the id the customer sees is the one Stage 00 decided, which has the route from the platform check in front of it (`custom:` when no route was found), so the skill adds that prefix to this suggestion and never sends the bare form.
 
 ## Value formatting (for `default` and model parameters)
 
@@ -136,18 +133,14 @@ A JSON value is written as text like this:
 | string | as is |
 | `true` / `false` | `true` / `false` |
 | number with no fraction (`5`, `5.0`, `0`) | digits only: `5`, `5`, `0` |
-| other number (`0.7`) | shortest decimal that reads back to the same number: `0.7`. A number that would need exponent notation (below `0.0001` or from `1e21` up) is written exactly as it appears in the source. This is rare; if your tooling cannot keep the source text, add a warning naming the value and use your language's shortest form. |
+| other number (`0.7`) | shortest decimal that reads back to the same number: `0.7`. A number that would need exponent notation (below `0.0001` or from `1e21` up) is written exactly as it appears in the source. This is rare. The assistant's client may re-encode numbers on the way to the tool, so the tool writes such a number as it arrives and adds a warning naming it. |
 | `null` | not written at all (a null `default` is skipped, as step 4 says) |
 | list | `[` + items joined by one space + `]` |
 | object | `map[` + `key:value` pairs sorted by key, joined by one space + `]` |
 
-## Self-check (mandatory)
+## Reference examples
 
-Before the first real run, build each of the extractions below, run your steps 1 to 6 on it, and compare. For V1, also assemble the whole document and compare it with the expected document that follows V1 (leave out `generatedOn` when comparing). They are already normalised and valid.
-
-- If any hash differs, find the difference against the steps above and fix the program. Do not adjust a test value.
-- Run the real extraction only when all of them match.
-- If you cannot make them match after three attempts, stop and tell the customer the document cannot be completed here. Do not send or hand off a document whose hashes failed the check.
+The tool's tests reproduce every hash below exactly, and for V1 and V7 the whole expected document (without `generatedOn`). They are already normalised and valid. A change to the steps above must keep them all passing; never adjust a test value to fit the code.
 
 ### V1: one agent, one tool with a default, a guardrail, a model and middleware
 

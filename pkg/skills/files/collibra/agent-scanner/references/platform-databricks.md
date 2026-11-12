@@ -104,7 +104,7 @@ Let `V` be the chosen version and `C` its git commit (from the run's tags).
 ### When the deployed code is scanned
 
 - The scan root for Stages 03, 05 and 06 is `deployed-<V>`. Evidence paths are relative to it.
-- The extraction carries `source`: `repoUrl` (from the run's tag, else from the remote) and `commitSha` = `C`. The finalize step must not use `HEAD`.
+- The extraction carries `source`: `repoUrl` (from the run's tag, else from the remote) and `commitSha` = `C`. Stage 06 keeps this `source` and doesn't read `HEAD`.
 - The review tells the customer: "Scanned the code deployed as version `V` (commit `C`)", the `git diff --stat C..HEAD` summary against the working copy, and that the working copy can be scanned afterwards as a separate scan.
 - A working-copy scan later under the same agent id, without a `deployment`, is a separate version of the same agent (its document hash differs). That is expected.
 

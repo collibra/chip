@@ -7,9 +7,8 @@ The first contact with the customer. It does three things: it checks what the en
 Without reading the agent's code:
 
 - The scan root: the folder you are working in, unless the customer already named one in their opening message. If it cannot be read, say so and stop.
-- Code check: run `python3 --version`. If Python 3.8 or newer is missing, check for `jq` and `shasum` or `sha256sum` (the bash route). If neither works, or you cannot run commands at all, tell the customer now: extraction can proceed but the document cannot be completed here.
 - Repository state: if the scan root is inside a git repository, run `git status --porcelain` (it lists untracked files too). Note whether it is clean, and if not, how many files and the first ten.
-- Collibra connection: note whether the `publish_agent_scan` tool is among the tools offered to you, and whether `list_scanned_agents` and `get_latest_agent_scan` are. Do not call them.
+- Collibra connection: note whether the `finalize_agent_scan` tool (it completes the document) and the `publish_agent_scan` tool are among the tools offered to you, and whether `list_scanned_agents` and `get_latest_agent_scan` are. Do not call them.
 - Whether the client lets you start sub-agents. Note it; do not use it unless Stage 05 says so.
 - The output folder: make a new private temporary folder outside the repository (`mktemp -d`, mode 700; on Windows the system temp folder). It is where every later stage writes. If the customer already named another place, use that.
 
@@ -19,7 +18,7 @@ Send one message. It states the defaults you will use, in plain words, and asks 
 
 > I will read only inside `<folder>`, skip dependency and build folders, secrets and key files, and scan each independent agent system I find as its own file. Working files go to a new private temporary folder (`<path>`). I will work out the id Collibra uses for this agent and show it to you before anything is sent, and I will show you the result and offer to send it to Collibra only after you have seen it. If I hit something unclear while reading, I will pick the most likely answer, note it as a warning, and show you all warnings at the end. Tell me if you want anything different.
 
-Add anything the checks found that the customer should know now: the code cannot be completed here (no way to run code), or no tool for sending is offered (the run will end with a saved file).
+Add anything the checks found that the customer should know now: the document cannot be completed here (no `finalize_agent_scan` tool), or no tool for sending is offered (the run will end with a saved file).
 
 This stage asks nothing about the id, the domain, the platform, earlier versions or the model deployment: those are decided by the stages that need them (the id by Stage 01 and Stage 02 and shown in Stage 07, the domain only when sending, the platform look-up and earlier versions by Stage 04). If you have a question tool, do not use it for this message.
 
@@ -76,8 +75,8 @@ Stages ask the customer only about a decision with real alternatives, and only w
 - Uncommitted changes need an explicit answer.
 - A platform look-up needs the customer's choice of profile (Stage 04).
 - A platform id is needed (for Databricks, the workspace id) and no look-up, address or earlier answer gives it: ask for it once.
-- You cannot run code, so the document cannot be completed (offer to stop with the extraction).
-- The finalize program keeps rejecting the extraction after two fixes.
+- The Collibra connection has no `finalize_agent_scan`, so the document cannot be completed (offer to stop with the extraction).
+- `finalize_agent_scan` keeps rejecting the extraction after two fixes.
 - The reading budget runs out before any agent is found.
 
 ## What to say about internals

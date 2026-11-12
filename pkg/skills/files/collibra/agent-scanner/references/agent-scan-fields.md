@@ -1,6 +1,6 @@
 # Agent scan fields
 
-The exact shape of `extraction.json` and the labels to use. Anything not listed here is not written by you (the finalize program adds it).
+The exact shape of `extraction.json` and the labels to use. Anything not listed here is not written by you (`finalize_agent_scan` adds it).
 
 ## Top level
 
@@ -15,7 +15,7 @@ All three are JSON arrays, never a JSON string that contains an array.
 | Field | Meaning |
 |---|---|
 | `platform` | `{ "name": "<UPPER_SNAKE_CASE>", "metadata": { ... } }`. `name` is the host from the platform check in upper case: `DATABRICKS` (metadata keys `ucModelName`, `workspaceId`, `mlflowRunId`), `AWS`, `AZURE`, `GCP`, `SNOWFLAKE`; leave the block out when there is no host. It is where the agent runs; the id's prefix may name a different route (an agent on AWS reporting to MLflow has `platform.name` `AWS` and an id starting `mlflow:`) |
-| `source` | `{ "repoUrl": "...", "commitSha": "..." }`. Set it only when the scanned code is not the working copy (for example an extracted deployed commit); otherwise the finalize step finds it with git |
+| `source` | `{ "repoUrl": "...", "commitSha": "..." }`. Set it only when the scanned code is not the working copy (for example an extracted deployed commit); otherwise Stage 06 adds it from git before finalizing |
 
 ## Agent
 

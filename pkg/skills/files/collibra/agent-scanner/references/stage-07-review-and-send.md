@@ -22,7 +22,7 @@ File:       <path to agent_scan.json>
 Agent id:   <suggested external id>
 ```
 
-Explain the **agent id** in plain words: it is how Collibra recognises this agent on later scans, so it should stay the same every time this agent is scanned. Use the id the earlier stages settled (the known agent's, otherwise the one the router or the platform file defines from the route), or, when none of them gave one, the finalize program's suggestion with the route from the platform check in front of it (`custom:` when none). Say which, and that the customer can still change it now.
+Explain the **agent id** in plain words: it is how Collibra recognises this agent on later scans, so it should stay the same every time this agent is scanned. Use the id the earlier stages settled (the known agent's, otherwise the one the router or the platform file defines from the route), or, when none of them gave one, the `suggestedAgentId` from `finalize_agent_scan` with the route from the platform check in front of it (`custom:` when none). Say which, and that the customer can still change it now.
 
 The domain is none unless the customer names one. Say so in the summary ("Domain: none; tell me if you want one") and, with the consent question, let the customer name one or change the id; if they do, show the summary again and ask again. Never guess a domain.
 
