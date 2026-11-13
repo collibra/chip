@@ -113,6 +113,18 @@ Let MCP clients provide Basic Auth headers with each request:
 - **Benefit**: Proper attribution of actions to individual users
 - **Note**: Only works with HTTP transport modes, not stdio mode.
 
+### User ID Header
+Every request the server sends to Collibra carries an `x-mcp-user-id` header holding the UUID of the
+user its credentials belong to, so Collibra can attribute MCP traffic to a user:
+- The UUID is the `id` returned by `GET /rest/2.0/users/current`, called with the same `Authorization`
+  value as the request. The lookup itself does not carry `x-mcp-user-id`.
+- Lookups are cached per credential for 10 minutes, in a cache of at most 1000 credentials that evicts
+  the least recently used one. Concurrent requests on the same credential share a single lookup.
+- If the lookup fails (an error status, a timeout after 10 seconds, or a response without an `id`), the
+  request is sent without the header. The failure is cached for 10 minutes like a successful lookup.
+- A request with no `Authorization` header makes no lookup and carries no `x-mcp-user-id`.
+- An `x-mcp-user-id` header sent by the MCP client is never forwarded to Collibra.
+
 ## Usage Examples
 
 ### Using Environment Variables
