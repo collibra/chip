@@ -119,11 +119,17 @@ user its credentials belong to, whenever that user can be resolved, so Collibra 
 traffic to a user:
 - The UUID is the `id` returned by `GET /rest/2.0/users/current`, called with the same `Authorization`
   value as the request. The lookup itself does not carry `x-mcp-user-id`.
-- Lookups are cached per credential for 10 minutes, in a cache of at most 1000 credentials that evicts
-  the least recently used one. Concurrent requests on the same credential share a single lookup.
-- If the lookup fails (an error status, a timeout after 2 seconds, or a response without an `id`), the
-  request is sent without the header. The failure is cached for 10 minutes like a successful lookup,
-  so a struggling Collibra is not sent a lookup with every request.
+- Successful lookups are cached per credential for 10 minutes, in a cache of at most 1000 credentials
+  that evicts the least recently used one. Concurrent requests on the same credential share a single lookup.
+- A lookup that has not answered within 500 milliseconds is abandoned. If the lookup fails, the
+  request is sent without the header and the failure is cached, so a struggling Collibra is not sent
+  a lookup with every request:
+  - A failure that a retry would repeat is cached for 10 minutes, like a successful lookup: any 4xx
+    response other than 408 and 429, and a 200 response without an `id`.
+  - A transient failure is cached for 30 seconds: the 500 millisecond timeout, a network or transport
+    error, a 5xx, 408 or 429 response, a 200 response whose body cannot be decoded or exceeds 1 MiB,
+    and an unexpected error inside the lookup.
+  - A 401 or 403 is logged at debug level; every other failure is logged as a warning.
 - With server-wide credentials (`username`/`password`) the lookup uses those credentials, so every
   request carries the service account's UUID.
 - A request with no `Authorization` header makes no lookup and carries no `x-mcp-user-id`.

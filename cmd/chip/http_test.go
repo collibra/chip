@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -219,23 +223,203 @@ func TestFailedUserIDLookupLeavesHeaderOff(t *testing.T) {
 	}
 }
 
-func TestFailedUserIDLookupIsCached(t *testing.T) {
-	dgc := newFakeDGC(t, func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "boom", http.StatusInternalServerError)
-	})
+func TestDefinitiveLookupFailureIsCachedForTenMinutes(t *testing.T) {
+	cases := map[string]http.HandlerFunc{
+		"401":      statusHandler(http.StatusUnauthorized),
+		"403":      statusHandler(http.StatusForbidden),
+		"404":      statusHandler(http.StatusNotFound),
+		"empty id": bodyHandler(`{"id":"","userName":"alice"}`),
+	}
+	for name, handler := range cases {
+		t.Run(name, func(t *testing.T) {
+			dgc := newFakeDGC(t, handler)
+			lookups := &lookupTransport{}
+			clock := &fakeClock{now: time.Unix(0, 0)}
+			client := &http.Client{Transport: newInterceptedTransport(dgc, lookups, clock)}
+
+			callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+			clock.Advance(userIDCacheTTL - time.Second)
+			callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+			if got := lookups.count(); got != 1 {
+				t.Fatalf("expected 1 lookup within 10 minutes, got %d", got)
+			}
+
+			clock.Advance(2 * time.Second)
+			callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+			if got := lookups.count(); got != 2 {
+				t.Errorf("expected a second lookup after 10 minutes, got %d lookups", got)
+			}
+			assertNoUserIDHeader(t, dgc)
+		})
+	}
+}
+
+func TestTransientLookupFailureIsCachedForThirtySeconds(t *testing.T) {
+	cases := map[string]struct {
+		handler   http.HandlerFunc
+		intercept func(*http.Request) (*http.Response, error)
+	}{
+		"timeout":           {handler: blockingHandler(5 * time.Second)},
+		"transport error":   {intercept: func(*http.Request) (*http.Response, error) { return nil, errors.New("connection reset") }},
+		"500":               {handler: statusHandler(http.StatusInternalServerError)},
+		"503":               {handler: statusHandler(http.StatusServiceUnavailable)},
+		"408":               {handler: statusHandler(http.StatusRequestTimeout)},
+		"429":               {handler: statusHandler(http.StatusTooManyRequests)},
+		"malformed body":    {handler: bodyHandler(`{"id":`)},
+		"oversized body":    {handler: bodyHandler(oversizedUserBody())},
+		"padded past limit": {handler: bodyHandler(`{"id":"` + aliceID + `"}` + strings.Repeat(" ", userIDResponseLimit))},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dgc := newFakeDGC(t, tc.handler)
+			lookups := &lookupTransport{intercept: tc.intercept}
+			clock := &fakeClock{now: time.Unix(0, 0)}
+			transport := newInterceptedTransport(dgc, lookups, clock)
+			transport.userIDs.lookupTimeout = 50 * time.Millisecond
+			client := &http.Client{Transport: transport}
+
+			callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+			clock.Advance(userIDTransientFailureTTL - time.Second)
+			callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+			if got := lookups.count(); got != 1 {
+				t.Fatalf("expected 1 lookup within 30 seconds, got %d", got)
+			}
+
+			clock.Advance(2 * time.Second)
+			callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+			if got := lookups.count(); got != 2 {
+				t.Errorf("expected a second lookup after 30 seconds, got %d lookups", got)
+			}
+			assertNoUserIDHeader(t, dgc)
+		})
+	}
+}
+
+func TestSlowLookupIsAbandonedAfterTimeout(t *testing.T) {
+	if userIDLookupTimeout != 500*time.Millisecond {
+		t.Fatalf("expected a 500ms lookup timeout, got %s", userIDLookupTimeout)
+	}
+	dgc := newFakeDGC(t, blockingHandler(3*time.Second))
 	client := newTestClient(dgc)
 
+	started := time.Now()
 	callTool(t, client, http.Header{"Authorization": {aliceAuth}})
-	callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Errorf("expected the lookup to be abandoned after %s, the call took %s", userIDLookupTimeout, elapsed)
+	}
+	if got := len(dgc.toolRequests()); got != 1 {
+		t.Fatalf("expected the DGC request to be sent, got %d", got)
+	}
+	assertNoUserIDHeader(t, dgc)
+}
 
-	if got := len(dgc.lookups()); got != 1 {
+func TestLookupFailureLogLevel(t *testing.T) {
+	cases := map[string]struct {
+		handler http.HandlerFunc
+		level   slog.Level
+	}{
+		"401":     {handler: statusHandler(http.StatusUnauthorized), level: slog.LevelDebug},
+		"403":     {handler: statusHandler(http.StatusForbidden), level: slog.LevelDebug},
+		"404":     {handler: statusHandler(http.StatusNotFound), level: slog.LevelWarn},
+		"500":     {handler: statusHandler(http.StatusInternalServerError), level: slog.LevelWarn},
+		"timeout": {handler: blockingHandler(5 * time.Second), level: slog.LevelWarn},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			logs := captureLogs(t)
+			dgc := newFakeDGC(t, tc.handler)
+			transport := newTestTransport(dgc)
+			transport.userIDs.lookupTimeout = 50 * time.Millisecond
+
+			callTool(t, &http.Client{Transport: transport}, http.Header{"Authorization": {aliceAuth}})
+
+			levels := logs.levelsOf("Could not resolve the current user")
+			if len(levels) != 1 || levels[0] != tc.level {
+				t.Errorf("expected one %s record, got %v", tc.level, levels)
+			}
+		})
+	}
+}
+
+func TestPanickingLookupIsRecoveredAndReleasesWaiters(t *testing.T) {
+	dgc := newFakeDGC(t, usersByCredential)
+	lookups := &lookupTransport{intercept: func(*http.Request) (*http.Response, error) {
+		// Delaying the panic lets the other callers start waiting on this lookup.
+		time.Sleep(50 * time.Millisecond)
+		panic("lookup transport failed")
+	}}
+	client := &http.Client{Transport: newInterceptedTransport(dgc, lookups, nil)}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		var wg sync.WaitGroup
+		for range 5 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+			}()
+		}
+		wg.Wait()
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("callers waiting on a panicking lookup were not released")
+	}
+
+	if got := lookups.count(); got != 1 {
 		t.Errorf("expected 1 lookup, got %d", got)
 	}
-	for _, request := range dgc.toolRequests() {
-		if values := request.Values(userIDHeader); len(values) != 0 {
-			t.Errorf("expected no %s, got %v", userIDHeader, values)
-		}
+	if got := len(dgc.toolRequests()); got != 5 {
+		t.Errorf("expected 5 DGC requests, got %d", got)
 	}
+	assertNoUserIDHeader(t, dgc)
+}
+
+func TestCancelledWaiterDoesNotWaitForInFlightLookup(t *testing.T) {
+	lookupStarted := make(chan struct{})
+	releaseLookup := make(chan struct{})
+	var startOnce sync.Once
+	dgc := newFakeDGC(t, func(w http.ResponseWriter, r *http.Request) {
+		startOnce.Do(func() { close(lookupStarted) })
+		select {
+		case <-releaseLookup:
+		case <-r.Context().Done():
+		}
+		usersByCredential(w, r)
+	})
+	transport := newTestTransport(dgc)
+	transport.userIDs.lookupTimeout = 10 * time.Second
+	baseURL, err := url.Parse(dgc.server.URL)
+	if err != nil {
+		t.Fatalf("parsing server URL: %v", err)
+	}
+
+	owner := make(chan struct{})
+	go func() {
+		defer close(owner)
+		callTool(t, &http.Client{Transport: transport}, http.Header{"Authorization": {aliceAuth}})
+	}()
+	<-lookupStarted
+
+	ctx, cancel := context.WithCancel(context.Background())
+	waiter := make(chan string, 1)
+	go func() { waiter <- transport.userIDs.resolve(ctx, baseURL, aliceAuth) }()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case id := <-waiter:
+		if id != "" {
+			t.Errorf("expected no user ID for a cancelled waiter, got %q", id)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelled waiter kept waiting for the in-flight lookup")
+	}
+	close(releaseLookup)
+	<-owner
 }
 
 func TestRequestWithoutAuthorizationMakesNoLookup(t *testing.T) {
@@ -294,6 +478,44 @@ func usersByCredential(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, `{"id":%q,"userName":"user"}`, id)
 }
 
+func statusHandler(status int) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, http.StatusText(status), status)
+	}
+}
+
+func bodyHandler(body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}
+}
+
+// blockingHandler answers only after delay, or not at all if the lookup is abandoned first.
+func blockingHandler(delay time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(delay):
+			usersByCredential(w, r)
+		}
+	}
+}
+
+// oversizedUserBody is valid JSON with an id, padded past userIDResponseLimit.
+func oversizedUserBody() string {
+	return `{"id":"` + aliceID + `","padding":"` + strings.Repeat("x", userIDResponseLimit) + `"}`
+}
+
+func assertNoUserIDHeader(t *testing.T, dgc *fakeDGC) {
+	t.Helper()
+	for _, request := range dgc.toolRequests() {
+		if values := request.Values(userIDHeader); len(values) != 0 {
+			t.Errorf("expected no %s, got %v", userIDHeader, values)
+		}
+	}
+}
+
 func newTestClient(dgc *fakeDGC) *http.Client {
 	return &http.Client{Transport: newTestTransport(dgc)}
 }
@@ -301,6 +523,17 @@ func newTestClient(dgc *fakeDGC) *http.Client {
 func newTestTransport(dgc *fakeDGC) *collibraClient {
 	config := &Config{Api: CollibraApiConfig{Url: dgc.server.URL}}
 	return newCollibraTransport(config, chip.NewCollibraClient(http.DefaultTransport))
+}
+
+// newInterceptedTransport routes DGC traffic through lookups and, when clock is set, ages the
+// user ID cache by it.
+func newInterceptedTransport(dgc *fakeDGC, lookups *lookupTransport, clock *fakeClock) *collibraClient {
+	config := &Config{Api: CollibraApiConfig{Url: dgc.server.URL}}
+	transport := newCollibraTransport(config, chip.NewCollibraClient(lookups))
+	if clock != nil {
+		transport.userIDs.cache = newUserIDCache(userIDCacheSize, userIDCacheTTL, clock.Now)
+	}
+	return transport
 }
 
 // callTool sends one DGC request the way a tool does, as part of an MCP tool call whose
@@ -398,3 +631,68 @@ func (c *fakeClock) Advance(d time.Duration) {
 	defer c.mu.Unlock()
 	c.now = c.now.Add(d)
 }
+
+// lookupTransport sends requests to DGC and counts the current-user lookups; when intercept is
+// set it answers the lookups instead of DGC.
+type lookupTransport struct {
+	mu        sync.Mutex
+	lookups   int
+	intercept func(*http.Request) (*http.Response, error)
+}
+
+func (l *lookupTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request.URL.Path == currentUserPath {
+		l.mu.Lock()
+		l.lookups++
+		l.mu.Unlock()
+		if l.intercept != nil {
+			return l.intercept(request)
+		}
+	}
+	return http.DefaultTransport.RoundTrip(request)
+}
+
+func (l *lookupTransport) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.lookups
+}
+
+// logCapture is an slog handler that records every log record.
+type logCapture struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func captureLogs(t *testing.T) *logCapture {
+	capture := &logCapture{}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(capture))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return capture
+}
+
+func (c *logCapture) levelsOf(messagePrefix string) []slog.Level {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var levels []slog.Level
+	for _, record := range c.records {
+		if strings.HasPrefix(record.Message, messagePrefix) {
+			levels = append(levels, record.Level)
+		}
+	}
+	return levels
+}
+
+func (c *logCapture) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c *logCapture) Handle(_ context.Context, record slog.Record) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.records = append(c.records, record)
+	return nil
+}
+
+func (c *logCapture) WithAttrs([]slog.Attr) slog.Handler { return c }
+
+func (c *logCapture) WithGroup(string) slog.Handler { return c }
