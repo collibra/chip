@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -96,6 +97,36 @@ func TestUserIDIsResolvedPerCredential(t *testing.T) {
 		authorization := request.Get("Authorization")
 		if got := request.Get(userIDHeader); got != expected[authorization] {
 			t.Errorf("request with %q: expected %s %q, got %q", authorization, userIDHeader, expected[authorization], got)
+		}
+	}
+}
+
+func TestServerWideCredentialsResolveTheServiceAccount(t *testing.T) {
+	const serviceAccountID = "00000000-0000-0000-0000-0000000005e1"
+	serviceAccountAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("svc:secret"))
+	dgc := newFakeDGC(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != serviceAccountAuth {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"id":%q}`, serviceAccountID)
+	})
+	config := &Config{Api: CollibraApiConfig{Url: dgc.server.URL, Username: "svc", Password: "secret"}}
+	client := &http.Client{Transport: newCollibraTransport(config, chip.NewCollibraClient(http.DefaultTransport))}
+
+	callTool(t, client, http.Header{"Authorization": {aliceAuth}})
+	callTool(t, client, http.Header{"Authorization": {bobAuth}})
+
+	lookups := dgc.lookups()
+	if len(lookups) != 1 {
+		t.Fatalf("expected 1 lookup, got %d", len(lookups))
+	}
+	if got := lookups[0].Get("Authorization"); got != serviceAccountAuth {
+		t.Errorf("lookup must use the configured credentials, got %q", got)
+	}
+	for _, request := range dgc.toolRequests() {
+		if got := request.Get(userIDHeader); got != serviceAccountID {
+			t.Errorf("expected %s %q, got %q", userIDHeader, serviceAccountID, got)
 		}
 	}
 }

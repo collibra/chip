@@ -20,12 +20,14 @@ const (
 	currentUserPath     = "/rest/2.0/users/current"
 	userIDCacheTTL      = 10 * time.Minute
 	userIDCacheSize     = 1000
-	userIDLookupTimeout = 10 * time.Second
+	userIDLookupTimeout = 2 * time.Second
 )
 
 // userIDResolver maps an Authorization value to the DGC user UUID it authenticates as. Results,
 // including failed lookups (cached as an empty ID), are kept for userIDCacheTTL so a credential
-// costs at most one lookup per TTL however many requests it makes.
+// costs at most one lookup per TTL however many requests it makes; caching failures keeps a
+// struggling DGC from receiving a lookup with every request. The lookup timeout is short because
+// the first request on a credential waits for it and the header only serves attribution.
 type userIDResolver struct {
 	next          http.RoundTripper
 	lookupTimeout time.Duration
@@ -46,11 +48,7 @@ func (r *userIDResolver) resolve(ctx context.Context, baseURL *url.URL, authoriz
 	key := credentialKey(authorization)
 	entry, owner := r.cache.acquire(key)
 	if owner {
-		id, err := r.lookup(ctx, baseURL, authorization)
-		if err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("Could not resolve the current user, %s will not be sent: %v", userIDHeader, err))
-		}
-		r.cache.complete(entry, id)
+		r.fill(ctx, baseURL, authorization, entry)
 	}
 	select {
 	case <-entry.done:
@@ -60,8 +58,21 @@ func (r *userIDResolver) resolve(ctx context.Context, baseURL *url.URL, authoriz
 	}
 }
 
-// lookup is detached from the caller's cancellation because its result is shared with every
-// other request on the same credential.
+// fill completes entry even if the lookup panics, so requests waiting on it are released.
+func (r *userIDResolver) fill(ctx context.Context, baseURL *url.URL, authorization string, entry *userIDEntry) {
+	var id string
+	defer func() { r.cache.complete(entry, id) }()
+
+	id, err := r.lookup(ctx, baseURL, authorization)
+	if err != nil {
+		slog.WarnContext(ctx, fmt.Sprintf("Could not resolve the current user, %s will not be sent: %v", userIDHeader, err))
+	}
+}
+
+// lookup calls the inner transport directly rather than clients.GetCurrentUser, which goes
+// through collibraClient and would recurse back into this resolver. It is detached from the
+// caller's cancellation because its result is shared with every other request on the same
+// credential.
 func (r *userIDResolver) lookup(ctx context.Context, baseURL *url.URL, authorization string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.lookupTimeout)
 	defer cancel()
