@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // The finalize procedure turns an agent-scanning skill's extraction into the
@@ -233,7 +235,8 @@ func dropNulls(parent object, keys ...string) {
 }
 
 // cleanDeployments runs before the Step 2 checks: blank values count as absent,
-// an endpoint with no url is dropped with a warning, and an empty deployment is removed.
+// an endpoint with no url is dropped with a warning, the platform facts are
+// cleaned, and an empty deployment is removed.
 func (s *scan) cleanDeployments() {
 	for _, agent := range s.agents {
 		deployment, ok := agent["deployment"].(object)
@@ -251,8 +254,42 @@ func (s *scan) cleanDeployments() {
 		} else if value, present := deployment["endpoint"]; present && value == nil {
 			delete(deployment, "endpoint")
 		}
+		s.cleanPlatformFacts(deployment)
 		if len(deployment) == 0 {
 			delete(agent, "deployment")
+		}
+	}
+}
+
+// cleanPlatformFacts drops blank facts, an empty tag list and an empty
+// registration, and a creator that is a bare id: Collibra leaves such a value
+// out, so the skill resolves it to a name first and warns when it can't.
+func (s *scan) cleanPlatformFacts(deployment object) {
+	for _, key := range []string{"createdOn", "createdBy", "description"} {
+		dropBlank(deployment, key)
+	}
+	s.dropBareIDCreator(deployment, "deployment.createdBy")
+	if tags, ok := deployment["tags"].([]any); (ok && len(tags) == 0) || deployment["tags"] == nil {
+		delete(deployment, "tags")
+	}
+	registration, ok := deployment["registration"].(object)
+	if !ok {
+		dropNulls(deployment, "registration")
+		return
+	}
+	dropBlank(registration, "createdOn")
+	dropBlank(registration, "createdBy")
+	s.dropBareIDCreator(registration, "deployment.registration.createdBy")
+	if len(registration) == 0 {
+		delete(deployment, "registration")
+	}
+}
+
+func (s *scan) dropBareIDCreator(parent object, field string) {
+	if text, ok := parent["createdBy"].(string); ok {
+		if _, err := uuid.Parse(strings.TrimSpace(text)); err == nil {
+			delete(parent, "createdBy")
+			s.warn("%s '%s' is an id, not a name, and was dropped", field, text)
 		}
 	}
 }

@@ -1,8 +1,10 @@
 package finalize_agent_scan
 
 import (
+	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // validate is Step 2 plus the shape check of Step 7: every problem is listed,
@@ -152,8 +154,8 @@ func (s *scan) validateSystemPrompt(agent object, owner string) {
 	s.checkString(prompt, "text", owner+" systemPrompt")
 }
 
-// validateDeployment checks the ROOT-only deployment: a string version and an
-// endpoint url without credentials.
+// validateDeployment checks the ROOT-only deployment: a string version, an
+// endpoint url without credentials, and the platform's facts about the version.
 func (s *scan) validateDeployment(agent object, owner string) {
 	value, present := agent["deployment"]
 	if !present {
@@ -167,7 +169,8 @@ func (s *scan) validateDeployment(agent object, owner string) {
 		s.problem("%s: 'deployment' must be an object with 'version' and 'endpoint'.", owner)
 		return
 	}
-	s.checkKeys(deployment, owner+" deployment", []string{"version", "endpoint"})
+	s.checkKeys(deployment, owner+" deployment", deploymentKeys)
+	s.validatePlatformFacts(deployment, owner)
 	if version, present := deployment["version"]; present {
 		if _, ok := version.(string); !ok {
 			s.problem("%s: deployment.version must be a string, for example \"42\".", owner)
@@ -190,6 +193,68 @@ func (s *scan) validateDeployment(agent object, owner string) {
 		s.problem("%s: deployment.endpoint.url must be a string.", owner)
 	case !validURLWithoutCredentials(address):
 		s.problem("%s: deployment.endpoint.url must be an address without a user or password before '@'.", owner)
+	}
+}
+
+var deploymentKeys = []string{"version", "endpoint", "createdOn", "createdBy", "description", "tags", "registration"}
+
+// validatePlatformFacts checks what the platform records about the deployed
+// version and the agent's registration (fingerprint schema 0.14.0). None of
+// these fields is in a hash, so they never make a new version on their own.
+func (s *scan) validatePlatformFacts(deployment object, owner string) {
+	where := owner + " deployment"
+	s.checkTimestamp(deployment, "createdOn", where)
+	s.checkString(deployment, "createdBy", where)
+	s.checkString(deployment, "description", where)
+	s.validateTags(deployment, where)
+	value, present := deployment["registration"]
+	if !present {
+		return
+	}
+	registration, ok := value.(object)
+	if !ok {
+		s.problem("%s: 'registration' must be an object with 'createdOn' and 'createdBy'.", where)
+		return
+	}
+	s.checkKeys(registration, where+".registration", []string{"createdOn", "createdBy"})
+	s.checkTimestamp(registration, "createdOn", where+".registration")
+	s.checkString(registration, "createdBy", where+".registration")
+}
+
+// validateTags checks deployment.tags: a list of {key, value} objects, value optional.
+func (s *scan) validateTags(deployment object, where string) {
+	value, present := deployment["tags"]
+	if !present {
+		return
+	}
+	tags, ok := value.([]any)
+	if !ok {
+		s.problem("%s: 'tags' must be a list of objects with 'key' and optionally 'value'.", where)
+		return
+	}
+	for i, item := range tags {
+		tag, ok := item.(object)
+		if !ok {
+			s.problem("%s.tags[%d] must be an object with 'key' and optionally 'value'.", where, i)
+			continue
+		}
+		s.checkKeys(tag, fmt.Sprintf("%s.tags[%d]", where, i), []string{"key", "value"}, "key")
+		if key, ok := tag["key"].(string); !ok || strings.TrimSpace(key) == "" {
+			s.problem("%s.tags[%d]: 'key' must be a non-blank string.", where, i)
+		}
+		s.checkString(tag, "value", fmt.Sprintf("%s.tags[%d]", where, i))
+	}
+}
+
+// checkTimestamp reports a value that isn't an ISO-8601 date-time with a zone.
+func (s *scan) checkTimestamp(o object, key, owner string) {
+	value, present := o[key]
+	if !present {
+		return
+	}
+	text, ok := value.(string)
+	if _, err := time.Parse(time.RFC3339, text); !ok || err != nil {
+		s.problem("%s: '%s' must be an ISO-8601 date-time with a zone, for example \"2026-11-10T09:30:00Z\".", owner, key)
 	}
 }
 

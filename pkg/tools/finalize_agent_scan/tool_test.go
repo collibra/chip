@@ -178,6 +178,80 @@ func TestRejectsListEveryProblem(t *testing.T) {
 	}
 }
 
+// platformFactsExtraction is a one-agent extraction whose ROOT deployment
+// carries the given extra fields next to version and endpoint.
+func platformFactsExtraction(facts string) []byte {
+	return []byte(`{"agents":[{"name":"main_agent","role":"ROOT","pattern":"p",
+		"modelsResolved":true,"toolsResolved":true,"subagentsResolved":true,"middlewareResolved":true,
+		"deployment":{"version":"42","endpoint":{"url":"https://host/serving-endpoints/ep/invocations","name":"ep"}` + facts + `}}],
+		"tools":[],"warnings":[]}`)
+}
+
+func TestPlatformFactsAreKeptAndInNoHash(t *testing.T) {
+	without := run(t, platformFactsExtraction(""))
+	with := run(t, platformFactsExtraction(`,"createdOn":"2026-11-10T09:30:00Z","createdBy":"ml.engineer@example.com",
+		"description":"Support agent, version 42.","tags":[{"key":"team","value":"guardian"},{"key":"reviewed"}],
+		"registration":{"createdOn":"2026-11-01T08:00:00Z","createdBy":"ml.engineer@example.com"}`))
+	if with.Status != StatusSuccess || without.Status != StatusSuccess {
+		t.Fatalf("problems %v / %v", with.Problems, without.Problems)
+	}
+	if with.ContentHash != without.ContentHash {
+		t.Errorf("platform facts changed the document hash: %s vs %s", with.ContentHash, without.ContentHash)
+	}
+	agentWith := decode(t, with.Document)["agents"].([]any)[0].(map[string]any)
+	agentWithout := decode(t, without.Document)["agents"].([]any)[0].(map[string]any)
+	if agentWith["contentHash"] != agentWithout["contentHash"] {
+		t.Error("platform facts changed the agent hash")
+	}
+	deployment := agentWith["deployment"].(map[string]any)
+	for _, key := range []string{"createdOn", "createdBy", "description", "tags", "registration"} {
+		if _, present := deployment[key]; !present {
+			t.Errorf("deployment.%s was not kept", key)
+		}
+	}
+}
+
+func TestPlatformFactsAreCleaned(t *testing.T) {
+	out := run(t, platformFactsExtraction(`,"createdOn":" ","createdBy":"0f8c3e2a-6b1d-4c9e-9a47-3d2b5e8f1a60","description":"",
+		"tags":[],"registration":{"createdOn":"","createdBy":"7b2e9d14-3a6f-4c81-b5e0-9f4d2a7c1e38"}`))
+	if out.Status != StatusSuccess {
+		t.Fatalf("problems %v", out.Problems)
+	}
+	deployment := decode(t, out.Document)["agents"].([]any)[0].(map[string]any)["deployment"].(map[string]any)
+	for _, key := range []string{"createdOn", "createdBy", "description", "tags", "registration"} {
+		if _, present := deployment[key]; present {
+			t.Errorf("deployment.%s should have been dropped", key)
+		}
+	}
+	for _, want := range []string{"deployment.createdBy '0f8c3e2a", "deployment.registration.createdBy '7b2e9d14"} {
+		if !containsAny(out.Warnings, want) {
+			t.Errorf("no warning mentions %q; got %q", want, out.Warnings)
+		}
+	}
+}
+
+func TestPlatformFactsRejectBadValues(t *testing.T) {
+	out := run(t, platformFactsExtraction(`,"createdOn":"2026-11-10 09:30","createdBy":7,
+		"tags":[{"key":" "},{"key":"team","value":3,"colour":"red"},"plain"],"registration":{"createdOn":"yesterday","owner":"x"}`))
+	if out.Status != StatusValidationError {
+		t.Fatalf("status %s, want validation_error", out.Status)
+	}
+	for _, want := range []string{
+		"'createdOn' must be an ISO-8601 date-time",
+		"'createdBy' must be a string",
+		"tags[0]: 'key' must be a non-blank string",
+		"tags[1]: 'value' must be a string",
+		"tags[1] has an unknown field 'colour'",
+		"tags[2] must be an object",
+		"registration has an unknown field 'owner'",
+		"registration: 'createdOn' must be an ISO-8601 date-time",
+	} {
+		if !containsAny(out.Problems, want) {
+			t.Errorf("no problem mentions %q; got %q", want, out.Problems)
+		}
+	}
+}
+
 func TestRejectsNonObjectInput(t *testing.T) {
 	for _, input := range []string{``, `null`, `[]`, `"{}"`, `{"agents":{},"tools":[]}`} {
 		out := run(t, []byte(input))

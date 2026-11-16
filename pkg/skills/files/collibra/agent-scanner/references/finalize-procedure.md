@@ -4,7 +4,7 @@ What the `finalize_agent_scan` tool does, written as a specification. You don't 
 
 ## Input and output
 
-- Input: the extraction, `extraction.json`, with `agents`, `tools`, `warnings`, and optionally `platform` and `source` (below), and on the root agent a `deployment` object, `{ "version": "...", "endpoint": { "url": "...", "name": "..." } }`, every part optional except that an `endpoint` needs its `url`.
+- Input: the extraction, `extraction.json`, with `agents`, `tools`, `warnings`, and optionally `platform` and `source` (below), and on the root agent a `deployment` object, `{ "version": "...", "endpoint": { "url": "...", "name": "..." } }` plus the platform facts of schema 0.14.0 (`createdOn`, `createdBy`, `description`, `tags`, `registration`; `agent-scan-fields.md`), every part optional except that an `endpoint` needs its `url` and a tag its `key`.
 - Output: the complete document, which Stage 06 saves as `agent_scan.json`, with the counts of agents, tools and warnings, the document `contentHash` and a suggested agent id (see step 8).
 - If step 2 finds any problem, no document: the list of every problem instead.
 
@@ -32,8 +32,9 @@ List every problem found, not only the first.
 - An agent carries the old fields `deploymentVersion` or `endpointUrl`: the service refuses them, so the extraction must use `deployment` instead.
 - An agent that is not the ROOT carries `deployment`.
 - `deployment` is not an object, `deployment.version` is not a string, or `deployment.endpoint.url` is not a string or carries credentials (a user part before the `@` of the address, such as `https://user:password@host/path`).
+- A platform fact has the wrong shape: `createdOn` (also in `registration`) is not an ISO-8601 date-time with a zone, `createdBy` or `description` is not a string, `tags` is not a list of `{ "key", "value" }` objects with a non-blank `key`, or `registration` is not an object with only `createdOn` and `createdBy`.
 
-Before these checks a blank `version` or `name` counts as absent and is removed, and an `endpoint` with no `url` is dropped with the warning "deployment.endpoint had no url and was dropped". A `deployment` left empty is removed.
+Before these checks a blank `version` or `name` counts as absent and is removed, and an `endpoint` with no `url` is dropped with the warning "deployment.endpoint had no url and was dropped". A blank `createdOn`, `createdBy` or `description`, an empty `tags` list and an empty `registration` are removed too. A `createdBy` that is a bare id (a UUID) is dropped with the warning "deployment.createdBy '<id>' is an id, not a name, and was dropped", because Collibra leaves such a value out. A `deployment` left empty is removed.
 
 ## Step 3: Repair references (warn, do not reject)
 
@@ -104,7 +105,7 @@ tools: the normalised tools, each with its contentHash (null for mcp_dynamic)
 warnings: your warnings plus those added above
 ```
 
-`generatedOn`, `source` and `platform` are not hashed. `deployment` is in no agent or tool hash; its `version` and `endpoint.url` are in the document hash (Step 6). Write with two-space indentation and UTF-8, without escaping non-ASCII characters.
+`generatedOn`, `source` and `platform` are not hashed. `deployment` is in no agent or tool hash; its `version` and `endpoint.url` are in the document hash (Step 6), and its platform facts are in no hash, so a change to them alone is not a new version. Write with two-space indentation and UTF-8, without escaping non-ASCII characters.
 
 **Shape check, before writing the file.** The schema rejects missing required keys and unknown keys, so confirm each object has exactly these (extraction-only fields such as `evidence` are already removed):
 

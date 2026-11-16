@@ -89,6 +89,7 @@ Write these into `extraction.json`; the finalize step turns them into the docume
 | Platform name and traceability details | `platform` (`name` in UPPER_SNAKE_CASE, `metadata` object) |
 | Deployed version of the root agent, if known | root agent's `deployment.version` (a string) |
 | Serving address and name of the root agent, if known | root agent's `deployment.endpoint` (`url`, and `name` where the platform has one) |
+| The platform's facts about the deployed version and about the agent's own record, if read | root agent's `deployment` (`createdOn`, `createdBy`, `description`, `tags`, and `registration` with `createdOn` and `createdBy`); in no hash |
 | Where the scanned code came from, when it is not the working copy | top-level `source` (`repoUrl`, `commitSha`) |
 | Root agent name | The platform file's rule (for Databricks, the model's own name, not a variable name) |
 | A default agent id | the id the platform file defines (for Databricks, `databricks:<workspace_id>:<model_full_name>`), unless the customer gave one |

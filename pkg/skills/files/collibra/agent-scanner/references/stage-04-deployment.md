@@ -32,7 +32,7 @@ This is the second reason for the platform check: the host's CLI (`platform.json
 
 ## Step 5: Hand back
 
-Record the results as the router's "What a platform file hands back" table says: the `platform` block, the root agent's `deployment` (`version`, and `endpoint` with `url` and, for Databricks, the serving endpoint's `name`), `source` when deployed code is scanned, the default agent id, `deployed-config.json`, and warnings. The deployment's `version` and `endpoint.url` are in the document hash, so a redeploy is a new version in Collibra.
+Record the results as the router's "What a platform file hands back" table says: the `platform` block, the root agent's `deployment` (`version`, `endpoint` with `url` and, for Databricks, the serving endpoint's `name`, and the platform facts the look-up returned: `createdOn`, `createdBy`, `description`, `tags`, `registration`), `source` when deployed code is scanned, the default agent id, `deployed-config.json`, and warnings. The deployment's `version` and `endpoint.url` are in the document hash, so a redeploy is a new version in Collibra. The platform facts are in no hash.
 
 If the scan root changes (the deployed code was extracted into the output folder), run Stage 03 again on that folder before Stage 05, so evidence paths are relative to it.
 
