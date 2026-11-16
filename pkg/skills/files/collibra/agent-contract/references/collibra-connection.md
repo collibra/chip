@@ -105,7 +105,7 @@ Each of these means Collibra wrote nothing. Match on what the error says, not on
 ```
 GUARDIAN CONTRACT — READY TO SAVE
 Kind:      Global | Specialised · checked against <agent name(s) | no particular agent>
-Action:    Create new in domain <domain> | New version of <contract name> (current: version <v>)
+Action:    Create new in the <domain> domain | New version of <contract name> (current: version <v>)
 Prepared:  <date>   Context verified against Collibra: yes | no (offline)
 
 Rules, in order (save exactly this list)

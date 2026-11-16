@@ -14,7 +14,7 @@ Stage 06 whole-contract pass complete: every rule marked, no unresolved conflict
 Contract:   <name>
 Kind:       Global | Specialised
 Checked against: all agents (global) | <agent(s)> (<use case>) | no particular agent
-Mode:       New, in domain <domain> | Edit (baseline: <n> rules, version <v> saved <date>)
+Mode:       New, in the <domain> domain | Edit (baseline: <n> rules, version <v> saved <date>)
 Connection: read ✓/✗ · write ✓/✗ · existence check ✓/✗
 ```
 

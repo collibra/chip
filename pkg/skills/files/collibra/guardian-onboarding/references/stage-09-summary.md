@@ -10,7 +10,7 @@ Write it as a list, so the links can be clicked (not inside a code block):
 - **Version:** [`<name>`](`links.agentVersion`)
 - **Use case:** [`<name>`](`<get_asset_details link>`), or none
 - **Agent contracts:** [`<name>`](`links.contracts[].url`) (`<n>` rules), one per contract
-- **Domains:** agent in **`<domain>`**, use case in **`<domain>`**, contracts in **`<domain>`** (one per domain used; when two share a name, add the id). Take them from this run, or from the `domain` `get_asset_details` returns on each asset
+- **Domains:** agent in the **`<domain>`** domain, use case in the **`<domain>`** domain, contracts in the **`<domain>`** domain (one per domain used; when two share a name, add the id). Take them from this run, or from the `domain` `get_asset_details` returns on each asset
 - **Rules:** `<n>` of `<total>` checked while the agent runs, [see them on the Contract tab](`links.contractTab`)
 - **Rules file:** `<path in the project>`, checked
 - **Mode:** Monitor (record only) or Enforce (stop it), from `enforcement_mode` in `<settings file>`

@@ -106,7 +106,7 @@ Once the customer settles on a name, `GET /agentContracts` with `name=<name>`. T
 
 Collibra's list of Agent Contracts shows names only, so two contracts with the same name look identical there, even in different domains. Warn, never block:
 
-- One match → *"There's already a contract called **<name>**, in **<domain>**. In Collibra's list of contracts, the two would look identical. How about **<suggested name>** (a), or do you want to keep **<name>** (b)?"*
+- One match → *"There's already a contract called **<name>**, in the **<domain>** domain. In Collibra's list of contracts, the two would look identical. How about **<suggested name>** (a), or do you want to keep **<name>** (b)?"*
 - Several → name every domain they're in, then the same question.
 - Domain can't be read → *"…, in a domain I can't see."*
 
@@ -119,7 +119,7 @@ No match, or no way to list contracts → say nothing and go on.
 Collibra stores the contract in a Governance Asset domain. Take the domains Guardian Onboarding gave you, otherwise `prepare_create_asset` with `assetType` `Agent Contract` and no domain: the Governance Asset domains the customer can see.
 
 - **Several, and the contract is specialised** → set aside the domain that holds the global contract, if there is one: it is the first entry of `GET /agentContracts` (`layer` `GLOBAL`; reuse the list if you have it), and `get_contract_domain` gives its domain id. Unless it is the only domain, a specialised contract doesn't go there.
-- **One left** → use it, and say so in the frame: *"I'll save it in **<domain>**."* No question.
+- **One left** → use it, and say so in the frame: *"I'll save it in the **<domain>** domain."* No question.
 - **Several left** → ask which, each with its name and id (names can repeat). Recommend none.
 - **None** → *"I can't see a Governance Asset domain you can use. Someone with admin rights in Collibra has to give you access to one before the contract can be saved. We can keep drafting meanwhile."* Record `domain: none`; Stage 07 says it once more.
 - **Capability missing or offline** → ask for the domain's name or Collibra link and record it as given.
@@ -138,7 +138,7 @@ Print and keep:
 Contract:   <name>
 Kind:       Global | Specialised
 Checked against: all agents (global) | <agent(s)> (<use case>) | no particular agent
-Mode:       New, in domain <domain> | Edit (baseline: <n> rules, version <v> saved <date>)
+Mode:       New, in the <domain> domain | Edit (baseline: <n> rules, version <v> saved <date>)
 Connection: read ✓/✗ · write ✓/✗ · existence check ✓/✗
 ```
 

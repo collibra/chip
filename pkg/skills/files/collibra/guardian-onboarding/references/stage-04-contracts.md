@@ -53,7 +53,7 @@ If rules were already applied to this agent, a new or changed contract makes the
 
 ## Exit
 
-"Step 3 of 8 done: `<n>` agent contracts apply to `<agent>`: [`<name>`](<instance>/ai-governance/agent-contracts/<contractId>) (`<rules>` rules, in **`<domain>`**), one per contract`<. The new link shows on the agent's [Contract tab](<instance>/asset/<aiAgentId>?tabbar=Contract)>`." Each contract's domain is the one it was saved in, or for an existing contract the `domain` `get_asset_details` returns on its id. Then "Learn more:" and the agent contracts page (`references/documentation.md`). Write the contract ids to the state file.
+"Step 3 of 8 done: `<n>` agent contracts apply to `<agent>`: [`<name>`](<instance>/ai-governance/agent-contracts/<contractId>) (`<rules>` rules, in the **`<domain>`** domain), one per contract`<. The new link shows on the agent's [Contract tab](<instance>/asset/<aiAgentId>?tabbar=Contract)>`." Each contract's domain is the one it was saved in, or for an existing contract the `domain` `get_asset_details` returns on its id. Then "Learn more:" and the agent contracts page (`references/documentation.md`). Write the contract ids to the state file.
 
 Links: a contract is `<instance>/ai-governance/agent-contracts/<contractId>`; all contracts are `<instance>/ai-governance/agent-contracts`.
 

@@ -78,6 +78,7 @@ Everything you create in Collibra (the agent, through the scan; an agent contrac
   - **None** → `refusal-scripts.md › R-PERMISSION` with "create `<an AI use case>`": the customer can't see a domain for it.
 - **Never send the scan without a domain**, and never use a domain the tool didn't return.
 - **A permission error (403) on create** means the role is missing: `R-PERMISSION`, never retried (H10).
+- **Name a domain as a domain** in everything the customer reads: "in the **AI Use Cases** domain", never just "in AI Use Cases", which reads like a place. When the name already ends in "domain", don't add the word again.
 - Keep the domain ids in the state file, so a later run doesn't look them up again.
 
 ## How you write to the customer
