@@ -51,6 +51,7 @@ query GetAssetDetails(%s) {
       name
     }
     domain {
+      id
       name
     }
     status {
@@ -182,6 +183,7 @@ type AssetType struct {
 }
 
 type Domain struct {
+	ID   string `json:"id,omitempty"`
 	Name string `json:"name"`
 }
 

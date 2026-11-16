@@ -2,7 +2,7 @@
 
 Link the agent to an AI use case, if the customer wants one. It is optional: Guardian applies the rules without it.
 
-**Tools:** `get_asset_details`, `search_asset_keyword`, `prepare_create_asset`, `create_asset`, `edit_asset` (operation `add_relation` with `relationTypeId`).
+**Tools:** `get_asset_details`, `search_asset_keyword`, `prepare_create_asset`, `register_ai_use_case`, `edit_asset` (operation `add_relation` with `relationTypeId`).
 
 ## Step 1: Does the agent have one?
 
@@ -39,9 +39,9 @@ example no permission, never retried, `refusal-scripts.md › R-PERMISSION`), or
 
 1. Draft a **name and a description** from the scan: what the agent is for, who uses it, in plain words. Add other attributes only where the code shows them; never guess a risk or an owner.
 2. Show the draft and let the customer edit it. Show it again after every change.
-3. `prepare_create_asset` for an AI Use Case in the AI Use Cases domain (the customer confirms the domain if there is more than one).
-4. Ask, word for word: "Shall I create this AI use case and link it to `<agent>`?"
-5. After the customer's clear yes: `create_asset` with exactly the name and description shown, then link it as in step 3 (the same yes covers the link, because it was part of the question).
+3. The domain, as Stage 00 H11 says (`assetType` "AI Use Case").
+4. Ask, word for word: "Shall I create this AI use case in `<domain>` and link it to `<agent>`?"
+5. After the customer's clear yes: `register_ai_use_case` with exactly the name and description shown and that domain, first without `confirm` (check the preview matches what you showed), then with `confirm` true. It makes the customer the use case's Owner, which the link needs. Then link it as in step 3 (the same yes covers the link, because it was part of the question). Never use `create_asset` for an AI use case: it needs a role on the domain that AI Business Users and AI Producers don't have.
 
 ## Step 5: Check
 
@@ -51,7 +51,7 @@ If the rules were already applied to this agent: linking a use case doesn't mark
 
 ## Exit
 
-- Linked: "Step 4 of 8 done: `<agent>` is linked to the AI use case [`<name>`](<instance>/asset/<useCaseId>)."
+- Linked: "Step 4 of 8 done: `<agent>` is linked to the AI use case [`<name>`](<instance>/asset/<useCaseId>), in **`<domain>`**." The domain is the one it was created in, or for an existing use case the `domain` `get_asset_details` returns.
 - Skipped: "Step 4 of 8 skipped: you can link an AI use case later from [the agent's page](<instance>/asset/<aiAgentId>)."
 
 Exit when the use case is linked, or skipped. Keep its id for the summary and the support details; on resuming, read it again from the agent's relations.

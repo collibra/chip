@@ -20,11 +20,17 @@ Unresolved: <list of *Resolved flags that are false, one line each, with the rea
 Warnings:   <n>: <each warning, one line>
 File:       <path to agent_scan.json>
 Agent id:   <suggested external id>
+Domain:     <domain name> (<domain id>)
 ```
 
 Explain the **agent id** in plain words: it is how Collibra recognises this agent on later scans, so it should stay the same every time this agent is scanned. Use the id the earlier stages settled (the known agent's, otherwise the one the router or the platform file defines from the route), or, when none of them gave one, the `suggestedAgentId` from `finalize_agent_scan` with the route from the platform check in front of it (`custom:` when none). Say which, and that the customer can still change it now.
 
-The domain is none unless the customer names one. Say so in the summary ("Domain: none; tell me if you want one") and, with the consent question, let the customer name one or change the id; if they do, show the summary again and ask again. Never guess a domain.
+The **domain** is where Collibra files the agent. Without one, Collibra uses its default domain, which the customer may not be able to open. Never guess a domain.
+
+- **Run from Guardian Onboarding:** use the domain it gave you.
+- **Otherwise:** `prepare_create_asset` with `assetType` "AI Agent" and no domain lists the domains for agents the customer can see. One → use it. Several → ask which, with the consent question; names can repeat, so give each domain's id with its name. None → send nothing: the customer needs the AI Producer role or a domain for agents from their Collibra administrator (offer the handoff, Step 5).
+
+Show it in the summary (`Domain: <name> (<id>)`). With the consent question, let the customer change the domain or the id; if they do, show the summary again and ask again.
 
 ## Step 2: Decide the route
 
@@ -51,7 +57,7 @@ Ask this question, word for word:
 
 ## Step 4: Send
 
-Use only `publish_agent_scan`, one call per document, with `confirm` set to true, `document` exactly as saved in `agent_scan.json` (pass it through; do not edit, summarise or re-type it), `externalId` set to the agent id and `domainId` only if the customer gave one. Do not change the document between consent and send. Never call it with `confirm` true before the customer's yes. If the result carries `warnings`, tell the customer about them in plain words.
+Use only `publish_agent_scan`, one call per document, with `confirm` set to true, `document` exactly as saved in `agent_scan.json` (pass it through; do not edit, summarise or re-type it), `externalId` set to the agent id and `domainId` set to the domain from Step 1. Do not change the document between consent and send. Never call it with `confirm` true before the customer's yes. If the result carries `warnings`, tell the customer about them in plain words.
 
 - **Several documents:** send them one at a time in the order shown, one call each. Stop at the first failure and say which were sent and which were not; do not retry or skip ahead.
 - **Success:** report what Collibra returned (the scan, the state it recorded). Explain in plain words that Collibra has the agent scan and that creating the matching records can take a little while. Do not claim the agent is fully registered. If the tool lets you read the result back, do so once and report it.

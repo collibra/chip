@@ -22,6 +22,7 @@ This file is the router. **Load `references/stage-00-security-and-scope.md` firs
 - **H8 One agent per run.**
 - **H9 Installs.** Only the customer's Guardian SDK files and the tools in `shared/platform-prerequisites.md`, after a yes to the exact command.
 - **H10 Retries.** Only reads, time-outs, server errors and writes you can confirm didn't happen; never after 401 or 403.
+- **H11 Domains.** Create only in a domain `prepare_create_asset` returns for that kind of asset: one is used, several are offered; never the scan without one.
 
 ## Keep it light
 

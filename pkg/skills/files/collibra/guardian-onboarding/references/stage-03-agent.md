@@ -15,7 +15,9 @@ Make sure Collibra knows the agent's current version, and get its AI Agent id an
 
 ## Step 2: Hand off to the scanner
 
-Tell the customer: "I'll now describe your agent to Collibra. You'll see exactly what will be sent before anything goes." Load `collibra/agent-scanner` with `load_collibra_skill` and follow it from its own start, with its own rules and questions; it asks for consent in its own way. Point it at the agent's project path from Stage 01. The scan must include the step 1 changes: if they aren't committed, tell the customer, and when the scanner asks about uncommitted changes, recommend including them.
+First get the domain the agent goes into, as Stage 00 H11 says (asset type `AI Agent`); the state file may already hold it.
+
+Tell the customer: "I'll now describe your agent to Collibra. You'll see exactly what will be sent before anything goes." Load `collibra/agent-scanner` with `load_collibra_skill` and follow it from its own start, with its own rules and questions; it asks for consent in its own way. Point it at the agent's project path from Stage 01, and give it the domain: it is the domain the scan is sent with, never none. The scan must include the step 1 changes: if they aren't committed, tell the customer, and when the scanner asks about uncommitted changes, recommend including them.
 
 If the scanner reports that only the deployment changed and the code didn't, give the same explanation as in step 1 and let the customer decide at the scanner's own question. Don't recommend either answer.
 
@@ -40,9 +42,9 @@ When the scanner ends, reload `references/stage-00-security-and-scope.md` if it 
 
 ## Exit
 
-Write the agent id and version id to the state file. Then:
+Write the agent id and version id to the state file. The domain is the one the scan was sent with; for an agent Collibra already knew, the `domain` `get_asset_details` returns for it. Then:
 
-- "Step 2 of 8 done: Collibra knows `<agent>`, version `<n>`. Links: [`<agent>`](<instance>/asset/<aiAgentId>), [version `<n>`](<instance>/asset/<aiAgentVersionId>)`<, and where it runs: [<endpoint name>](<instance>/asset/<endpoint id>)>`."
-- Unchanged: "Step 2 of 8 done: your code hasn't changed, so Collibra already has the latest version. Links: [`<agent>`](<instance>/asset/<aiAgentId>), [version `<n>`](<instance>/asset/<aiAgentVersionId>)."
+- "Step 2 of 8 done: Collibra knows `<agent>`, version `<n>`, in **`<domain>`**. Links: [`<agent>`](<instance>/asset/<aiAgentId>), [version `<n>`](<instance>/asset/<aiAgentVersionId>)`<, and where it runs: [<endpoint name>](<instance>/asset/<endpoint id>)>`."
+- Unchanged: "Step 2 of 8 done: your code hasn't changed, so Collibra already has the latest version, in **`<domain>`**. Links: [`<agent>`](<instance>/asset/<aiAgentId>), [version `<n>`](<instance>/asset/<aiAgentVersionId>)."
 
 Exit when the AI Agent id and AI Agent Version id are known and stored in the state file.

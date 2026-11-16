@@ -149,9 +149,14 @@ func GetAssetTypeByPublicID(ctx context.Context, client *http.Client, publicID s
 	return &result, nil
 }
 
-// ListDomainsForPrepare lists domains, limited to the given count.
-func ListDomainsForPrepare(ctx context.Context, client *http.Client, limit int) ([]PrepareCreateDomain, int, error) {
-	reqURL := fmt.Sprintf("/rest/2.0/domains?limit=%d&offset=0", limit)
+// ListDomainsForPrepare lists domains, limited to the given count. With
+// typeIDs, Collibra returns only the domains of those domain types.
+func ListDomainsForPrepare(ctx context.Context, client *http.Client, limit int, typeIDs ...string) ([]PrepareCreateDomain, int, error) {
+	q := url.Values{"limit": {fmt.Sprint(limit)}, "offset": {"0"}}
+	if len(typeIDs) > 0 {
+		q["typeIds"] = typeIDs
+	}
+	reqURL := "/rest/2.0/domains?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("creating list domains request: %w", err)

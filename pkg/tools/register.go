@@ -60,6 +60,7 @@ import (
 	"github.com/collibra/chip/pkg/tools/publish_agent_scan"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
+	"github.com/collibra/chip/pkg/tools/register_ai_use_case"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
 	"github.com/collibra/chip/pkg/tools/search_catalog_columns"
@@ -144,6 +145,10 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	toolRegister(server, toolConfig, apply_latest_rules.NewTool(client))
 	toolRegister(server, toolConfig, get_agent_rules_report.NewTool(client))
 	toolRegister(server, toolConfig, get_agent_rules_file.NewTool(client))
+	// register_ai_use_case creates the optional AI use case of a Guardian setup
+	// through AI Governance, which honours the global Register AI Use Case
+	// permission; the generic create_asset needs a role on the domain.
+	toolRegister(server, toolConfig, register_ai_use_case.NewTool(client))
 	// The data quality tools are gated as one block behind the data-quality
 	// capability flag (--data-quality), not behind an experimental feature
 	// name: they are generally available, but several write to Collibra and

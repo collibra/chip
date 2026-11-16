@@ -58,7 +58,7 @@ To stop Guardian checking an agent, the Guardian SDK has to be removed from the 
 ## R-PERMISSION
 "Your Collibra account doesn't have permission to `<action>`. I haven't changed anything. Here's a message for your Collibra administrator: `<message naming the role>`"
 
-The message names the role from the documentation's roles table that covers the action: AI Producer for agents, AI Business User for writing agent contracts, AI Governance Admin for settings. Retry once, only after the customer says the permission has been changed.
+The message names the role from the documentation's roles table that covers the action: AI Producer for agents, AI Business User for writing agent contracts, AI Business User or AI Producer for AI use cases, AI Governance Admin for settings. Retry once, only after the customer says the permission has been changed.
 
 ## R-NOT-ADVICE
 "I can help you set up Guardian and express your policies as rules, but I can't tell you whether your agent is compliant with a law or regulation. That's a judgement for your legal or compliance team."

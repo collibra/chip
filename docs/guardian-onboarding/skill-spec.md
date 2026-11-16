@@ -249,14 +249,14 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 ### 05 AI use case (optional)
 
 - **Tools:** `get_asset_details` (the agent's incoming relations), `search_asset_keyword` with `assetTypeFilter`
-      "AI Use Case", `prepare_create_asset`, `create_asset`, `edit_asset add_relation` with `relationTypeId`
+      "AI Use Case", `prepare_create_asset`, `register_ai_use_case`, `edit_asset add_relation` with `relationTypeId`
   ([tools-spec.md](tools-spec.md#change-edit_asset-add_relation-takes-an-optional-relation-type-id)).
 - **Does:** if the agent has no use case, search for similar ones with words from the scan (agent name, the purpose in
   its instructions, its tools' subject). Show each match first (name, one line of its description, how many agents
   already use it, link), then offer: use it; choose another; create one from the agent; skip. The customer decides; an
   existing use case is never linked without being shown.
   To create: draft a **name and description** from the scan (and only the attributes the code shows), show them, let the
-      customer edit, then create it in the AI Use Cases domain and link it.
+      customer edit, then create it in a domain for AI use cases the customer can see (`prepare_create_asset` for an AI Use Case; see Domains in decisions.md) and link it.
 - **The link:** after the customer's yes, edit the AI Use Case with `add_relation`, `relationTypeId`
   `00000000-0000-0000-0000-000000007109` (`AIUseCaseUsesAIAgent`) and the agent as `targetAssetId`; never only the role
   name "uses", which names four relation types on an AI Use Case. If the link fails or the customer prefers, they link

@@ -116,17 +116,13 @@ No match, or no way to list contracts → say nothing and go on.
 
 ### Pick the domain
 
-Collibra stores the contract in a Governance Asset domain. `find_governance_domain()` gives the domains the customer can save to.
+Collibra stores the contract in a Governance Asset domain. Take the domains Guardian Onboarding gave you, otherwise `prepare_create_asset` with `assetType` `Agent Contract` and no domain: the Governance Asset domains the customer can see.
 
-- One domain → propose it: *"I'll save it in **<domain>** (<community>). OK?"*
-- Several → keep the new contract with the existing ones unless the customer wants otherwise. Take the contracts from `GET /agentContracts` (reuse the list if you already have it). `get_contract_domain` for each; with more than 20, read the 20 saved most recently. Count them per domain, leaving out domains the customer can't save to.
-  - All in one domain → *"Your other contracts are in **<domain>** (<community>), so I'll save this one there too. OK, or do you want a different domain?"*
-  - Spread over several → propose the one with the most: *"Most of your contracts (<n> of <m>) are in **<domain>** (<community>), so I'll save this one there too. OK? The others are in <domains>."* On a tie, list the tied domains first and ask which.
-  - No existing contracts, their domains can't be read, or none of them is a domain the customer can save to → list name and community; ask which. If the other contracts are all in a domain the customer can't save to, say so in one line.
-- None → *"I can't see a Governance Asset domain you can use. Someone with admin rights in Collibra has to create one or give you access before the contract can be saved. We can keep drafting meanwhile."* Record `domain: none`; Stage 07 says it once more.
-- Capability missing or offline → ask for the domain's name or Collibra link and record it as given.
-
-`get_contract_domain` returns the domain's name. Match it to the domains `find_governance_domain()` returned by name; if two of those share the name, show both with their community.
+- **Several, and the contract is specialised** → set aside the domain that holds the global contract, if there is one: it is the first entry of `GET /agentContracts` (`layer` `GLOBAL`; reuse the list if you have it), and `get_contract_domain` gives its domain id. Unless it is the only domain, a specialised contract doesn't go there.
+- **One left** → use it, and say so in the frame: *"I'll save it in **<domain>**."* No question.
+- **Several left** → ask which, each with its name and id (names can repeat). Recommend none.
+- **None** → *"I can't see a Governance Asset domain you can use. Someone with admin rights in Collibra has to give you access to one before the contract can be saved. We can keep drafting meanwhile."* Record `domain: none`; Stage 07 says it once more.
+- **Capability missing or offline** → ask for the domain's name or Collibra link and record it as given.
 
 ### Is the name taken in that domain?
 

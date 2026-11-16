@@ -302,15 +302,12 @@ func enumerateAssetTypesForDomain(ctx context.Context, client *http.Client, doma
 // whose domain type matches one of the asset type's allowed domain
 // types (so e.g. asking for "where can I create a Business Term" only
 // returns Glossary-type domains). One extra /assignments/assetType/{id}
-// call buys this; the alternative — returning every domain on the
+// call buys this, and /domains is asked for those types only (typeIds), so
+// the 500-domain page holds only candidates; the alternative — returning every domain on the
 // instance — produced misleading suggestions and clipped the useful
 // ones when the 20-item cap was hit.
 func enumerateDomainsFor(ctx context.Context, client *http.Client, assetType *clients.PrepareCreateAssetType) (Output, error) {
 	allowed, allowedErr := clients.ListAllowedDomainTypesForAssetType(ctx, client, assetType.ID)
-	domains, _, err := clients.ListDomainsForPrepare(ctx, client, 500)
-	if err != nil {
-		return Output{}, err
-	}
 
 	// Three cases by allowed-types lookup:
 	//   - lookup errored        : fall back to unfiltered ("don't know, here's everything")
@@ -325,6 +322,17 @@ func enumerateDomainsFor(ctx context.Context, client *http.Client, assetType *cl
 			Status:  StatusNeedsClarification,
 			Message: noCompatibleDomainsMessage(assetType.Name),
 		}, nil
+	}
+
+	var typeIDs []string
+	if allowedErr == nil {
+		for _, a := range allowed {
+			typeIDs = append(typeIDs, a.ID)
+		}
+	}
+	domains, _, err := clients.ListDomainsForPrepare(ctx, client, 500, typeIDs...)
+	if err != nil {
+		return Output{}, err
 	}
 
 	candidates := domains

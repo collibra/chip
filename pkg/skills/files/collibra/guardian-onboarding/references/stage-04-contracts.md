@@ -29,7 +29,7 @@ The default is the first option. "Use" goes to step 4 (linking). "Write" goes to
 
 ## Step 3: Hand off to the contract skill
 
-Tell the customer what step 3 involves before the hand-off: "Step 3 of 8: your agent contract. I'll draft rules for `<agent>` from what it does, ask you for any values I can't know (such as limits), go through the rules with you, and show you the whole contract before anything is saved. After it's saved, I'll link it to `<agent>` and we go on to step 4, what your agent is for." Load `collibra/agent-contract` with `load_collibra_skill` and follow it from its own start, with its own rules; it asks for consent in its own way. Tell it what you already know: global or specialised, and the agent to check the rules against. It works on one contract at a time, and may offer to link a new specialised contract to the agent itself.
+Tell the customer what step 3 involves before the hand-off: "Step 3 of 8: your agent contract. I'll draft rules for `<agent>` from what it does, ask you for any values I can't know (such as limits), go through the rules with you, and show you the whole contract before anything is saved. After it's saved, I'll link it to `<agent>` and we go on to step 4, what your agent is for." Load `collibra/agent-contract` with `load_collibra_skill` and follow it from its own start, with its own rules; it asks for consent in its own way. Tell it what you already know: global or specialised, the agent to check the rules against, and, for a new contract, the domains Stage 00 H11 finds for an `Agent Contract`. The contract skill uses only those. It works on one contract at a time, and may offer to link a new specialised contract to the agent itself.
 
 While the contract skill runs, end every message that waits for the customer with one plain line saying where they are and what happens after they answer, for example "Step 3 of 8, your agent contract. After your answers, I'll go through the rules with you, then show the whole contract to save." Keep it to one line, and don't repeat the contract skill's own summary.
 
@@ -53,7 +53,7 @@ If rules were already applied to this agent, a new or changed contract makes the
 
 ## Exit
 
-"Step 3 of 8 done: `<n>` agent contracts apply to `<agent>`: [`<name>`](<instance>/ai-governance/agent-contracts/<contractId>) (`<rules>` rules), one per contract`<. The new link shows on the agent's [Contract tab](<instance>/asset/<aiAgentId>?tabbar=Contract)>`." Then "Learn more:" and the agent contracts page (`references/documentation.md`). Write the contract ids to the state file.
+"Step 3 of 8 done: `<n>` agent contracts apply to `<agent>`: [`<name>`](<instance>/ai-governance/agent-contracts/<contractId>) (`<rules>` rules, in **`<domain>`**), one per contract`<. The new link shows on the agent's [Contract tab](<instance>/asset/<aiAgentId>?tabbar=Contract)>`." Each contract's domain is the one it was saved in, or for an existing contract the `domain` `get_asset_details` returns on its id. Then "Learn more:" and the agent contracts page (`references/documentation.md`). Write the contract ids to the state file.
 
 Links: a contract is `<instance>/ai-governance/agent-contracts/<contractId>`; all contracts are `<instance>/ai-governance/agent-contracts`.
 

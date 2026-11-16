@@ -62,13 +62,14 @@ type domainRow struct {
 
 type mockDGC struct {
 	t                *testing.T
-	excludeBT        bool // simulate license-gated asset type missing from /assetTypes
-	domainTypeOther  bool // domain returns a non-Glossary type
-	noAssignments    bool // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
-	emptyDomainTypes bool // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
-	bidiRelation     bool // the assignment carries one relation type assigned in BOTH directions
-	productRows      bool // /assetTypes unfiltered listing includes a real type and a decoy with distinct product values
-	noteReadOnly     bool // the assignment marks Note read-only
+	excludeBT        bool     // simulate license-gated asset type missing from /assetTypes
+	domainTypeOther  bool     // domain returns a non-Glossary type
+	noAssignments    bool     // /assignments/assetType/{id} returns [] (asset type has no assignment anywhere)
+	emptyDomainTypes bool     // the assignment lists empty domainTypes (creatable nowhere, sub-case b)
+	bidiRelation     bool     // the assignment carries one relation type assigned in BOTH directions
+	productRows      bool     // /assetTypes unfiltered listing includes a real type and a decoy with distinct product values
+	noteReadOnly     bool     // the assignment marks Note read-only
+	domainTypeIDs    []string // typeIds the last unnamed /domains request asked for
 }
 
 func (m *mockDGC) server() *httptest.Server {
@@ -142,6 +143,7 @@ func (m *mockDGC) server() *httptest.Server {
 				rows = []domainRow{{ID: glossaryDomainID, Name: glossaryDomain, Type: domainType}}
 			}
 		} else {
+			m.domainTypeIDs = r.URL.Query()["typeIds"]
 			rows = []domainRow{{ID: glossaryDomainID, Name: glossaryDomain, Type: domainType}}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"results": rows, "total": len(rows)})
@@ -373,6 +375,19 @@ func TestPrepare_AssetTypeOnly_EnumeratesDomains(t *testing.T) {
 	}
 	if len(out.DomainOptions) == 0 {
 		t.Errorf("expected domain options, got none")
+	}
+}
+
+func TestPrepare_AssetTypeOnly_AsksCollibraForAllowedDomainTypesOnly(t *testing.T) {
+	m := &mockDGC{t: t}
+	out, _ := prepare_create_asset.NewTool(client(t, m)).Handler(t.Context(), prepare_create_asset.Input{
+		AssetType: btTypeName,
+	})
+	if out.Status != prepare_create_asset.StatusIncomplete {
+		t.Fatalf("want incomplete, got %q (%s)", out.Status, out.Message)
+	}
+	if len(m.domainTypeIDs) != 1 || m.domainTypeIDs[0] != glossaryTypeID {
+		t.Errorf("/domains typeIds = %v, want [%s]", m.domainTypeIDs, glossaryTypeID)
 	}
 }
 
