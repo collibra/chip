@@ -17,6 +17,7 @@ type handlers struct {
 	run      func(w http.ResponseWriter, r *http.Request) // GET /rest/dq/1.0/jobRuns/{id}
 	monitors func(w http.ResponseWriter, r *http.Request) // GET /rest/dq/1.0/jobRuns/{id}/monitors
 	profile  func(w http.ResponseWriter, r *http.Request) // GET /rest/dq/1.0/jobRuns/{id}/profile
+	logs     func(w http.ResponseWriter, r *http.Request) // GET /rest/dq/internal/v1/job/{id}/edge/platformLogs
 }
 
 func newServer(t *testing.T, h handlers) *httptest.Server {
@@ -47,7 +48,29 @@ func newServer(t *testing.T, h handlers) *httptest.Server {
 			h.run(w, r)
 		}
 	})
+	mux.HandleFunc("/rest/dq/internal/v1/job/", func(w http.ResponseWriter, r *http.Request) {
+		if h.logs == nil {
+			// Logs are best-effort: tests that don't care get a 404 (log absent).
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		h.logs(w, r)
+	})
 	return httptest.NewServer(mux)
+}
+
+// logsByType serves a different body per ?type= value.
+func logsByType(submit, driver string) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("type") {
+		case "SUBMIT":
+			_, _ = w.Write([]byte(submit))
+		case "DRIVER":
+			_, _ = w.Write([]byte(driver))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}
 }
 
 func jsonHandler(code int, body any) func(http.ResponseWriter, *http.Request) {
@@ -323,5 +346,65 @@ func TestTransportError(t *testing.T) {
 	out := run(t, server, tools.Input{RunID: "r-1"})
 	if out.Status != tools.StatusError {
 		t.Fatalf("expected error on transport failure, got %q (%s)", out.Status, out.Message)
+	}
+}
+
+// ---- platform logs ----
+
+func TestPlatformLogsReturned(t *testing.T) {
+	server := newServer(t, handlers{
+		run:      jsonHandler(http.StatusOK, finishedRun()),
+		monitors: jsonHandler(http.StatusOK, monitorsResult()),
+		profile:  jsonHandler(http.StatusOK, profileResult()),
+		logs:     logsByType("submit log", "driver log"),
+	})
+	defer server.Close()
+
+	out := run(t, server, tools.Input{RunID: "9c1d1e3a-2b4f-4a6c-8d90-111213141516"})
+	if out.Run == nil || out.Run.Stage2Logs != "submit log" || out.Run.Stage3Logs != "driver log" {
+		t.Fatalf("expected both logs surfaced, got %+v", out.Run)
+	}
+	if out.Guidance != "" {
+		t.Errorf("expected no guidance when everything was read, got %q", out.Guidance)
+	}
+}
+
+func TestPlatformLogsTruncatedToTail(t *testing.T) {
+	long := strings.Repeat("a", 30000) + "THE-END"
+	server := newServer(t, handlers{
+		run:      jsonHandler(http.StatusOK, finishedRun()),
+		monitors: jsonHandler(http.StatusOK, monitorsResult()),
+		profile:  jsonHandler(http.StatusOK, profileResult()),
+		logs:     logsByType(long, "short"),
+	})
+	defer server.Close()
+
+	out := run(t, server, tools.Input{RunID: "r-1"})
+	if !strings.HasPrefix(out.Run.Stage2Logs, "[truncated") || !strings.HasSuffix(out.Run.Stage2Logs, "THE-END") {
+		t.Errorf("expected the tail of the log with a truncation marker, got %.80q", out.Run.Stage2Logs)
+	}
+	if out.Run.Stage3Logs != "short" {
+		t.Errorf("expected short log untouched, got %q", out.Run.Stage3Logs)
+	}
+}
+
+func TestPlatformLogsFailureStillReturnsRun(t *testing.T) {
+	server := newServer(t, handlers{
+		run:      jsonHandler(http.StatusOK, finishedRun()),
+		monitors: jsonHandler(http.StatusOK, monitorsResult()),
+		profile:  jsonHandler(http.StatusOK, profileResult()),
+		logs:     jsonHandler(http.StatusForbidden, map[string]any{"message": "boom"}),
+	})
+	defer server.Close()
+
+	out := run(t, server, tools.Input{RunID: "r-1"})
+	if out.Status != tools.StatusSuccess || out.Run == nil {
+		t.Fatalf("expected success with run details, got %q (%s)", out.Status, out.Message)
+	}
+	if out.Run.Stage2Logs != "" || out.Run.Stage3Logs != "" {
+		t.Errorf("expected no logs, got %+v", out.Run)
+	}
+	if !strings.Contains(out.Guidance, "stage 2") || !strings.Contains(out.Guidance, "stage 3") || !strings.Contains(out.Guidance, "403") {
+		t.Errorf("expected guidance noting both log failures, got %q", out.Guidance)
 	}
 }

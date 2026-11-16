@@ -1,7 +1,7 @@
 // Package get_dq_job_run implements the dq_get_job_run MCP tool — read the full details of a single
 // Collibra data-quality job run by id.
 //
-// The flow combines three public GETs:
+// The flow combines three public GETs and two internal ones:
 //
 //	Run     : GET /rest/dq/1.0/jobRuns/{jobRunId}       -> lifecycle fields, and (once terminal)
 //	          score/rowCount/executionTimeSeconds/activeMonitors/breakingMonitors.
@@ -9,9 +9,12 @@
 //	          breakdown behind the run's aggregate score.
 //	Profile : GET /rest/dq/1.0/jobRuns/{jobRunId}/profile -> per-column profiling statistics
 //	          (value/null/empty/unique counts, min/max/mean/median/quartiles, top value shapes).
+//	Logs    : GET /rest/dq/internal/v1/job/{jobRunId}/edge/platformLogs?type=SUBMIT|DRIVER -> the
+//	          stage 2 (submit) and stage 3 (driver) platform logs, each capped at maxLogChars (the tail
+//	          is kept, since failures surface last).
 //
-// This is a pure read: no confirm checkpoint, no writes. A failure fetching the per-monitor breakdown
-// or the column profile does not fail the whole call — the run's own details are still returned, with
+// This is a pure read: no confirm checkpoint, no writes. A failure fetching the per-monitor breakdown,
+// the column profile or a platform log does not fail the whole call — the run's own details are still returned, with
 // a note in guidance for each lookup that failed. 400/401/403/404/500 and transport failures are
 // surfaced as messages with actionable guidance rather than Go errors.
 package get_dq_job_run
@@ -26,6 +29,9 @@ import (
 	"github.com/collibra/chip/pkg/clients"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// maxLogChars caps each returned platform log so a verbose Spark driver log cannot flood the response.
+const maxLogChars = 20000
 
 type Status string
 
@@ -113,6 +119,8 @@ type RunDetail struct {
 	CustomMonitors       []CustomMonitorResult   `json:"customMonitors,omitempty" jsonschema:"Per-monitor results for the job's custom DQ rules."`
 	Profile              []ColumnProfile         `json:"profile,omitempty" jsonschema:"Per-column profiling statistics captured during the run (first page, up to 100 columns)."`
 	TotalProfiledColumns *int64                  `json:"totalProfiledColumns,omitempty" jsonschema:"Total number of profiled columns for the run; may exceed len(profile) when there are more than 100."`
+	Stage2Logs           string                  `json:"stage2Logs,omitempty" jsonschema:"Stage 2 (submit) platform log; the last 20000 characters if longer. Absent if the run has not reached that stage or the log could not be read."`
+	Stage3Logs           string                  `json:"stage3Logs,omitempty" jsonschema:"Stage 3 (driver) platform log; the last 20000 characters if longer. Absent if the run has not reached that stage or the log could not be read."`
 	JobDetailsLink       string                  `json:"jobDetailsLink,omitempty" jsonschema:"Job Details deep-link path (relative to the Collibra instance URL), when jobName is known."`
 }
 
@@ -135,6 +143,9 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"the per-monitor breakdown (adaptive + custom DQ rules) behind that score, and per-column " +
 			"profiling statistics (value/null/empty/unique counts, min/max/mean/median/quartiles, top value " +
 			"shapes) captured during the run.\n\n" +
+			"Also returns the stage 2 (submit) and stage 3 (driver) platform logs as stage2Logs and stage3Logs, " +
+			"truncated to the last 20000 characters each. They may be absent when the run has not reached that " +
+			"stage yet or the log could not be read (guidance says why); use them to diagnose failures.\n\n" +
 			"Fields that are only meaningful once a run has finished (score, rowCount, executionTimeSeconds, " +
 			"per-monitor results, profile) are absent while the run is still in progress.\n\n" +
 			"Example user requests: \"Show me the details of DQ run <id>\"; \"What was the score for run <id>?\"; " +
@@ -205,6 +216,12 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 			detail.TotalProfiledColumns = profile.Total
 		}
 
+		var logNote string
+		detail.Stage2Logs, logNote = fetchLog(ctx, collibraClient, runID, clients.DqPlatformLogSubmit, "stage 2")
+		notes = appendNonEmpty(notes, logNote)
+		detail.Stage3Logs, logNote = fetchLog(ctx, collibraClient, runID, clients.DqPlatformLogDriver, "stage 3")
+		notes = appendNonEmpty(notes, logNote)
+
 		out := Output{
 			Status:  StatusSuccess,
 			Message: fmt.Sprintf("Found run %q (status %s).", runID, run.Status),
@@ -245,8 +262,37 @@ func monitorsLookupNote(code int, err error) string {
 	return fmt.Sprintf("The run itself was found, but reading its per-monitor results failed (HTTP %d): %v. Retry, or check the run's monitor breakdown in the Collibra UI.", code, err)
 }
 
+// fetchLog reads one stage's platform log. A failure yields an empty log plus a guidance note.
+func fetchLog(ctx context.Context, collibraClient *http.Client, runID, logType, stage string) (log, note string) {
+	raw, code, err := clients.GetDqJobRunPlatformLogs(ctx, collibraClient, runID, logType)
+	if err != nil {
+		return "", logsLookupNote(stage, code, err)
+	}
+	return tailLog(raw), ""
+}
+
+func appendNonEmpty(notes []string, note string) []string {
+	if note == "" {
+		return notes
+	}
+	return append(notes, note)
+}
+
+// tailLog keeps the last maxLogChars characters of a log, marking the cut.
+func tailLog(log string) string {
+	runes := []rune(log)
+	if len(runes) <= maxLogChars {
+		return log
+	}
+	return fmt.Sprintf("[truncated: showing last %d of %d characters]\n%s", maxLogChars, len(runes), string(runes[len(runes)-maxLogChars:]))
+}
+
 func profileLookupNote(code int, err error) string {
 	return fmt.Sprintf("The run itself was found, but reading its column profile failed (HTTP %d): %v. Retry, or check the run's profile in the Collibra UI.", code, err)
+}
+
+func logsLookupNote(stage string, code int, err error) string {
+	return fmt.Sprintf("The %s log could not be read (HTTP %d): %v. It may not exist yet if the run has not reached that stage.", stage, code, err)
 }
 
 func lookupError(code int, err error, runID string) Output {

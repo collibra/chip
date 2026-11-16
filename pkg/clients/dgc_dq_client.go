@@ -645,6 +645,28 @@ func GetDqJobRun(ctx context.Context, collibraHttpClient *http.Client, jobRunID 
 	return &run, code, nil
 }
 
+// Platform log types of the DQ internal edge platformLogs endpoint.
+const (
+	DqPlatformLogSubmit = "SUBMIT" // stage 2
+	DqPlatformLogDriver = "DRIVER" // stage 3
+)
+
+// GetDqJobRunPlatformLogs reads one stage's platform log for a job run via the INTERNAL
+// GET /rest/dq/internal/v1/job/{uuid}/edge/platformLogs?type={SUBMIT|DRIVER}. The log is returned as
+// the raw response body.
+func GetDqJobRunPlatformLogs(ctx context.Context, collibraHttpClient *http.Client, jobRunID, logType string) (string, int, error) {
+	endpoint := "/rest/dq/internal/v1/job/" + url.PathEscape(jobRunID) + "/edge/platformLogs?type=" + url.QueryEscape(logType)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	body, code, err := executeRequestWithStatus(collibraHttpClient, req)
+	if err != nil {
+		return "", code, err
+	}
+	return string(body), code, nil
+}
+
 // DqAdaptiveMonitorResult is one adaptive monitor's outcome for a specific job run
 // (GET /rest/dq/1.0/jobRuns/{jobRunId}/monitors).
 type DqAdaptiveMonitorResult struct {
