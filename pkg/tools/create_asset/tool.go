@@ -116,9 +116,9 @@ func NewTool(collibraClient *http.Client) *chip.Tool[Input, Output] {
 			"Inputs accept human-friendly identifiers: assetType resolves from UUID, publicId, or display name; domain from UUID or display name; status from UUID or status name; attributes by name or typeId. " +
 			"Markdown in RICH_TEXT attribute values (e.g. 'Definition') is converted to HTML server-side so it renders correctly in Collibra. " +
 			"When allowDuplicate is false (the default), an existing asset with the same name in the same (assetType, domain) returns status=duplicate_found without writing. " +
-			"Attributes the assignment marks read-only (values Collibra calculates, such as a trust score) are rejected with status=validation_error and never need to be supplied; prepare_create_asset flags them with readOnly=true. " +
+			"Attributes the assignment marks read-only (values Collibra calculates, such as a trust score) are rejected with status=validation_error and never need to be supplied; get_asset_operating_model flags them with readOnly=true. " +
 			"Validation errors return suggestion-rich messages so the agent can self-correct. " +
-			"Calling prepare_create_asset first is optional — only needed when the agent wants to enumerate options or inspect a type's full attribute schema.",
+			"Calling get_asset_operating_model first is optional — only needed when the agent wants to inspect the attributes, relations and statuses available for an asset type in a domain.",
 		Handler:     handler(collibraClient),
 		Permissions: []string{},
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: chip.Ptr(false), IdempotentHint: false, OpenWorldHint: chip.Ptr(false)},
