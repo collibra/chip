@@ -232,7 +232,9 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 
 - **Tools:** `list_agent_contracts` (with `agentId`), `get_agent_contract`, `get_agent_contract_rules`,
   `edit_asset add_relation`; hand-off to `collibra/agent-contract`.
-- **Does:** check the global contract first, then the contracts governing this agent. None: look for existing
+- **Does:** check the global contract first, then the contracts governing this agent. Only the global contract: it governs
+  every agent, so ask whether to create a specialised contract for this agent as well (use a fitting one, create one, or
+  only the company-wide contract for now). None: look for existing
   specialised contracts that could fit (`list_agent_contracts` by name, with words from the scan); show any match first
   (name, rule count, one example rule, how many agents it applies to, link), then let the customer choose: use it (link
   it, below), write a new one with the contract skill (this agent's, or the company-wide one), or stop. A specialised contract that doesn't govern the agent yet (for example one just

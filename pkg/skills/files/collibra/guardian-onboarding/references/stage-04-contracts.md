@@ -10,7 +10,15 @@ Make sure at least one agent contract governs the agent: the company-wide (globa
 2. If a contract can't be read (a permission error on one of them), say the list may be incomplete and offer a message to the administrator about view rights.
 3. `agentContractsFeatureDisabled`: "Collibra settings" in `references/verify-and-diagnose.md`.
 
-If at least one contract governs the agent and has rules, show them (name, rule count, link) and go to the exit, unless the customer wants to write or change one.
+If a specialised contract with rules governs the agent, show the contracts that govern it (name, rule count, link) and go to the exit, unless the customer wants to write or change one.
+
+If only the global contract governs the agent, don't stop there: a global contract governs every agent without a link, so on its own it says nothing about this agent. Look for specialised contracts that could fit, as in step 2, and show each match first. Then ask (header `Contracts`): "`<agent>` follows your company-wide contract, [`<name>`](<instance>/ai-governance/agent-contracts/<contractId>) (`<n>` rules), which is set up for every agent. Do you want to create a specialised contract for `<agent>` as well?"
+
+- **Use `<name>`** (first, only when a match was shown)
+- **Create a specialised contract (default when nothing was found)**
+- **Only the company-wide contract for now**
+
+"Use" goes to step 4 (linking), "Create" to step 3, and "Only the company-wide contract" to the exit.
 
 ## Step 2: None applies: look for one that could fit
 
