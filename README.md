@@ -12,6 +12,12 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 ### Read Tools
 
+- [`search_users`](pkg/tools/search_users/) - Find users by name, title or department, the members of a user group, or given user ids. Never returns email addresses. **Requires:** the `access-management` experimental feature
+- [`search_user_groups`](pkg/tools/search_user_groups/) - Find user groups by name, or the groups a user belongs to. **Requires:** the `access-management` experimental feature
+- [`search_roles`](pkg/tools/search_roles/) - Find global and resource roles by name, description or type, or the roles a user or group holds. **Requires:** the `access-management` experimental feature
+- [`find_responsibilities`](pkg/tools/find_responsibilities/) - Find who holds which role on which resource: the assignments of a role, of a user or group, or on a community, domain or asset. **Requires:** the `access-management` experimental feature
+- [`list_communities`](pkg/tools/list_communities/) - List communities, or the sub-communities of one. **Requires:** the `access-management` experimental feature
+- [`list_domains`](pkg/tools/list_domains/) - List domains by name, type or community. **Requires:** the `access-management` experimental feature
 - [`discover_business_glossary`](pkg/tools/discover_business_glossary/) - Ask questions about terms and definitions. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
 - [`discover_data_assets`](pkg/tools/discover_data_assets/) - Query available data assets using natural language. Note that this tool leverages Collibra AI and therefore consumes Collibra Units (CUs). **Requires:** `dgc.ai-copilot`
 - [`get_assessment`](pkg/tools/get_assessment/) - Retrieve conducted assessment(s) from the Assessments application (these are not catalog assets). Direct lookup of a single assessment by name or UUID (or by its linked Assessment Review asset), or a filtered lookup combining name (partial), status, template, conducted asset, and a last-modified range (paginated)
@@ -45,6 +51,13 @@ This Go-based MCP server acts as a bridge between AI applications and Collibra, 
 
 ### Write Tools
 
+- [`create_user_group`](pkg/tools/create_user_group/) - Create an empty user group. Confirm checkpoint. **Requires:** the `access-management` experimental feature
+- [`rename_user_group`](pkg/tools/rename_user_group/) - Change the name of a user group. Confirm checkpoint. **Requires:** the `access-management` experimental feature
+- [`delete_user_group`](pkg/tools/delete_user_group/) - Permanently delete a user group; the roles it held are lost. Confirm checkpoint. **Requires:** the `access-management` experimental feature
+- [`add_users_to_user_group`](pkg/tools/add_users_to_user_group/) - Add users to a user group; members already in it are skipped. Confirm checkpoint. **Requires:** the `access-management` experimental feature
+- [`remove_users_from_user_group`](pkg/tools/remove_users_from_user_group/) - Take users out of a user group. Confirm checkpoint. **Requires:** the `access-management` experimental feature
+- [`create_user`](pkg/tools/create_user/) - Create a user, optionally in user groups. Sets no password. Confirm checkpoint. **Requires:** the `access-management` experimental feature
+- [`change_user`](pkg/tools/change_user/) - Change a user's name, email, title, department, language or whether the account is enabled. Confirm checkpoint. **Requires:** the `access-management` experimental feature
 - [`add_data_classification_match`](pkg/tools/add_data_classification_match/) - Associate a data class with an asset. **Requires:** `dgc.classify`, `dgc.catalog`
 - [`create_assessment`](pkg/tools/create_assessment/) - Conduct a new assessment from a template (given by name or UUID) in the Assessments application. Returns the template's (unanswered) questions to fill in afterward with `edit_assessment` — no separate prepare step needed. The owner and USER assignees accept a UUID, email, username, or full name
 - [`create_asset`](pkg/tools/create_asset/) - Create a new asset of any type. Resolves `assetType` (UUID, publicId, or display name), `domain` (UUID or name), `status` (UUID or name), and attributes (by name or typeId) server-side; converts Markdown to HTML for `RICH_TEXT` attributes; gates on duplicate-name (default `allowDuplicate: false`)
@@ -266,6 +279,8 @@ experimental feature name.
 Some functionality ships behind an opt-in `experimental` flag. These features are off by default and may change or be removed without a deprecation cycle. Enable them via `--experimental=<name>`, the `COLLIBRA_MCP_EXPERIMENTAL` environment variable, or the `mcp.experimental` field in `mcp.yaml`. Unknown names log a warning but do not fail startup, so stale configs survive a feature being retired or renamed.
 
 ### Known experimental features
+
+- `access-management` — Tools that read and manage users, user groups, roles, role assignments, communities and domains: `search_users`, `search_user_groups`, `search_roles`, `find_responsibilities`, `list_communities` and `list_domains` (read), and `create_user_group`, `rename_user_group`, `delete_user_group`, `add_users_to_user_group`, `remove_users_from_user_group`, `create_user` and `change_user` (write). Every write tool is built around a confirm checkpoint: `confirm=false` (the default) writes nothing and returns what would change, and `confirm=true` writes. The tools call DGC's public REST API (`/rest/2.0/users`, `userGroups`, `roles`, `responsibilities`, `communities` and `domains`) with the signed-in user's own permissions, so what a call may do is what that user may do in Collibra. No tool returns an email address, and `create_user` sets no password.
 
 - `context-specifications` — Context specification tools: `list_context_specifications`, `get_context_specification`, and the `contextSpecificationId` parameter on `get_asset_details`. These tools generate structured YAML context for assets using the Semantic Blueprint API.
 

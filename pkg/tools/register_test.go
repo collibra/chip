@@ -256,3 +256,86 @@ func listTools(t *testing.T, cfg *chip.ServerToolConfig) []*mcp.Tool {
 	}
 	return result
 }
+
+// accessManagementToolNames are the tools gated behind the access-management
+// experimental feature, in registration order.
+var accessManagementToolNames = []string{
+	"search_users",
+	"search_user_groups",
+	"search_roles",
+	"find_responsibilities",
+	"list_communities",
+	"list_domains",
+	"create_user_group",
+	"rename_user_group",
+	"delete_user_group",
+	"add_users_to_user_group",
+	"remove_users_from_user_group",
+	"create_user",
+	"change_user",
+}
+
+func TestRegisterAll_AccessManagementToolsHiddenByDefault(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{})
+	for _, name := range accessManagementToolNames {
+		if slices.Contains(names, name) {
+			t.Errorf("expected %q to be absent without the %q experimental feature", name, tools.AccessManagementFeature)
+		}
+	}
+}
+
+func TestRegisterAll_AccessManagementToolsVisibleWhenEnabled(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.AccessManagementFeature}})
+	for _, name := range accessManagementToolNames {
+		if !slices.Contains(names, name) {
+			t.Errorf("expected %q to be present with the %q experimental feature", name, tools.AccessManagementFeature)
+		}
+	}
+}
+
+// The feature only moves its own tools: the rest of the surface is identical in
+// both states, asserted by name membership in both directions.
+func TestRegisterAll_AccessManagementFeatureOnlyMovesItsOwnTools(t *testing.T) {
+	off := listToolNames(t, &chip.ServerToolConfig{})
+	on := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.AccessManagementFeature}})
+
+	for _, name := range off {
+		if !slices.Contains(on, name) {
+			t.Errorf("tool %q is registered without the feature but not with it", name)
+		}
+	}
+	for _, name := range on {
+		if slices.Contains(accessManagementToolNames, name) {
+			continue
+		}
+		if !slices.Contains(off, name) {
+			t.Errorf("tool %q outside the domain is only registered with the feature", name)
+		}
+	}
+	if len(on) != len(off)+len(accessManagementToolNames) {
+		t.Errorf("the feature registered %d tools, without it %d; expected a difference of exactly %d",
+			len(on), len(off), len(accessManagementToolNames))
+	}
+}
+
+// The allow-list filters within the enabled tools; it cannot reach a tool inside
+// a closed gate.
+func TestRegisterAll_EnabledToolsCannotReopenAccessManagementGate(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{EnabledTools: []string{"create_user", "delete_user_group"}})
+	for _, name := range accessManagementToolNames {
+		if slices.Contains(names, name) {
+			t.Errorf("expected %q to stay absent when named in enabled-tools without the feature", name)
+		}
+	}
+}
+
+// access-management is an experimental feature name, not a capability flag, so
+// it must not open the data quality gate or any other.
+func TestRegisterAll_AccessManagementFeatureDoesNotOpenDataQuality(t *testing.T) {
+	names := listToolNames(t, &chip.ServerToolConfig{Experimental: []string{tools.AccessManagementFeature}})
+	for _, name := range dataQualityToolNames {
+		if slices.Contains(names, name) {
+			t.Errorf("expected %q to stay absent: the access-management feature must not open the data quality gate", name)
+		}
+	}
+}

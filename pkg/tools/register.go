@@ -7,19 +7,25 @@ import (
 	"github.com/collibra/chip/pkg/chip"
 	"github.com/collibra/chip/pkg/skills"
 	"github.com/collibra/chip/pkg/tools/add_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/add_users_to_user_group"
 	"github.com/collibra/chip/pkg/tools/cancel_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/change_user"
 	"github.com/collibra/chip/pkg/tools/create_assessment"
 	"github.com/collibra/chip/pkg/tools/create_asset"
 	"github.com/collibra/chip/pkg/tools/create_dq_job"
 	"github.com/collibra/chip/pkg/tools/create_dq_rule"
+	"github.com/collibra/chip/pkg/tools/create_user"
+	"github.com/collibra/chip/pkg/tools/create_user_group"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job"
 	"github.com/collibra/chip/pkg/tools/delete_dq_job_run"
+	"github.com/collibra/chip/pkg/tools/delete_user_group"
 	"github.com/collibra/chip/pkg/tools/deploy_dq_rule_template"
 	"github.com/collibra/chip/pkg/tools/discover_business_glossary"
 	"github.com/collibra/chip/pkg/tools/discover_data_assets"
 	"github.com/collibra/chip/pkg/tools/edit_assessment"
 	"github.com/collibra/chip/pkg/tools/edit_asset"
 	"github.com/collibra/chip/pkg/tools/find_dq_rules"
+	"github.com/collibra/chip/pkg/tools/find_responsibilities"
 	"github.com/collibra/chip/pkg/tools/generate_dq_rule_sql"
 	"github.com/collibra/chip/pkg/tools/get_assessment"
 	"github.com/collibra/chip/pkg/tools/get_asset_details"
@@ -41,13 +47,17 @@ import (
 	"github.com/collibra/chip/pkg/tools/get_user_id_by_name"
 	"github.com/collibra/chip/pkg/tools/init_data_contract"
 	"github.com/collibra/chip/pkg/tools/list_asset_types"
+	"github.com/collibra/chip/pkg/tools/list_communities"
 	"github.com/collibra/chip/pkg/tools/list_context_specifications"
 	"github.com/collibra/chip/pkg/tools/list_data_contracts"
+	"github.com/collibra/chip/pkg/tools/list_domains"
 	"github.com/collibra/chip/pkg/tools/list_dq_rule_templates"
 	"github.com/collibra/chip/pkg/tools/prepare_create_asset"
 	"github.com/collibra/chip/pkg/tools/pull_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/push_data_contract_manifest"
 	"github.com/collibra/chip/pkg/tools/remove_data_classification_match"
+	"github.com/collibra/chip/pkg/tools/remove_users_from_user_group"
+	"github.com/collibra/chip/pkg/tools/rename_user_group"
 	"github.com/collibra/chip/pkg/tools/search_asset_keyword"
 	"github.com/collibra/chip/pkg/tools/search_catalog_columns"
 	"github.com/collibra/chip/pkg/tools/search_data_classes"
@@ -56,6 +66,9 @@ import (
 	"github.com/collibra/chip/pkg/tools/search_dq_jobs"
 	"github.com/collibra/chip/pkg/tools/search_lineage_entities"
 	"github.com/collibra/chip/pkg/tools/search_lineage_transformations"
+	"github.com/collibra/chip/pkg/tools/search_roles"
+	"github.com/collibra/chip/pkg/tools/search_user_groups"
+	"github.com/collibra/chip/pkg/tools/search_users"
 	"github.com/collibra/chip/pkg/tools/update_dq_job"
 	"github.com/collibra/chip/pkg/tools/validate_dq_rule"
 )
@@ -63,6 +76,11 @@ import (
 // ContextSpecificationsFeature is the experimental-feature identifier used to
 // gate the context specification tools.
 const ContextSpecificationsFeature = "context-specifications"
+
+// AccessManagementFeature is the experimental-feature identifier used to gate
+// the tools that read and manage users, user groups, roles, role assignments,
+// communities and domains.
+const AccessManagementFeature = "access-management"
 
 // CopilotToolNames lists tool names that are routed to the copilot service.
 // Used by chip-service to direct these requests to the copilot backend
@@ -106,6 +124,25 @@ func RegisterAll(server *chip.Server, client *http.Client, toolConfig *chip.Serv
 	// would ship exactly the broken half-a-pair that section 1.1 warns about —
 	// callers that accept a name with no tool available to resolve one.
 	toolRegister(server, toolConfig, get_user_id_by_name.NewTool(client))
+	// The tools that read and manage users, user groups, roles, role assignments,
+	// communities and domains are one preview domain, opt-in through a single
+	// experimental feature name (docs/TOOL_CONTRIBUTION_STANDARDS.md 3.1): the
+	// write tools among them create, change and delete.
+	if toolConfig.IsExperimentalEnabled(AccessManagementFeature) {
+		toolRegister(server, toolConfig, search_users.NewTool(client))
+		toolRegister(server, toolConfig, search_user_groups.NewTool(client))
+		toolRegister(server, toolConfig, search_roles.NewTool(client))
+		toolRegister(server, toolConfig, find_responsibilities.NewTool(client))
+		toolRegister(server, toolConfig, list_communities.NewTool(client))
+		toolRegister(server, toolConfig, list_domains.NewTool(client))
+		toolRegister(server, toolConfig, create_user_group.NewTool(client))
+		toolRegister(server, toolConfig, rename_user_group.NewTool(client))
+		toolRegister(server, toolConfig, delete_user_group.NewTool(client))
+		toolRegister(server, toolConfig, add_users_to_user_group.NewTool(client))
+		toolRegister(server, toolConfig, remove_users_from_user_group.NewTool(client))
+		toolRegister(server, toolConfig, create_user.NewTool(client))
+		toolRegister(server, toolConfig, change_user.NewTool(client))
+	}
 	toolRegister(server, toolConfig, get_assessment.NewTool(client))
 	toolRegister(server, toolConfig, create_assessment.NewTool(client))
 	toolRegister(server, toolConfig, edit_assessment.NewTool(client))
