@@ -204,7 +204,8 @@ Before the scan, so Guardian's wiring is part of the version the rules are made 
 - **Does:** works out how the agent runs and is deployed, without blocking when the customer doesn't know
   ([sdk-and-platforms.md](sdk-and-platforms.md#when-the-customer-doesnt-know-how-the-agent-is-deployed)); asks where the customer saved the Guardian SDK
   files Collibra shared with the customer; reads their names and metadata (no versions hard-coded); checks Python and the
-  agent framework, including the LangChain and LangGraph versions against the documentation's tested ranges; prepares one
+  agent framework (a Databricks App on `requirements.txt` moves to uv with Python 3.12 or later, because Databricks runs
+  pip Apps on 3.11), including the LangChain and LangGraph versions against the documentation's tested ranges; prepares one
   diff with every project change from
   [sdk-and-platforms.md](sdk-and-platforms.md#what-changes-in-the-customers-project), with the mode the customer chose: record only, or stop the action (a short explanation of each, no
   default forced; "record only" is offered first as the safer start).

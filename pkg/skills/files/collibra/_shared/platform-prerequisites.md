@@ -52,7 +52,9 @@ the same way as a platform tool:
 
    If the customer can't install software, or IT will do it, write the message for IT and pause until "continue".
 4. **Where the agent is deployed** must also run Python 3.12 or later. Check the platform's setting where the project
-   shows it; otherwise put it in the note for whoever deploys.
+   shows it; otherwise put it in the note for whoever deploys. A Databricks App that installs with `requirements.txt`
+   always runs Python 3.11, so the skill moves it to uv (`pyproject.toml` with `requires-python = ">=3.12"` and
+   `uv.lock`) as part of its changes.
 
 ## Commands by platform
 

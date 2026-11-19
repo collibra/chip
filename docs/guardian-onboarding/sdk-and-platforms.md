@@ -22,7 +22,9 @@ the same way as a platform tool:
 
    If the customer can't install software, or IT will do it, write the message for IT and pause until "continue".
 4. **Where the agent is deployed** must also run Python 3.12 or later. Check the platform's setting where the project
-   shows it; otherwise put it in the note for whoever deploys.
+   shows it; otherwise put it in the note for whoever deploys. A Databricks App that installs with `requirements.txt`
+   always runs Python 3.11, so the skill moves it to uv (`pyproject.toml` with `requires-python = ">=3.12"` and
+   `uv.lock`) as part of its changes.
 
 ## Platform command-line tools: `_shared/platform-prerequisites.md`
 
@@ -156,6 +158,7 @@ Shown as one diff before the customer's yes:
 |---|---|---|
 | `vendor/` (new) | The Collibra wheels needed | A deployed agent may not reach a private package index, so the wheels ship with it |
 | `requirements.txt` or `pyproject.toml` | `--find-links ./vendor` and `collibra-sdk[guardian-langchain,guardian-injection,mlflow]` (with uv, a `[tool.uv.sources]` path entry) | The deployment installs the SDK from the shipped wheels |
+| Databricks App on `requirements.txt` | `pyproject.toml` (new) with `requires-python = ">=3.12"` and every package from `requirements.txt`, `uv.lock` (new), `requirements.txt` removed. No question; mentioned only when the App already names another Python version | Databricks runs pip Apps on Python 3.11 with no setting to change it, and uses pip whenever `requirements.txt` is there. uv Apps run the Python `requires-python` asks for, and don't get Databricks' preinstalled libraries |
 | The entry module | The three lines above, at the very top | Guardian on, without changing the agent's scan |
 | `collibra-guardian.toml` (new, in the folder the agent starts from) | `enforcement_mode = "<monitor or enforce, as the customer chose>"` only | What Guardian does when a rule is broken. The SDK's own default is `enforce`, so the skill always writes it. **No `policy_bundle` yet:** a path that names a missing file stops the agent, so the path is written in stage 07, together with the file |
 
