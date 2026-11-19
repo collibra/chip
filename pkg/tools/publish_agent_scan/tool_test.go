@@ -172,8 +172,10 @@ func TestPublishAgentScan_RejectionsReturnErrorCodeAndPlainMessage(t *testing.T)
 			"fingerprintDefaultModelInvalid", "fingerprintGuardrailConfidenceMissing",
 			"fingerprintLlmFallbackWithoutLlm", "fingerprintRootOnlyField",
 		},
-		http.StatusUnauthorized: {"bearerTokenRequired", "tenantEnvironmentRequired"},
-		http.StatusForbidden:    {"tenantEnvironmentForbidden", "tenantEnvironmentDisabled"},
+		http.StatusUnauthorized:        {"bearerTokenRequired", "tenantEnvironmentRequired"},
+		http.StatusForbidden:           {"tenantEnvironmentForbidden", "tenantEnvironmentDisabled"},
+		http.StatusUnprocessableEntity: {"tenantReleaseUnsupported"},
+		http.StatusServiceUnavailable:  {"tenantReleaseUnavailable"},
 	}
 	for status, errorCodes := range codes {
 		for _, code := range errorCodes {
@@ -218,6 +220,30 @@ func TestPublishAgentScan_AuthErrorsTellTheSkillNotToRetry(t *testing.T) {
 		if !strings.Contains(out.Guidance, "Do not retry") {
 			t.Errorf("HTTP %d guidance should say not to retry: %s", status, out.Guidance)
 		}
+	}
+}
+
+func TestPublishAgentScan_TenantReleaseRefusalsSayWhetherToRetry(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		code   string
+		want   string
+	}{
+		{"too old", http.StatusUnprocessableEntity, "tenantReleaseUnsupported", "Do not retry"},
+		{"release unknown", http.StatusServiceUnavailable, "tenantReleaseUnavailable", "send the same scan again"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeGuardian(t, tt.status, `{"errorCode":"`+tt.code+`","statusCode":`+itoa(tt.status)+`,"userMessage":"This tenant environment runs Collibra 2026.05.596, and a scan needs 2026.06 or later"}`)
+			out, _ := publish_agent_scan.NewTool(f.client).Handler(t.Context(), validInput(true))
+			if !strings.Contains(out.Guidance, tt.want) || !strings.Contains(out.Message, "not stored") {
+				t.Errorf("message %q, guidance %q: want %q in the guidance and 'not stored' in the message", out.Message, out.Guidance, tt.want)
+			}
+			if f.calls.Load() != 1 {
+				t.Errorf("sent %d request(s), want 1 (no retry)", f.calls.Load())
+			}
+		})
 	}
 }
 

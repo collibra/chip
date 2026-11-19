@@ -43,6 +43,8 @@ When a send fails, the answer carries an error code and a message. Explain in pl
 | `scanLlmFallbackWithoutLlm` | The document claims no LLM was used but marks fields as LLM-derived. | Stop. This should not happen with the output of `finalize_agent_scan`. Show the customer the message; do not edit `parser` by hand. |
 | `scanRootOnlyField` | A deployment-only field on a non-root agent. | Stop. This skill never writes these fields; report the message. |
 | Sign-in or permission errors (401 or 403) | The Collibra connection is not signed in, or may not write agent scans, or is for a different environment. | Not temporary. Offer the handoff. Retry once only after the customer says access changed. |
+| `tenantReleaseUnsupported` (422) | This Collibra runs a release too old for agent scans; the message names the release found and the one needed. | Stop. Not temporary: tell the customer both releases, and that their Collibra administrator has to upgrade before the agent can be set up. Don't retry. |
+| `tenantReleaseUnavailable` (503) | Collibra couldn't say which release it runs. Usually temporary. | Say so, and offer to send the same scan again in a few minutes. No rerun of Stage 06 is needed, because the document didn't change. |
 
 A rejected document is not stored by Collibra. After any change, rerun Stage 06, show the summary again and ask for consent again.
 

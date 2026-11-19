@@ -231,6 +231,10 @@ func describeRejection(apiErr *clients.AgentScanAPIError) string {
 
 func guidanceFor(apiErr *clients.AgentScanAPIError) string {
 	switch {
+	case apiErr.ErrorCode == "tenantReleaseUnsupported":
+		return "Do not retry: nothing was stored, and the same scan is refused until this Collibra environment is upgraded. Tell the customer which release it runs and which one is needed (both are in the message), and that their Collibra administrator has to upgrade it before the agent can be set up."
+	case apiErr.ErrorCode == "tenantReleaseUnavailable":
+		return "Nothing was stored. Collibra could not say which release it runs, which is usually temporary: tell the customer, and offer to send the same scan again in a few minutes. If it keeps happening, they should contact their Collibra administrator."
 	case apiErr.StatusCode == http.StatusUnauthorized:
 		return "Do not retry: signing in again is needed, not another attempt. Ask the customer to sign in to Collibra again (or check that their connection to this assistant is authorised), then start the send again."
 	case apiErr.StatusCode == http.StatusForbidden:
@@ -258,6 +262,8 @@ var rejectionText = map[string]string{
 	"tenantEnvironmentRequired":             "Collibra could not tell which environment this request is for (HTTP 401).",
 	"tenantEnvironmentForbidden":            "The sign-in is for a different Collibra environment than the one being written to (HTTP 403).",
 	"tenantEnvironmentDisabled":             "Agent scans are switched off for this Collibra environment (HTTP 403).",
+	"tenantReleaseUnsupported":              "This Collibra environment runs a release that is too old for agent scans, so the scan was not stored (HTTP 422).",
+	"tenantReleaseUnavailable":              "Collibra could not say which release it runs, so the scan was not stored (HTTP 503).",
 }
 
 func validationError(message string) *Output {
