@@ -318,7 +318,7 @@ func resolveAssessmentID(ctx context.Context, client *http.Client, ref string) (
 		return r, nil
 	}
 
-	paged, err := clients.ListAssessments(ctx, client, clients.ListAssessmentsParams{Name: r, Limit: 50})
+	paged, err := clients.ListAssessments(ctx, client, clients.ListAssessmentsParams{Name: r, Limit: chip.Ptr(50)})
 	if err != nil {
 		return "", fmt.Errorf("looking up assessment %q: %w", r, err)
 	}

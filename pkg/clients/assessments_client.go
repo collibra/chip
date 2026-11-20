@@ -132,7 +132,7 @@ type ListAssessmentsParams struct {
 	AssetID          string `url:"assetId,omitempty"`
 	LastModifiedFrom string `url:"lastModifiedFrom,omitempty"`
 	LastModifiedTo   string `url:"lastModifiedTo,omitempty"`
-	Limit            int    `url:"limit,omitempty"`
+	Limit            *int   `url:"limit,omitempty"`
 	Cursor           string `url:"cursor,omitempty"`
 }
 

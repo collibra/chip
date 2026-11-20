@@ -12,6 +12,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const (
+	minLimit = 1
+	maxLimit = 50
+)
+
 // Input has two modes. A DIRECT lookup (assessmentId or assessmentReviewId)
 // fetches a single assessment and can't be combined with anything else. A
 // FILTERED lookup uses any combination of the remaining fields and returns a
@@ -29,7 +34,7 @@ type Input struct {
 	AssetID          string `json:"assetId,omitempty" jsonschema:"Filter: UUID of the asset the assessment was conducted on."`
 	LastModifiedFrom string `json:"lastModifiedFrom,omitempty" jsonschema:"Filter: ISO-8601 timestamp; include assessments last modified at or after this time (e.g. 2026-07-01T00:00:00.000Z)."`
 	LastModifiedTo   string `json:"lastModifiedTo,omitempty" jsonschema:"Filter: ISO-8601 timestamp; include assessments last modified before this time."`
-	Limit            int    `json:"limit,omitempty" jsonschema:"Filter: max results to return (1-50, default 10)."`
+	Limit            *int   `json:"limit,omitempty" jsonschema:"Filter: max results to return (1-50, default 10)."`
 	Cursor           string `json:"cursor,omitempty" jsonschema:"Filter: pagination cursor from a previous response's nextCursor."`
 }
 
@@ -72,6 +77,10 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 		}
 		if direct == 1 && hasFilters(input) {
 			return Output{}, fmt.Errorf("assessmentId/assessmentReviewId fetch a single assessment and cannot be combined with filters (name, status, template, assetId, dates, limit, cursor)")
+		}
+
+		if err := validateLimit(input.Limit); err != nil {
+			return Output{}, err
 		}
 
 		// Validate the UUID-valued fields that are present.
@@ -137,7 +146,16 @@ func handler(collibraClient *http.Client) chip.ToolHandlerFunc[Input, Output] {
 // hasFilters reports whether any filter field is set.
 func hasFilters(in Input) bool {
 	return in.Name != "" || in.Status != "" || in.TemplateID != "" || in.TemplateVersion != "" ||
-		in.AssetID != "" || in.LastModifiedFrom != "" || in.LastModifiedTo != "" || in.Limit != 0 || in.Cursor != ""
+		in.AssetID != "" || in.LastModifiedFrom != "" || in.LastModifiedTo != "" || in.Limit != nil || in.Cursor != ""
+}
+
+// validateLimit rejects a limit outside 1-50, matching the Assessments API. A
+// nil limit is left out of the request so the API default applies.
+func validateLimit(limit *int) error {
+	if limit != nil && (*limit < minLimit || *limit > maxLimit) {
+		return fmt.Errorf("limit must be between %d and %d; got %d", minLimit, maxLimit, *limit)
+	}
+	return nil
 }
 
 // fromList shapes a list lookup: one match returns as the single Assessment,
