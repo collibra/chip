@@ -17,8 +17,9 @@ import (
 )
 
 type collibraClient struct {
-	config *Config
-	next   http.RoundTripper
+	config  *Config
+	next    http.RoundTripper
+	userIDs *userIDResolver
 }
 
 func newCollibraClient(config *Config) *http.Client {
@@ -48,11 +49,14 @@ func newCollibraClient(config *Config) *http.Client {
 		baseTransport.Proxy = http.ProxyURL(proxyURL)
 	}
 
-	return &http.Client{
-		Transport: &collibraClient{
-			config: config,
-			next:   chip.NewCollibraClient(baseTransport),
-		},
+	return &http.Client{Transport: newCollibraTransport(config, chip.NewCollibraClient(baseTransport))}
+}
+
+func newCollibraTransport(config *Config, next http.RoundTripper) *collibraClient {
+	return &collibraClient{
+		config:  config,
+		next:    next,
+		userIDs: newUserIDResolver(next),
 	}
 }
 
@@ -73,6 +77,12 @@ func (c *collibraClient) RoundTrip(request *http.Request) (*http.Response, error
 		reqClone.SetBasicAuth(c.config.Api.Username, c.config.Api.Password)
 	} else {
 		copyHeader(toolRequest, reqClone, "Authorization")
+	}
+	reqClone.Header.Del(userIDHeader)
+	if authorization := reqClone.Header.Get("Authorization"); authorization != "" {
+		if userID := c.userIDs.resolve(reqClone.Context(), baseURL, authorization); userID != "" {
+			reqClone.Header.Set(userIDHeader, userID)
+		}
 	}
 	reqClone.Header.Set("X-MCP-Session-Id", chip.GetSessionId(reqClone.Context()))
 	reqClone.Header.Set("X-MCP-Tool-Name", toolRequest.Params.Name)
