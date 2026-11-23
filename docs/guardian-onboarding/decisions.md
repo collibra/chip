@@ -59,7 +59,7 @@ Checked on 2026-11-03. The skill keeps its own steps for these until the documen
   agent.
 - The "Allow collecting payloads" option isn't described, though the Guardian tab topic refers to it.
 - Connecting Collibra to the agent's activity (Edge, the Databricks connection) isn't documented.
-- Databricks Apps and Model Serving aren't covered; the documentation points managed platforms to `guardian-auto`.
+- Collibra's documentation doesn't describe Databricks Apps or Model Serving yet (it points managed platforms to `guardian-auto`). Both are supported by the skill's own steps.
 - No permission is given for Apply latest rules.
 - The documentation says applying the rules needs an AI use case linked to the agent; Guardian doesn't need one. To
   confirm with the Guardian team, and the documentation updated.

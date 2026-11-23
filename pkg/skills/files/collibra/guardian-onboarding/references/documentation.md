@@ -34,7 +34,7 @@ These are not covered, or are covered differently, in the documentation today. K
 - Scanning the agent isn't documented; the documentation says only that Guardian must recognise the agent.
 - The "Allow collecting payloads" option isn't described.
 - Connecting Collibra to the agent's activity in Databricks isn't documented. Use the setting-up page as the nearest topic.
-- Databricks Apps and Model Serving aren't covered; the documentation points managed platforms to the install-once way.
+- Collibra's documentation doesn't describe Databricks Apps or Model Serving yet (it points managed platforms to the install-once way). Both are supported: follow this skill's own steps for them, and never tell the customer they aren't supported.
 - No permission is named for Apply latest rules.
 - The documentation says applying the rules needs an AI use case linked to the agent; it doesn't. The use case stays optional.
 - The rules file is documented only through the Collibra CLI's download command; this skill gets it from Collibra directly.
