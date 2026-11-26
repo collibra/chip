@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Role holders to user group</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Role holders to user group</h1>
+    <p class="sub">Claude finds who holds a Collibra role and shows the plan. Nothing is written until you approve it once.</p>
+  </header>
+
+  <main>
+    <section id="setup" class="panel" aria-labelledby="setup-title">
+      <h2 id="setup-title">1. Roles and groups</h2>
+      <div id="mappings"></div>
+      <div class="row">
+        <button id="add-mapping" type="button" class="secondary">Add another role</button>
+        <button id="analyze" type="button" class="primary">Analyze</button>
+      </div>
+      <p id="setup-error" class="error" role="alert" hidden></p>
+    </section>
+
+    <section id="progress" class="panel" aria-live="polite" hidden>
+      <h2>Working</h2>
+      <p id="status" class="status"></p>
+      <details id="log-wrap"><summary>Activity</summary><ol id="log" class="log"></ol></details>
+    </section>
+
+    <section id="plan" class="panel" aria-labelledby="plan-title" hidden>
+      <h2 id="plan-title">2. Plan</h2>
+      <div id="stats" class="stats"></div>
+      <div id="warnings"></div>
+      <div id="plan-mappings"></div>
+    </section>
+
+    <section id="result" class="panel" aria-labelledby="result-title" hidden>
+      <h2 id="result-title">3. Result</h2>
+      <p id="result-summary"></p>
+      <div id="result-rows"></div>
+      <button id="restart" type="button" class="secondary">Start over</button>
+    </section>
+
+    <p id="fatal" class="error" role="alert" hidden></p>
+  </main>
+
+  <div id="approval" class="approval" hidden>
+    <div class="approval-text">
+      <strong>Approve this plan?</strong>
+      <span id="approval-summary"></span>
+    </div>
+    <div class="approval-buttons">
+      <button id="reject" type="button" class="secondary">Reject</button>
+      <button id="approve" type="button" class="primary">Approve and write</button>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

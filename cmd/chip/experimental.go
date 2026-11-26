@@ -18,6 +18,7 @@ import (
 // map so no other code needs to change.
 var knownExperimentalFeatures = map[string]string{
 	skills.FeatureName:                 "Embedded skill catalog served via list_collibra_skills and load_collibra_skill.",
+	tools.AccessManagementFeature:      "Access management tools: search_users, search_user_groups, search_roles, find_responsibilities, list_communities, list_domains (read), and create_user_group, rename_user_group, delete_user_group, add_users_to_user_group, remove_users_from_user_group, create_user, change_user (write, each behind a confirm checkpoint).",
 	tools.ContextSpecificationsFeature: "Context specification tools: list_context_specifications, get_context_specification, and contextSpecificationId parameter on get_asset_details.",
 }
 

@@ -62,3 +62,36 @@ func TestUUIDs_OneInvalid(t *testing.T) {
 		t.Fatalf("expected error identifying field and index, got %v", err)
 	}
 }
+
+func TestDashedUUID_AcceptsOnlyTheDashedForm(t *testing.T) {
+	for _, value := range []string{"00000000-0000-0000-0000-000000900002", "ABCDEF00-1111-2222-3333-444455556666"} {
+		if err := DashedUUID("id", value); err != nil {
+			t.Errorf("expected %q to pass, got: %v", value, err)
+		}
+	}
+	// uuid.Parse accepts these forms, but DGC's REST API answers them with a 400.
+	for _, value := range []string{"", "x", "00000000000000000000000000900002", "{00000000-0000-0000-0000-000000900002}", "urn:uuid:00000000-0000-0000-0000-000000900002"} {
+		if err := DashedUUID("id", value); err == nil {
+			t.Errorf("expected %q to fail", value)
+		}
+	}
+}
+
+func TestDashedUUIDOptional_EmptyPasses(t *testing.T) {
+	if err := DashedUUIDOptional("id", ""); err != nil {
+		t.Errorf("expected an empty value to pass, got: %v", err)
+	}
+	if err := DashedUUIDOptional("id", "x"); err == nil {
+		t.Error("expected a malformed value to fail")
+	}
+}
+
+func TestDashedUUIDs_NamesTheOffendingElement(t *testing.T) {
+	if err := DashedUUIDs("ids", nil); err != nil {
+		t.Errorf("expected an empty list to pass, got: %v", err)
+	}
+	err := DashedUUIDs("ids", []string{"00000000-0000-0000-0000-000000900002", "bad"})
+	if err == nil || !strings.Contains(err.Error(), "ids[1]") {
+		t.Errorf("expected the error to name ids[1], got: %v", err)
+	}
+}
